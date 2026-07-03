@@ -1,32 +1,24 @@
 [general]
 id = "sd1-161"
-config_dir = "gen/AS161"
+config_dir = "/etc/scion/AS161"
 
 [trust_db]
-connection = "gen-cache/sd1-161.trust.db"
+connection = "/var/lib/scion/sd1-161.trust.db"
 
 [path_db]
-connection = "gen-cache/sd1-161.path.db"
+connection = "/var/lib/scion/sd1-161.path.db"
 
 [sd]
-address = "127.0.0.99:30255"
-
-[tracing]
-enabled = true
-debug = true
-agent = "172.17.0.1:6831"
+address = "10.0.0.161:30255"
 
 [metrics]
-prometheus = "127.0.0.99:30455"
+prometheus = "10.0.0.161:30455"
 
 [features]
 experimental_idint = true
 
-[api]
-addr = "127.0.0.99:30955"
-
 [drkey_level2_db]
-connection = "gen-cache/sd1-161.drkey_level2.db"
+connection = "/var/lib/scion/sd1-161.drkey_level2.db"
 
 [log.console]
-level = "debug"
+level = "info"

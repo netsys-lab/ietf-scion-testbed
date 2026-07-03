@@ -1,15 +1,15 @@
 [general]
 id = "br1-154-1"
-config_dir = "gen/AS154"
+config_dir = "/etc/scion/AS154"
 
 [metrics]
-prometheus = "127.0.0.41:30442"
+prometheus = "10.0.0.154:30442"
 
 [features]
 experimental_idint = true
 
 [api]
-addr = "127.0.0.41:31142"
+addr = "10.0.0.154:31142"
 
 [log.console]
-level = "debug"
+level = "info"

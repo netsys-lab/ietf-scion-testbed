@@ -5,25 +5,25 @@
   "isd_as": "1-152",
   "mtu": 1472,
   "test_dispatcher": true,
-  "dispatched_ports": "31000-32767",
+  "dispatched_ports": "1-65535",
   "control_service": {
     "cs1-152-1": {
-      "addr": "127.0.0.26:31008"
+      "addr": "10.0.0.152:31008"
     }
   },
   "discovery_service": {
     "cs1-152-1": {
-      "addr": "127.0.0.26:31008"
+      "addr": "10.0.0.152:31008"
     }
   },
   "border_routers": {
     "br1-152-1": {
-      "internal_addr": "127.0.0.25:31010",
+      "internal_addr": "10.0.0.152:31010",
       "interfaces": {
         "6957": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:7]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:6]:50000"
+            "local": "[fd00:fade:2::152]:50000",
+            "remote": "[fd00:fade:2::150]:50000"
           },
           "isd_as": "1-150",
           "link_to": "core",
@@ -34,8 +34,8 @@
         },
         "48344": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:d]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:c]:50000"
+            "local": "[fd00:fade:4::152]:50000",
+            "remote": "[fd00:fade:4::151]:50000"
           },
           "isd_as": "1-151",
           "link_to": "core",
@@ -46,8 +46,8 @@
         },
         "43214": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:14]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:15]:50000"
+            "local": "[fd00:fade:6::152]:50000",
+            "remote": "[fd00:fade:6::153]:50000"
           },
           "isd_as": "1-153",
           "link_to": "core",
@@ -58,8 +58,8 @@
         },
         "25173": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:16]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:17]:50000"
+            "local": "[fd00:fade:a::152]:50000",
+            "remote": "[fd00:fade:a::155]:50000"
           },
           "isd_as": "1-155",
           "link_to": "child",
@@ -70,8 +70,8 @@
         },
         "50187": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:18]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:19]:50000"
+            "local": "[fd00:fade:b::152]:50000",
+            "remote": "[fd00:fade:b::156]:50000"
           },
           "isd_as": "1-156",
           "link_to": "child",
@@ -82,8 +82,8 @@
         },
         "24381": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:1a]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:1b]:50000"
+            "local": "[fd00:fade:c::152]:50000",
+            "remote": "[fd00:fade:c::157]:50000"
           },
           "isd_as": "1-157",
           "link_to": "child",

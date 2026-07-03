@@ -5,25 +5,25 @@
   "isd_as": "1-153",
   "mtu": 1472,
   "test_dispatcher": true,
-  "dispatched_ports": "31000-32767",
+  "dispatched_ports": "1-65535",
   "control_service": {
     "cs1-153-1": {
-      "addr": "127.0.0.34:31012"
+      "addr": "10.0.0.153:31012"
     }
   },
   "discovery_service": {
     "cs1-153-1": {
-      "addr": "127.0.0.34:31012"
+      "addr": "10.0.0.153:31012"
     }
   },
   "border_routers": {
     "br1-153-1": {
-      "internal_addr": "127.0.0.33:31014",
+      "internal_addr": "10.0.0.153:31014",
       "interfaces": {
         "22716": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:9]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:8]:50000"
+            "local": "[fd00:fade:3::153]:50000",
+            "remote": "[fd00:fade:3::150]:50000"
           },
           "isd_as": "1-150",
           "link_to": "core",
@@ -34,8 +34,8 @@
         },
         "30732": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:f]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:e]:50000"
+            "local": "[fd00:fade:5::153]:50000",
+            "remote": "[fd00:fade:5::151]:50000"
           },
           "isd_as": "1-151",
           "link_to": "core",
@@ -46,8 +46,8 @@
         },
         "15515": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:15]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:14]:50000"
+            "local": "[fd00:fade:6::153]:50000",
+            "remote": "[fd00:fade:6::152]:50000"
           },
           "isd_as": "1-152",
           "link_to": "core",
@@ -58,8 +58,8 @@
         },
         "30478": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:1c]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:1d]:50000"
+            "local": "[fd00:fade:d::153]:50000",
+            "remote": "[fd00:fade:d::156]:50000"
           },
           "isd_as": "1-156",
           "link_to": "child",
@@ -70,8 +70,8 @@
         },
         "14606": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:1e]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:1f]:50000"
+            "local": "[fd00:fade:e::153]:50000",
+            "remote": "[fd00:fade:e::157]:50000"
           },
           "isd_as": "1-157",
           "link_to": "child",

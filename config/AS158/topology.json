@@ -3,25 +3,25 @@
   "isd_as": "1-158",
   "mtu": 1472,
   "test_dispatcher": true,
-  "dispatched_ports": "31000-32767",
+  "dispatched_ports": "1-65535",
   "control_service": {
     "cs1-158-1": {
-      "addr": "127.0.0.74:31032"
+      "addr": "10.0.0.158:31032"
     }
   },
   "discovery_service": {
     "cs1-158-1": {
-      "addr": "127.0.0.74:31032"
+      "addr": "10.0.0.158:31032"
     }
   },
   "border_routers": {
     "br1-158-1": {
-      "internal_addr": "127.0.0.73:31034",
+      "internal_addr": "10.0.0.158:31034",
       "interfaces": {
         "59691": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:23]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:22]:50000"
+            "local": "[fd00:fade:f::158]:50000",
+            "remote": "[fd00:fade:f::154]:50000"
           },
           "isd_as": "1-154",
           "link_to": "parent",
@@ -32,8 +32,8 @@
         },
         "48164": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:27]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:26]:50000"
+            "local": "[fd00:fade:11::158]:50000",
+            "remote": "[fd00:fade:11::155]:50000"
           },
           "isd_as": "1-155",
           "link_to": "peer",
@@ -45,8 +45,8 @@
         },
         "48610": {
           "underlay": {
-            "local": "[fd00:f00d:cafe::7f00:32]:50000",
-            "remote": "[fd00:f00d:cafe::7f00:33]:50000"
+            "local": "[fd00:fade:13::158]:50000",
+            "remote": "[fd00:fade:13::159]:50000"
           },
           "isd_as": "1-159",
           "link_to": "child",
