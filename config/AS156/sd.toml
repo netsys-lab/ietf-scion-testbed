@@ -9,10 +9,10 @@ connection = "/var/lib/scion/sd1-156.trust.db"
 connection = "/var/lib/scion/sd1-156.path.db"
 
 [sd]
-address = "10.0.0.156:30255"
+address = "10.20.3.156:30255"
 
 [metrics]
-prometheus = "10.0.0.156:30455"
+prometheus = "10.20.3.156:30455"
 
 [features]
 experimental_idint = true

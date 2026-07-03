@@ -1,0 +1,18 @@
+- name: Accept host keys of all nodes
+  hosts: localhost
+  connection: local
+  vars:
+    ssh_known_hosts_file: "{{ lookup('env', 'HOME') + '/.ssh/known_hosts'}}"
+  tasks:
+    - name: Scan host keys
+      ansible.builtin.shell:
+        cmd: "ssh-keyscan -T 10 {{ hostvars[item]['ansible_host'] }}"
+      with_items: "{{ groups['nodes'] }}"
+      register: scanned_hosts
+    - name: Add host keys
+      ansible.builtin.known_hosts:
+        name: "{{ (item.stdout | split)[0] }}"
+        key: "{{ item.stdout }}"
+        path: "{{ ssh_known_hosts_file }}"
+        state: present
+      with_items: "{{ scanned_hosts.results }}"

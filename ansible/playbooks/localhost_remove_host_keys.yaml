@@ -1,0 +1,11 @@
+- name: Remove host keys of all nodes from localhost
+  hosts: localhost
+  connection: local
+  vars:
+    ssh_known_hosts_file: "{{ lookup('env', 'HOME') + '/.ssh/known_hosts'}}"
+  tasks:
+    - name: Remove keys
+      ansible.builtin.known_hosts:
+        name: "{{ hostvars[item]['ansible_host'] }}"
+        state: absent
+      with_items: "{{ groups['nodes'] }}"

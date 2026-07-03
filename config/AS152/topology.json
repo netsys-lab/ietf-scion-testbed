@@ -8,17 +8,17 @@
   "dispatched_ports": "1-65535",
   "control_service": {
     "cs1-152-1": {
-      "addr": "10.0.0.152:31008"
+      "addr": "10.20.3.152:31008"
     }
   },
   "discovery_service": {
     "cs1-152-1": {
-      "addr": "10.0.0.152:31008"
+      "addr": "10.20.3.152:31008"
     }
   },
   "border_routers": {
     "br1-152-1": {
-      "internal_addr": "10.0.0.152:31010",
+      "internal_addr": "10.20.3.152:31010",
       "interfaces": {
         "6957": {
           "underlay": {

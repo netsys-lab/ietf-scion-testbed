@@ -1,29 +1,29 @@
 ases:
   hosts:
     AS1-150:
-      ansible_host: 10.0.0.150
+      ansible_host: 10.20.3.150
     AS1-151:
-      ansible_host: 10.0.0.151
+      ansible_host: 10.20.3.151
     AS1-152:
-      ansible_host: 10.0.0.152
+      ansible_host: 10.20.3.152
     AS1-153:
-      ansible_host: 10.0.0.153
+      ansible_host: 10.20.3.153
     AS1-154:
-      ansible_host: 10.0.0.154
+      ansible_host: 10.20.3.154
     AS1-155:
-      ansible_host: 10.0.0.155
+      ansible_host: 10.20.3.155
     AS1-156:
-      ansible_host: 10.0.0.156
+      ansible_host: 10.20.3.156
     AS1-157:
-      ansible_host: 10.0.0.157
+      ansible_host: 10.20.3.157
     AS1-158:
-      ansible_host: 10.0.0.158
+      ansible_host: 10.20.3.158
     AS1-159:
-      ansible_host: 10.0.0.159
+      ansible_host: 10.20.3.159
     AS1-160:
-      ansible_host: 10.0.0.160
+      ansible_host: 10.20.3.160
     AS1-161:
-      ansible_host: 10.0.0.161
+      ansible_host: 10.20.3.161
 
   vars:
     ansible_user: ietf
@@ -32,7 +32,7 @@ ases:
 service:
   hosts:
     dhcp-server:
-      ansible_host: 10.0.0.190
+      ansible_host: 10.20.3.190
       ansible_user: lars
   vars:
     ansible_python_interpreter: auto_silent

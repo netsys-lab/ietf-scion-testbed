@@ -3,7 +3,7 @@ id = "br1-150-1"
 config_dir = "/etc/scion/AS150"
 
 [metrics]
-prometheus = "10.0.0.150:30442"
+prometheus = "10.20.3.150:30442"
 
 [features]
 experimental_idint = true

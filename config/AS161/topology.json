@@ -6,17 +6,17 @@
   "dispatched_ports": "1-65535",
   "control_service": {
     "cs1-161-1": {
-      "addr": "10.0.0.161:31044"
+      "addr": "10.20.3.161:31044"
     }
   },
   "discovery_service": {
     "cs1-161-1": {
-      "addr": "10.0.0.161:31044"
+      "addr": "10.20.3.161:31044"
     }
   },
   "border_routers": {
     "br1-161-1": {
-      "internal_addr": "10.0.0.161:31046",
+      "internal_addr": "10.20.3.161:31046",
       "interfaces": {
         "58271": {
           "underlay": {
