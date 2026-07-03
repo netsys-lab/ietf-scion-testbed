@@ -1,0 +1,83 @@
+ASes:
+  "1-150":
+    core: true
+    voting: true
+    authoritative: true
+    issuing: true
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-151":
+    core: true
+    voting: true
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-152":
+    core: true
+    voting: true
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-153":
+    core: true
+    voting: true
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-154":
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-155":
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-156":
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-157":
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-158":
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-159":
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-160":
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+  "1-161":
+    cert_issuer: 1-150
+    underlay: UDP/IPv4
+    mtu: 1472
+links:
+  - {a: "1-150-br1", b: "1-151-br1", linkAtoB: CORE, underlay: UDP/IPv6, mtu: 1452, bw: 100}  # fd00:fade:1::/64
+  - {a: "1-150-br1", b: "1-152-br1", linkAtoB: CORE, underlay: UDP/IPv6, mtu: 1452, bw: 100}  # fd00:fade:2::/64
+  - {a: "1-150-br1", b: "1-153-br1", linkAtoB: CORE, underlay: UDP/IPv6, mtu: 1452, bw: 100}  # fd00:fade:3::/64
+  - {a: "1-151-br1", b: "1-152-br1", linkAtoB: CORE, underlay: UDP/IPv6, mtu: 1452, bw: 100}  # fd00:fade:4::/64
+  - {a: "1-151-br1", b: "1-153-br1", linkAtoB: CORE, underlay: UDP/IPv6, mtu: 1452, bw: 100}  # fd00:fade:5::/64
+  - {a: "1-152-br1", b: "1-153-br1", linkAtoB: CORE, underlay: UDP/IPv6, mtu: 1452, bw: 100}  # fd00:fade:6::/64
+  - {a: "1-150-br1", b: "1-154-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:7::/64
+  - {a: "1-151-br1", b: "1-154-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:8::/64
+  - {a: "1-151-br1", b: "1-155-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:9::/64
+  - {a: "1-152-br1", b: "1-155-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:a::/64
+  - {a: "1-152-br1", b: "1-156-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:b::/64
+  - {a: "1-152-br1", b: "1-157-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:c::/64
+  - {a: "1-153-br1", b: "1-156-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:d::/64
+  - {a: "1-153-br1", b: "1-157-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:e::/64
+  - {a: "1-154-br1", b: "1-158-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:f::/64
+  - {a: "1-154-br1", b: "1-155-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:10::/64
+  - {a: "1-158-br1", b: "1-155-br1", linkAtoB: PEER, underlay: UDP/IPv6, mtu: 1452, bw: 100}  # fd00:fade:11::/64
+  - {a: "1-155-br1", b: "1-156-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:12::/64
+  - {a: "1-158-br1", b: "1-159-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:13::/64
+  - {a: "1-155-br1", b: "1-159-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:14::/64
+  - {a: "1-155-br1", b: "1-160-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:15::/64
+  - {a: "1-155-br1", b: "1-161-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:16::/64
+  - {a: "1-156-br1", b: "1-161-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:17::/64
+  - {a: "1-157-br1", b: "1-161-br1", linkAtoB: CHILD, underlay: UDP/IPv6, mtu: 1452, bw: 100} # fd00:fade:18::/64

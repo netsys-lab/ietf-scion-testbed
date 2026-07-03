@@ -1,0 +1,32 @@
+[general]
+id = "sd1-159"
+config_dir = "gen/AS159"
+
+[trust_db]
+connection = "gen-cache/sd1-159.trust.db"
+
+[path_db]
+connection = "gen-cache/sd1-159.path.db"
+
+[sd]
+address = "127.0.0.83:30255"
+
+[tracing]
+enabled = true
+debug = true
+agent = "172.17.0.1:6831"
+
+[metrics]
+prometheus = "127.0.0.83:30455"
+
+[features]
+experimental_idint = true
+
+[api]
+addr = "127.0.0.83:30955"
+
+[drkey_level2_db]
+connection = "gen-cache/sd1-159.drkey_level2.db"
+
+[log.console]
+level = "debug"

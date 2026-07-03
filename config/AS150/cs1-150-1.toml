@@ -1,0 +1,49 @@
+[general]
+id = "cs1-150-1"
+config_dir = "gen/AS150"
+
+[trust_db]
+connection = "gen-cache/cs1-150-1.trust.db"
+
+[beacon_db]
+connection = "gen-cache/cs1-150-1.beacon.db"
+
+[path_db]
+connection = "gen-cache/cs1-150-1.path.db"
+
+[tracing]
+enabled = true
+debug = true
+agent = "172.17.0.1:6831"
+
+[metrics]
+prometheus = "127.0.0.10:30452"
+
+[api]
+addr = "127.0.0.10:31152"
+
+[features]
+experimental_idint = true
+
+[rpc]
+client_protocol = "all"
+server_protocol = "all"
+
+[drkey]
+prefetch_entries = 10000
+
+[ca]
+mode = "in-process"
+
+[log.console]
+level = "debug"
+
+[drkey.level1_db]
+connection = "gen-cache/cs1-150-1.drkey_level1.db"
+
+[drkey.secret_value_db]
+connection = "gen-cache/cs1-150-1.drkey_secret_value.db"
+
+[drkey.delegation]
+scmp = [ "127.0.0.1", "::1", "127.0.0.10",]
+idint = [ "127.0.0.1", "::1", "127.0.0.10",]

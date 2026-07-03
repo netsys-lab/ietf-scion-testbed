@@ -1,0 +1,90 @@
+{
+  "attributes": [
+    "core"
+  ],
+  "isd_as": "1-151",
+  "mtu": 1472,
+  "test_dispatcher": true,
+  "dispatched_ports": "31000-32767",
+  "control_service": {
+    "cs1-151-1": {
+      "addr": "127.0.0.18:31004"
+    }
+  },
+  "discovery_service": {
+    "cs1-151-1": {
+      "addr": "127.0.0.18:31004"
+    }
+  },
+  "border_routers": {
+    "br1-151-1": {
+      "internal_addr": "127.0.0.17:31006",
+      "interfaces": {
+        "13941": {
+          "underlay": {
+            "local": "[fd00:f00d:cafe::7f00:5]:50000",
+            "remote": "[fd00:f00d:cafe::7f00:4]:50000"
+          },
+          "isd_as": "1-150",
+          "link_to": "core",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        },
+        "54502": {
+          "underlay": {
+            "local": "[fd00:f00d:cafe::7f00:c]:50000",
+            "remote": "[fd00:f00d:cafe::7f00:d]:50000"
+          },
+          "isd_as": "1-152",
+          "link_to": "core",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        },
+        "6691": {
+          "underlay": {
+            "local": "[fd00:f00d:cafe::7f00:e]:50000",
+            "remote": "[fd00:f00d:cafe::7f00:f]:50000"
+          },
+          "isd_as": "1-153",
+          "link_to": "core",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        },
+        "48024": {
+          "underlay": {
+            "local": "[fd00:f00d:cafe::7f00:10]:50000",
+            "remote": "[fd00:f00d:cafe::7f00:11]:50000"
+          },
+          "isd_as": "1-154",
+          "link_to": "child",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        },
+        "59120": {
+          "underlay": {
+            "local": "[fd00:f00d:cafe::7f00:12]:50000",
+            "remote": "[fd00:f00d:cafe::7f00:13]:50000"
+          },
+          "isd_as": "1-155",
+          "link_to": "child",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        }
+      },
+      "idint": {
+        "id": 1,
+        "internal_speed": 10000000
+      }
+    }
+  }
+}

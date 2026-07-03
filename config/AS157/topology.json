@@ -1,0 +1,64 @@
+{
+  "attributes": [],
+  "isd_as": "1-157",
+  "mtu": 1472,
+  "test_dispatcher": true,
+  "dispatched_ports": "31000-32767",
+  "control_service": {
+    "cs1-157-1": {
+      "addr": "127.0.0.66:31028"
+    }
+  },
+  "discovery_service": {
+    "cs1-157-1": {
+      "addr": "127.0.0.66:31028"
+    }
+  },
+  "border_routers": {
+    "br1-157-1": {
+      "internal_addr": "127.0.0.65:31030",
+      "interfaces": {
+        "59974": {
+          "underlay": {
+            "local": "[fd00:f00d:cafe::7f00:1b]:50000",
+            "remote": "[fd00:f00d:cafe::7f00:1a]:50000"
+          },
+          "isd_as": "1-152",
+          "link_to": "parent",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        },
+        "2427": {
+          "underlay": {
+            "local": "[fd00:f00d:cafe::7f00:1f]:50000",
+            "remote": "[fd00:f00d:cafe::7f00:1e]:50000"
+          },
+          "isd_as": "1-153",
+          "link_to": "parent",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        },
+        "53174": {
+          "underlay": {
+            "local": "[fd00:f00d:cafe::7f00:30]:50000",
+            "remote": "[fd00:f00d:cafe::7f00:31]:50000"
+          },
+          "isd_as": "1-161",
+          "link_to": "child",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        }
+      },
+      "idint": {
+        "id": 1,
+        "internal_speed": 10000000
+      }
+    }
+  }
+}

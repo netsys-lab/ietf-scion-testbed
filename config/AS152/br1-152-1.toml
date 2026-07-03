@@ -1,0 +1,15 @@
+[general]
+id = "br1-152-1"
+config_dir = "gen/AS152"
+
+[metrics]
+prometheus = "127.0.0.25:30442"
+
+[features]
+experimental_idint = true
+
+[api]
+addr = "127.0.0.25:31142"
+
+[log.console]
+level = "debug"

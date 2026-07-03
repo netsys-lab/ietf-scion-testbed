@@ -1,0 +1,55 @@
+global:
+  evaluation_interval: 1s
+  external_labels:
+    monitor: scion-monitor
+  scrape_interval: 1s
+scrape_configs:
+- file_sd_configs:
+  - files:
+    - AS150/prometheus/br.yml
+    - AS151/prometheus/br.yml
+    - AS152/prometheus/br.yml
+    - AS153/prometheus/br.yml
+    - AS154/prometheus/br.yml
+    - AS155/prometheus/br.yml
+    - AS156/prometheus/br.yml
+    - AS157/prometheus/br.yml
+    - AS158/prometheus/br.yml
+    - AS159/prometheus/br.yml
+    - AS160/prometheus/br.yml
+    - AS161/prometheus/br.yml
+  job_name: BR
+- file_sd_configs:
+  - files:
+    - AS150/prometheus/cs.yml
+    - AS151/prometheus/cs.yml
+    - AS152/prometheus/cs.yml
+    - AS153/prometheus/cs.yml
+    - AS154/prometheus/cs.yml
+    - AS155/prometheus/cs.yml
+    - AS156/prometheus/cs.yml
+    - AS157/prometheus/cs.yml
+    - AS158/prometheus/cs.yml
+    - AS159/prometheus/cs.yml
+    - AS160/prometheus/cs.yml
+    - AS161/prometheus/cs.yml
+  job_name: CS
+- file_sd_configs:
+  - files:
+    - AS150/prometheus/sd.yml
+    - AS151/prometheus/sd.yml
+    - AS152/prometheus/sd.yml
+    - AS153/prometheus/sd.yml
+    - AS154/prometheus/sd.yml
+    - AS155/prometheus/sd.yml
+    - AS156/prometheus/sd.yml
+    - AS157/prometheus/sd.yml
+    - AS158/prometheus/sd.yml
+    - AS159/prometheus/sd.yml
+    - AS160/prometheus/sd.yml
+    - AS161/prometheus/sd.yml
+  job_name: SD
+- file_sd_configs:
+  - files:
+    - dispatcher/prometheus/disp.yml
+  job_name: dispatcher
