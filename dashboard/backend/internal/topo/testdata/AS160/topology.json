@@ -1,0 +1,40 @@
+{
+  "attributes": [],
+  "isd_as": "1-160",
+  "mtu": 1472,
+  "test_dispatcher": true,
+  "dispatched_ports": "1-65535",
+  "control_service": {
+    "cs1-160-1": {
+      "addr": "10.20.3.160:31040"
+    }
+  },
+  "discovery_service": {
+    "cs1-160-1": {
+      "addr": "10.20.3.160:31040"
+    }
+  },
+  "border_routers": {
+    "br1-160-1": {
+      "internal_addr": "10.20.3.160:31042",
+      "interfaces": {
+        "39652": {
+          "underlay": {
+            "local": "[fd00:fade:15::160]:50000",
+            "remote": "[fd00:fade:15::155]:50000"
+          },
+          "isd_as": "1-155",
+          "link_to": "parent",
+          "mtu": 1452,
+          "idint": {
+            "speed": 100000
+          }
+        }
+      },
+      "idint": {
+        "id": 1,
+        "internal_speed": 10000000
+      }
+    }
+  }
+}
