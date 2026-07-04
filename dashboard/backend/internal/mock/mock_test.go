@@ -1,11 +1,29 @@
 package mock
 
 import (
+	"math"
 	"testing"
 
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/topo"
 )
+
+// f64 returns a pointer to v, for building derive.Shaping literals in tests.
+func f64(v float64) *float64 { return &v }
+
+// linkGenByID returns the Generator's internal per-link state for linkID
+// (white-box: this test file is in package mock), so tests can compare
+// shaped RTT samples against the exact seeded per-side baseline rather than
+// re-deriving it.
+func linkGenByID(gen *Generator, linkID string) *linkGen {
+	for _, lg := range gen.links {
+		if lg.link.ID == linkID {
+			return lg
+		}
+	}
+	return nil
+}
 
 // testGraph is a small fixture graph, independent of the topo package's own
 // testdata, that includes the "150-154" link mock must pin down (mirroring
@@ -171,5 +189,145 @@ func TestDownLinkTrafficFrozen(t *testing.T) {
 
 	if rate := st.Rate(outKey(downEP), 10); rate != 0 {
 		t.Fatalf("want down-link rate 0, got %v", rate)
+	}
+}
+
+// TestShapingElevatesRTT sets 50ms delay on a healthy link, steps three
+// times, and checks the stored RTT lands near baseline+50 (well above the
+// nominal 2-5ms range regardless of the exact baseline). It then clears the
+// shaping and steps enough times for the mean-reverting walk to bring the
+// RTT back close to baseline, confirming SetShaping(id, nil) actually clears.
+func TestShapingElevatesRTT(t *testing.T) {
+	g := testGraph()
+	st := store.New(120)
+	gen := New(g, st, 11)
+
+	const linkID = "150-151"
+	aEP := topo.Endpoint{AS: 150, IfID: "1"}
+	lg := linkGenByID(gen, linkID)
+	if lg == nil {
+		t.Fatalf("fixture missing link %s", linkID)
+	}
+	baseline := lg.rttBaselineA
+
+	gen.SetShaping(linkID, &derive.Shaping{DelayMs: f64(50)})
+
+	now := int64(5_000_000)
+	for i := 0; i < 3; i++ {
+		gen.Step(now + int64(i)*1000)
+	}
+
+	s, ok := st.Last(rttKey(aEP))
+	if !ok {
+		t.Fatalf("missing rtt for %s", linkID)
+	}
+	if s.V < 40 {
+		t.Fatalf("shaped rtt should be well above nominal range, got %.2f", s.V)
+	}
+	want := baseline + 50
+	if diff := math.Abs(s.V - want); diff > 3 {
+		t.Fatalf("want rtt ~= baseline(%.2f)+50, got %.2f (diff %.2f)", baseline, s.V, diff)
+	}
+
+	// Clearing lets the walk revert toward baseline over a handful of steps
+	// (not asserting anything about derive's bands here -- this is raw store
+	// state, derive's baseline/band logic is a separate package).
+	gen.SetShaping(linkID, nil)
+	for i := 0; i < 30; i++ {
+		gen.Step(now + int64(3+i)*1000)
+	}
+	s2, ok := st.Last(rttKey(aEP))
+	if !ok {
+		t.Fatalf("missing rtt for %s after clear", linkID)
+	}
+	if diff := math.Abs(s2.V - baseline); diff > 3 {
+		t.Fatalf("want rtt back near baseline(%.2f) after clearing, got %.2f", baseline, s2.V)
+	}
+}
+
+// TestShapingSynthesizesWireLoss sets 10%% loss on a healthy link and checks
+// that the A-side output_bytes rate and the B-side input_bytes rate (the
+// counters derive.Deriver's lossEstimate compares for the A->B direction)
+// diverge by ~10%%, i.e. the receiving side's counter advances at
+// rate*(1-loss/100) while the sending side's advances at the full offered
+// rate.
+func TestShapingSynthesizesWireLoss(t *testing.T) {
+	g := testGraph()
+	st := store.New(60)
+	gen := New(g, st, 3)
+
+	const linkID = "150-151"
+	aEP := topo.Endpoint{AS: 150, IfID: "1"} // A side: sends outKey(aEP)
+	bEP := topo.Endpoint{AS: 151, IfID: "1"} // B side: receives inKey(bEP)
+
+	gen.SetShaping(linkID, &derive.Shaping{LossPct: f64(10)})
+
+	now := int64(6_000_000)
+	for i := 0; i < 5; i++ {
+		gen.Step(now + int64(i)*1000)
+	}
+
+	outRate := st.Rate(outKey(aEP), 10)
+	inRate := st.Rate(inKey(bEP), 10)
+	if outRate <= 0 {
+		t.Fatalf("want positive outbound rate, got %v", outRate)
+	}
+	gotLossPct := (outRate - inRate) / outRate * 100
+	if diff := math.Abs(gotLossPct - 10); diff > 0.5 {
+		t.Fatalf("want ~10%% wire loss (out=%.4f in=%.4f), got %.2f%%", outRate, inRate, gotLossPct)
+	}
+}
+
+// TestShapingCapsTrafficRate sets a 0.5 Mbit/s rate cap on a healthy link
+// (below the 0.3-2 Mbit/s ambient range it would otherwise wander in) and
+// checks the synthesized output rate never exceeds it.
+func TestShapingCapsTrafficRate(t *testing.T) {
+	g := testGraph()
+	st := store.New(60)
+	gen := New(g, st, 5)
+
+	const linkID = "150-151"
+	aEP := topo.Endpoint{AS: 150, IfID: "1"}
+
+	gen.SetShaping(linkID, &derive.Shaping{RateMbit: f64(0.5)})
+
+	now := int64(7_000_000)
+	for i := 0; i < 5; i++ {
+		gen.Step(now + int64(i)*1000)
+	}
+
+	mbit := st.Rate(outKey(aEP), 10) * 8 / 1e6
+	if mbit > 0.5+0.01 {
+		t.Fatalf("want capped rate <= 0.5 Mbit/s, got %.4f", mbit)
+	}
+}
+
+// TestShapingIgnoredOnDownLink shapes the pinned-down 150-154 link with an
+// extreme delay and checks its RTT stays in the ordinary unshaped
+// random-walk range and its traffic stays frozen at zero, confirming a down
+// link ignores shaping entirely.
+func TestShapingIgnoredOnDownLink(t *testing.T) {
+	g := testGraph()
+	st := store.New(60)
+	gen := New(g, st, 9)
+
+	downEP := topo.Endpoint{AS: 150, IfID: "2"} // 150-154 A-side
+
+	gen.SetShaping(downLinkID, &derive.Shaping{DelayMs: f64(999)})
+
+	now := int64(8_000_000)
+	for i := 0; i < 3; i++ {
+		gen.Step(now + int64(i)*1000)
+	}
+
+	s, ok := st.Last(rttKey(downEP))
+	if !ok {
+		t.Fatalf("missing rtt for down link")
+	}
+	if s.V > rttBaselineMax+5 {
+		t.Fatalf("down link rtt should ignore shaping, got %.2f", s.V)
+	}
+	if rate := st.Rate(outKey(downEP), 10); rate != 0 {
+		t.Fatalf("down link traffic must stay frozen even when shaped, got rate %v", rate)
 	}
 }

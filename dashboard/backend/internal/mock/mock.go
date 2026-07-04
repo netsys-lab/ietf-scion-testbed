@@ -12,14 +12,24 @@
 // Byte counters (output_bytes/input_bytes) are Prometheus-style COUNTERs:
 // the Store computes rates from consecutive deltas, so the generator keeps a
 // running cumulative total per endpoint and Puts that total, never a rate.
+//
+// Any link can also be interactively shaped via SetShaping (normally reached
+// through the Controller in controller.go, which the dashboard's shaping API
+// drives in mock mode): a shaped link's RTT tracks baseline+delay+jitter
+// instead of freely random-walking, its wire loss is synthesized by making
+// the receiving side's counter advance slower than the sending side's, and
+// its traffic is capped at rate_mbit -- so the demo's shaping controls work
+// fully without a live testbed. A down link (150-154) ignores shaping.
 package mock
 
 import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/topo"
 )
@@ -55,6 +65,11 @@ const (
 	// adjacent link index, making it wander slowly across the topology
 	// rather than teleporting or staying fixed.
 	burstMoveProb = 0.05
+
+	// rttShapedNoiseMs is the small symmetric noise applied on top of a
+	// shaped link's baseline+delay+jitter RTT, so a shaped sample still
+	// wobbles slightly instead of reading as a dead-flat line.
+	rttShapedNoiseMs = 0.15
 )
 
 // linkGen holds one link's random-walk state.
@@ -76,6 +91,10 @@ type linkGen struct {
 // Generator produces synthetic samples for a fixed graph into a Store. Build
 // one with New (seeded, for deterministic tests) and either call Step
 // directly or call Run to drive it off a 1s ticker.
+//
+// shaped/shapedMu let a mock Controller (internal/mock/controller.go) apply
+// interactive shaping from HTTP handler goroutines while Step runs on Run's
+// ticker goroutine: every access to shaped goes through shapedMu.
 type Generator struct {
 	g   topo.Graph
 	st  *store.Store
@@ -84,6 +103,9 @@ type Generator struct {
 	links     []*linkGen
 	burstIdx  int
 	burstMbit float64 // current magnitude of the wandering burst path
+
+	shapedMu sync.Mutex
+	shaped   map[string]*derive.Shaping // link ID -> currently-applied shaping
 }
 
 // New builds a Generator for graph g writing into st, seeded deterministically
@@ -116,7 +138,41 @@ func New(g topo.Graph, st *store.Store, seed int64) *Generator {
 		links:     links,
 		burstIdx:  burstIdx,
 		burstMbit: burstMbitMin + rng.Float64()*(burstMbitMax-burstMbitMin),
+		shaped:    make(map[string]*derive.Shaping),
 	}
+}
+
+// SetShaping sets the shaping applied to linkID's synthetic RTT/loss/traffic
+// from the next Step onward, or clears it when p is nil. Safe to call
+// concurrently with Step/Run: it is the method a mock Controller calls from
+// an HTTP handler goroutine while Step runs on Run's ticker goroutine.
+func (gen *Generator) SetShaping(linkID string, p *derive.Shaping) {
+	gen.shapedMu.Lock()
+	defer gen.shapedMu.Unlock()
+	if p == nil {
+		delete(gen.shaped, linkID)
+		return
+	}
+	gen.shaped[linkID] = p
+}
+
+// CurrentShaping returns a copy of the linkID -> Shaping snapshot currently
+// applied, safe for the caller to retain and read without racing Step.
+func (gen *Generator) CurrentShaping() map[string]*derive.Shaping {
+	gen.shapedMu.Lock()
+	defer gen.shapedMu.Unlock()
+	out := make(map[string]*derive.Shaping, len(gen.shaped))
+	for k, v := range gen.shaped {
+		out[k] = v
+	}
+	return out
+}
+
+// shapingFor returns the currently-applied shaping for linkID, or nil.
+func (gen *Generator) shapingFor(linkID string) *derive.Shaping {
+	gen.shapedMu.Lock()
+	defer gen.shapedMu.Unlock()
+	return gen.shaped[linkID]
 }
 
 // Step writes one synthetic sample set for every link (RTT, byte counters,
@@ -189,10 +245,22 @@ func (gen *Generator) maybeMoveBurst() {
 
 // stepLink advances one link's RTT/traffic random-walk state and writes its
 // samples. burst is true when this link currently carries the wandering
-// burst path.
+// burst path. A down link ignores any shaping applied to it: its RTT still
+// random-walks around baseline and its traffic is forced to zero regardless,
+// matching CLAUDE.md's "no particles on a down link" behavior.
 func (gen *Generator) stepLink(lg *linkGen, burst bool, now int64) {
-	lg.rttA = clamp(walk(gen.rng, lg.rttA, lg.rttBaselineA, 0.25, 0.2), rttMinMs, rttMaxMs)
-	lg.rttB = clamp(walk(gen.rng, lg.rttB, lg.rttBaselineB, 0.25, 0.2), rttMinMs, rttMaxMs)
+	var p *derive.Shaping
+	if !lg.down {
+		p = gen.shapingFor(lg.link.ID)
+	}
+
+	if p != nil {
+		lg.rttA = clamp(shapedRTT(gen.rng, lg.rttBaselineA, p), rttMinMs, rttMaxMs)
+		lg.rttB = clamp(shapedRTT(gen.rng, lg.rttBaselineB, p), rttMinMs, rttMaxMs)
+	} else {
+		lg.rttA = clamp(walk(gen.rng, lg.rttA, lg.rttBaselineA, 0.25, 0.2), rttMinMs, rttMaxMs)
+		lg.rttB = clamp(walk(gen.rng, lg.rttB, lg.rttBaselineB, 0.25, 0.2), rttMinMs, rttMaxMs)
+	}
 
 	ambientMid := (ambientMbitMin + ambientMbitMax) / 2
 	lg.ambientAB = clamp(walk(gen.rng, lg.ambientAB, ambientMid, 0.15, 0.1), ambientMbitMin, ambientMbitMax)
@@ -202,6 +270,14 @@ func (gen *Generator) stepLink(lg *linkGen, burst bool, now int64) {
 	if burst {
 		mbitAB += gen.burstMbit
 		mbitBA += gen.burstMbit
+	}
+	if p != nil && p.RateMbit != nil {
+		if mbitAB > *p.RateMbit {
+			mbitAB = *p.RateMbit
+		}
+		if mbitBA > *p.RateMbit {
+			mbitBA = *p.RateMbit
+		}
 	}
 
 	// A down link carries no traffic: force both directions to zero before
@@ -216,10 +292,23 @@ func (gen *Generator) stepLink(lg *linkGen, burst bool, now int64) {
 		beaconRateB = beaconsMinPerSec + gen.rng.Float64()*(beaconsMaxPerSec-beaconsMinPerSec)
 	}
 
+	// Wire-loss synthesis: the offered rate is what leaves the sending side
+	// (still credited to the sender's output_bytes in full), but only
+	// rate*(1-loss/100) of it arrives at the receiver's input_bytes, so
+	// derive's lossEstimate (out-in)/out recovers loss_pct from the two
+	// counters. Unshaped links keep the previous 1:1 in/out (no loss).
+	lossFactor := 1.0
+	if p != nil && p.LossPct != nil {
+		lossFactor = 1 - *p.LossPct/100
+		if lossFactor < 0 {
+			lossFactor = 0
+		}
+	}
+
 	lg.cumOutA += mbitToBytes(mbitAB)
-	lg.cumInB += mbitToBytes(mbitAB)
+	lg.cumInB += mbitToBytes(mbitAB * lossFactor)
 	lg.cumOutB += mbitToBytes(mbitBA)
-	lg.cumInA += mbitToBytes(mbitBA)
+	lg.cumInA += mbitToBytes(mbitBA * lossFactor)
 
 	lg.beaconA += beaconRateA * tickSeconds
 	lg.beaconB += beaconRateB * tickSeconds
@@ -250,6 +339,23 @@ func walk(rng *rand.Rand, cur, target, noise, revert float64) float64 {
 	cur += (rng.Float64()*2 - 1) * noise
 	cur += (target - cur) * revert
 	return cur
+}
+
+// shapedRTT computes one side's RTT sample while a link is shaped: the
+// per-side baseline plus the configured delay, a jitter term drawn uniformly
+// from [-jitter/2, +jitter/2), and a small independent noise term so the
+// sample still wobbles slightly rather than reading as a dead-flat line.
+// Callers clamp the result into [rttMinMs, rttMaxMs].
+func shapedRTT(rng *rand.Rand, baseline float64, p *derive.Shaping) float64 {
+	v := baseline
+	if p.DelayMs != nil {
+		v += *p.DelayMs
+	}
+	if p.JitterMs != nil {
+		v += *p.JitterMs * (rng.Float64() - 0.5)
+	}
+	v += (rng.Float64()*2 - 1) * rttShapedNoiseMs
+	return v
 }
 
 func clamp(v, min, max float64) float64 {

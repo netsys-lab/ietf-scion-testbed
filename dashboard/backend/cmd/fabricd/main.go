@@ -41,6 +41,11 @@ const (
 	pollInterval  = 5 * time.Second
 )
 
+// demoShapedLink is preshaped at startup in mock mode so the dashboard shows
+// a shaped link (elevated band, "+12MS" chip) immediately rather than only
+// after someone drives the shaping UI.
+const demoShapedLink = "155-160"
+
 // config is fabricd's on-disk configuration.
 type config struct {
 	Listen           string `toml:"listen"`
@@ -87,17 +92,24 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var lc api.Controller
 	if cfg.Mock {
 		log.Printf("mock mode: synthesizing telemetry instead of scraping")
-		go mock.Run(ctx, g, st)
+		gen := mock.New(g, st, time.Now().UnixNano())
+		// Preshape one link so the demo has a visibly shaped ("+12MS" chip,
+		// elevated band) link the moment the dashboard connects, without
+		// waiting on someone to drive the shaping UI first.
+		gen.SetShaping(demoShapedLink, &derive.Shaping{DelayMs: f64(12), JitterMs: f64(2)})
+		go gen.Run(ctx)
+		lc = mock.NewController(g, gen)
 	} else {
 		targets := scrape.Targets(g)
 		interval := time.Duration(cfg.ScrapeIntervalMs) * time.Millisecond
 		sc := scrape.New(st, targets, interval, &http.Client{Timeout: scrapeClientTimeout})
 		go sc.Run(ctx)
+		lc = linkdclient.New(g, &http.Client{Timeout: linkdClientTimeout})
 	}
 
-	lc := linkdclient.New(g, &http.Client{Timeout: linkdClientTimeout})
 	d := derive.New(g, st)
 
 	var static fs.FS
@@ -113,3 +125,6 @@ func main() {
 	log.Printf("fabricd listening on %s", cfg.Listen)
 	log.Fatal(http.ListenAndServe(cfg.Listen, h))
 }
+
+// f64 returns a pointer to v, for building derive.Shaping literals.
+func f64(v float64) *float64 { return &v }
