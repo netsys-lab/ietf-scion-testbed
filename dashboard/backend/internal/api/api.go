@@ -266,8 +266,8 @@ func (s *server) handleLive(w http.ResponseWriter, r *http.Request) {
 // frameInterval it computes one derive.Frame, marshals it once, and writes it
 // to every connected client (dropping any that cannot keep up). Every
 // pollInterval it refreshes the Deriver's shaping snapshot from the
-// Controller. h must be the handler returned by New; other handlers are
-// ignored (RunBroadcast returns immediately).
+// Controller. h must be the raw handler returned by New — passing anything
+// else (e.g. a middleware-wrapped handler) panics at startup.
 func RunBroadcast(ctx context.Context, h http.Handler, frameInterval, pollInterval time.Duration) {
 	s, ok := h.(*server)
 	if !ok {
