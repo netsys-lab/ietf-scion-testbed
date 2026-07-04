@@ -5,7 +5,10 @@ import Chrome from "./components/Chrome";
 import FabricMap from "./components/FabricMap";
 import ParticleLayer from "./components/ParticleLayer";
 import Ticker from "./components/Ticker";
+import LinkPanel from "./components/LinkPanel";
+import AsPanel from "./components/AsPanel";
 import "./components/chrome.css";
+import "./components/panel.css";
 
 // App shell: the mockup's three-row grid — masthead / map stage / ticker. It
 // opens the /api/live socket, feeds snapshots and frames into the store, and
@@ -18,6 +21,7 @@ function App() {
   const applyFrame = useFabricStore((s) => s.applyFrame);
   const setConnected = useFabricStore((s) => s.setConnected);
   const pushEvent = useFabricStore((s) => s.pushEvent);
+  const selected = useFabricStore((s) => s.selected);
 
   useEffect(() => {
     const dispose = connectLive(
@@ -43,12 +47,15 @@ function App() {
   return (
     <div id="app">
       <Chrome />
-      <main id="main">
+      <main id="main" className={selected ? "has-panel" : undefined}>
         <div id="stage">
           <FabricMap />
           <ParticleLayer />
         </div>
-        <aside id="panel" aria-live="polite" />
+        <aside id="panel" aria-live="polite">
+          {selected?.kind === "link" && <LinkPanel id={selected.id} />}
+          {selected?.kind === "as" && <AsPanel num={Number(selected.id)} />}
+        </aside>
       </main>
       <footer>
         <Ticker />

@@ -171,3 +171,34 @@ describe("pushEvent", () => {
     expect(events[8].text).toBe("E2");
   });
 });
+
+describe("select", () => {
+  it("sets the selection for a link", () => {
+    expect(useFabricStore.getState().selected).toBeUndefined();
+    useFabricStore.getState().select({ kind: "link", id: "151-155" });
+    expect(useFabricStore.getState().selected).toEqual({ kind: "link", id: "151-155" });
+  });
+
+  it("sets the selection for an AS", () => {
+    useFabricStore.getState().select({ kind: "as", id: "155" });
+    expect(useFabricStore.getState().selected).toEqual({ kind: "as", id: "155" });
+  });
+
+  it("clears the selection with undefined", () => {
+    useFabricStore.getState().select({ kind: "link", id: "151-155" });
+    useFabricStore.getState().select(undefined);
+    expect(useFabricStore.getState().selected).toBeUndefined();
+  });
+
+  it("keeps the selection across a frame update", () => {
+    useFabricStore.getState().applySnapshot(emptyTopology, makeFrame([makeLink({ band: "nominal" })]));
+    useFabricStore.getState().select({ kind: "link", id: "151-155" });
+
+    // A frame that changes a link's band must not disturb the selection.
+    const after = makeFrame([makeLink({ band: "degraded", rtt_ms_a: 53 })], 2);
+    useFabricStore.getState().applyFrame(after);
+
+    expect(useFabricStore.getState().selected).toEqual({ kind: "link", id: "151-155" });
+    expect(useFabricStore.getState().linksById["151-155"].band).toBe("degraded");
+  });
+});
