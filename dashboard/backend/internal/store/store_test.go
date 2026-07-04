@@ -1,6 +1,10 @@
 package store
 
-import "testing"
+import (
+	"fmt"
+	"sync"
+	"testing"
+)
 
 func TestPutLastAndWrap(t *testing.T) {
 	s := New(4)
@@ -37,4 +41,31 @@ func TestRateReset(t *testing.T) {
 	if r <= 0 || r > 101 {
 		t.Fatalf("reset-aware rate %f", r)
 	}
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	s := New(64)
+	var wg sync.WaitGroup
+	for w := 0; w < 4; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < 500; i++ {
+				s.Put(fmt.Sprintf("k%d", w%2), int64(i*10), float64(i))
+			}
+		}(w)
+	}
+	for r := 0; r < 4; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 500; i++ {
+				s.Last("k0")
+				s.Series("k1", 0)
+				s.Rate("k0", 16)
+				s.Keys("k")
+			}
+		}()
+	}
+	wg.Wait()
 }
