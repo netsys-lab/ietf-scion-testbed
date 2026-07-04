@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -54,6 +55,16 @@ type server struct {
 	hub      *hub
 	upgrader websocket.Upgrader
 	mux      *http.ServeMux
+
+	// lastFrame caches the most recent broadcast frame so handleLive can
+	// build a WS-connect snapshot from it instead of calling d.Frame
+	// directly: Deriver.Frame advances per-link hysteresis state as a side
+	// effect, so calling it at connect time would inject off-cadence FSM
+	// steps. Nil until the first broadcast tick runs.
+	lastFrame atomic.Pointer[derive.Frame]
+	// pollInFlight guards against overlapping Controller.Poll calls piling
+	// up behind a slow HTTP round trip and starving frame broadcasting.
+	pollInFlight atomic.Bool
 }
 
 // New builds the dashboard HTTP handler. static, when non-nil, is served at /
@@ -220,8 +231,17 @@ func (s *server) handleLive(w http.ResponseWriter, r *http.Request) {
 
 	// Send the snapshot before registering the client, so the connection's
 	// first bytes are always the snapshot and no broadcast can interleave
-	// ahead of it.
-	snap := snapshotMsg{Type: "snapshot", Topology: s.g, Frame: s.d.Frame(time.Now().UnixMilli())}
+	// ahead of it. Reuse the last broadcast frame rather than calling
+	// d.Frame here: that call advances per-link hysteresis state, so a
+	// client connect must not itself step the FSM off the broadcast cadence.
+	frame := s.lastFrame.Load()
+	if frame == nil {
+		// No broadcast tick has run yet (RunBroadcast not started, or this
+		// connect raced the very first tick); fall back to a direct call.
+		f := s.d.Frame(time.Now().UnixMilli())
+		frame = &f
+	}
+	snap := snapshotMsg{Type: "snapshot", Topology: s.g, Frame: *frame}
 	if data, err := json.Marshal(snap); err != nil || client.write(data) != nil {
 		conn.Close()
 		return
@@ -251,7 +271,7 @@ func (s *server) handleLive(w http.ResponseWriter, r *http.Request) {
 func RunBroadcast(ctx context.Context, h http.Handler, frameInterval, pollInterval time.Duration) {
 	s, ok := h.(*server)
 	if !ok {
-		return
+		panic("api.RunBroadcast: handler was not created by api.New (middleware-wrapped?)")
 	}
 	frameTick := time.NewTicker(frameInterval)
 	defer frameTick.Stop()
@@ -263,14 +283,21 @@ func RunBroadcast(ctx context.Context, h http.Handler, frameInterval, pollInterv
 		case <-ctx.Done():
 			return
 		case <-frameTick.C:
-			msg := frameMsg{Type: "frame", Frame: s.d.Frame(time.Now().UnixMilli())}
+			f := s.d.Frame(time.Now().UnixMilli())
+			s.lastFrame.Store(&f)
+			msg := frameMsg{Type: "frame", Frame: f}
 			data, err := json.Marshal(msg)
 			if err != nil {
 				continue
 			}
 			s.hub.broadcast(data)
 		case <-pollTick.C:
-			s.d.SetShaping(s.lc.Poll(ctx))
+			if s.pollInFlight.CompareAndSwap(false, true) {
+				go func() {
+					defer s.pollInFlight.Store(false)
+					s.d.SetShaping(s.lc.Poll(ctx))
+				}()
+			}
 		}
 	}
 }
