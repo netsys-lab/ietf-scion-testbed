@@ -1,0 +1,31 @@
+---
+- name: Deploy scion-linkd to all AS containers
+  hosts: ases
+  become: true
+  vars:
+    linkd_deb: "{{ playbook_dir }}/../../linkd/dist/scion-linkd_0.1.0_amd64.deb"
+  tasks:
+    - name: Copy scion-linkd package
+      ansible.builtin.copy:
+        src: "{{ linkd_deb }}"
+        dest: /tmp/scion-linkd.deb
+        mode: "0644"
+
+    - name: Install scion-linkd
+      ansible.builtin.apt:
+        deb: /tmp/scion-linkd.deb
+        state: present
+
+    - name: Ensure service is running
+      ansible.builtin.systemd:
+        name: scion-linkd
+        state: restarted
+        enabled: true
+
+    - name: Wait for API
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:30480/healthz"
+      register: health
+      retries: 5
+      delay: 2
+      until: health.status == 200
