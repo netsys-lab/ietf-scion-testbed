@@ -1,0 +1,11 @@
+# TYPE router_bfd_rtt_estimate_seconds gauge
+router_bfd_rtt_estimate_seconds{interface="6049",isd_as="1-155",neighbor_isd_as="1-151"} 0.0021
+# TYPE router_output_bytes_total counter
+router_output_bytes_total{interface="6049",isd_as="1-155",neighbor_isd_as="1-151",sizeclass="128",type="out"} 1000
+router_output_bytes_total{interface="6049",isd_as="1-155",neighbor_isd_as="1-151",sizeclass="256",type="br_transit"} 2000
+# TYPE router_input_bytes_total counter
+router_input_bytes_total{interface="6049",isd_as="1-155",neighbor_isd_as="1-151",sizeclass="128"} 500
+# TYPE router_interface_up gauge
+router_interface_up{interface="6049",isd_as="1-155",neighbor_isd_as="1-151"} 1
+# TYPE router_dropped_pkts_total counter
+router_dropped_pkts_total{interface="6049",isd_as="1-155",neighbor_isd_as="1-151",reason="busy_forwarder",sizeclass="128"} 7
