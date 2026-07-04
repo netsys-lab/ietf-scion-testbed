@@ -19,6 +19,12 @@ func TestValidateCaps(t *testing.T) {
 		{"loss over 100", Params{LossPct: f(101)}, false},
 		{"rate too small", Params{RateMbit: f(0.05)}, false},
 		{"rate too big", Params{RateMbit: f(1001)}, false},
+		{"delay at cap", Params{DelayMs: f(2000)}, true},
+		{"jitter at cap", Params{DelayMs: f(1), JitterMs: f(1000)}, true},
+		{"loss at cap", Params{LossPct: f(100)}, true},
+		{"rate at cap", Params{RateMbit: f(1000)}, true},
+		{"rate at floor", Params{RateMbit: f(0.1)}, true},
+		{"zero jitter without delay", Params{JitterMs: f(0)}, true},
 	}
 	for _, c := range cases {
 		if err := Validate(c.p); (err == nil) != c.ok {

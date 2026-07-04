@@ -1,8 +1,11 @@
 package shape
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"net/netip"
+	"syscall"
 
 	"github.com/vishvananda/netlink"
 )
@@ -64,8 +67,11 @@ func (netlinkShaper) Get(dev string) (Params, error) {
 			v := float64(ne.Jitter) / 1000
 			p.JitterMs = &v
 		}
+		// Write-path NetemQdiscAttrs.Loss is a float32 percent, but the
+		// read-path Netem.Loss here is the kernel's raw u32 probability
+		// (0..math.MaxUint32 == 0..100%), so it must be rescaled.
 		if ne.Loss > 0 {
-			v := float64(ne.Loss)
+			v := float64(ne.Loss) / float64(math.MaxUint32) * 100
 			p.LossPct = &v
 		}
 		if ne.Rate64 > 0 {
@@ -90,8 +96,10 @@ func (netlinkShaper) Clear(dev string) error {
 }
 
 func isNotFound(err error) bool {
-	return err != nil && (err.Error() == "no such file or directory" ||
-		err.Error() == "invalid argument")
+	// Netlink surfaces syscall.Errno values. Tolerate both ENOENT and
+	// EINVAL: the kernel returns EINVAL when deleting a non-existent root
+	// qdisc on some paths.
+	return errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.EINVAL)
 }
 
 // DevByAddr returns the network device that owns ip.
