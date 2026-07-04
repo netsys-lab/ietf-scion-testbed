@@ -25,6 +25,7 @@ import {
   appliedSummary,
   buildShaping,
   directionLabel,
+  isNeutral,
   resultsFromErrorBody,
   shapingToValues,
   type SliderValues,
@@ -147,18 +148,23 @@ export default function LinkPanel({ id }: { id: string }) {
     }
   };
 
+  // An Apply with every slider back at rest is routed to the same reset path
+  // as the Clear button: buildShaping now always sends explicit values, and
+  // an all-neutral PUT would still install a real (if no-op) 100 Mbit netem
+  // qdisc, whereas resetShaping's DELETE actually removes it.
   const runApply = async (clear: boolean) => {
     setBusy(true);
     setResults(null);
     setNetError(null);
-    const params = clear ? {} : buildShaping(vals);
+    const asReset = clear || isNeutral(vals.delay, vals.jitter, vals.loss, vals.rate);
+    const params = asReset ? {} : buildShaping(vals);
     try {
-      const res = clear ? await resetShaping(id, dir) : await putShaping(id, dir, params);
-      finishApply(res.results, params, clear);
+      const res = asReset ? await resetShaping(id, dir) : await putShaping(id, dir, params);
+      finishApply(res.results, params, asReset);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const parsed = resultsFromErrorBody(msg);
-      if (parsed) finishApply(parsed, params, clear);
+      if (parsed) finishApply(parsed, params, asReset);
       else setNetError(msg);
     } finally {
       setBusy(false);

@@ -12,18 +12,38 @@ import {
 } from "./shaping";
 
 describe("buildShaping", () => {
-  it("omits every field at its neutral position", () => {
-    expect(buildShaping(NEUTRAL)).toEqual({});
+  it("returns all four fields explicitly at the neutral position", () => {
+    expect(buildShaping(NEUTRAL)).toEqual({
+      delay_ms: 0,
+      jitter_ms: 0,
+      loss_pct: 0,
+      rate_mbit: 100,
+    });
   });
 
-  it("includes only the fields that depart from neutral", () => {
-    expect(buildShaping({ delay: 50, jitter: 0, loss: 0, rate: 100 })).toEqual({ delay_ms: 50 });
-    expect(buildShaping({ delay: 0, jitter: 0, loss: 2.5, rate: 100 })).toEqual({ loss_pct: 2.5 });
-    expect(buildShaping({ delay: 0, jitter: 0, loss: 0, rate: 50 })).toEqual({ rate_mbit: 50 });
+  it("carries each slider value through explicitly, never omitting a field", () => {
+    expect(buildShaping({ delay: 50, jitter: 0, loss: 0, rate: 100 })).toEqual({
+      delay_ms: 50,
+      jitter_ms: 0,
+      loss_pct: 0,
+      rate_mbit: 100,
+    });
+    expect(buildShaping({ delay: 0, jitter: 0, loss: 2.5, rate: 100 })).toEqual({
+      delay_ms: 0,
+      jitter_ms: 0,
+      loss_pct: 2.5,
+      rate_mbit: 100,
+    });
+    expect(buildShaping({ delay: 0, jitter: 0, loss: 0, rate: 50 })).toEqual({
+      delay_ms: 0,
+      jitter_ms: 0,
+      loss_pct: 0,
+      rate_mbit: 50,
+    });
   });
 
-  it("includes rate only when throttled below the 100 Mbit ceiling", () => {
-    expect(buildShaping({ delay: 0, jitter: 0, loss: 0, rate: 100 }).rate_mbit).toBeUndefined();
+  it("always includes rate_mbit, even at the 100 Mbit ceiling", () => {
+    expect(buildShaping({ delay: 0, jitter: 0, loss: 0, rate: 100 }).rate_mbit).toBe(100);
     expect(buildShaping({ delay: 0, jitter: 0, loss: 0, rate: 99 }).rate_mbit).toBe(99);
   });
 
@@ -38,10 +58,16 @@ describe("buildShaping", () => {
 });
 
 describe("isNeutral", () => {
-  it("is true only when nothing would be sent", () => {
-    expect(isNeutral(NEUTRAL)).toBe(true);
-    expect(isNeutral({ delay: 0, jitter: 0, loss: 0, rate: 99 })).toBe(false);
-    expect(isNeutral({ delay: 1, jitter: 0, loss: 0, rate: 100 })).toBe(false);
+  it("is true only at the exact neutral position", () => {
+    expect(isNeutral(0, 0, 0, 100)).toBe(true);
+  });
+
+  it("is false for any single deviation from neutral", () => {
+    expect(isNeutral(1, 0, 0, 100)).toBe(false);
+    expect(isNeutral(0, 1, 0, 100)).toBe(false);
+    expect(isNeutral(0, 0, 0.5, 100)).toBe(false);
+    expect(isNeutral(0, 0, 0, 99.5)).toBe(false);
+    expect(isNeutral(0, 0, 0, 99)).toBe(false);
   });
 });
 

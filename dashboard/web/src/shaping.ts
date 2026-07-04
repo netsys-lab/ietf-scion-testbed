@@ -1,8 +1,15 @@
 // Pure, framework-agnostic helpers for the shaping panel: turning the four
-// slider positions into a wire-shaping payload (omitting neutral fields the
-// same way the mockup's null-semantics do), formatting the applied summary
-// for the ticker, and the direction control's ordering/labels. Kept out of the
-// React component so shaping.test.ts can exercise the logic directly.
+// slider positions into a wire-shaping payload, formatting the applied
+// summary for the ticker, and the direction control's ordering/labels. Kept
+// out of the React component so shaping.test.ts can exercise the logic
+// directly.
+//
+// Design intent: slider position = desired state. linkd's PUT applies a
+// partial merge over the current kernel state for any field left out of the
+// request body, so buildShaping always sends all four fields explicitly —
+// omitting a neutral field would let a stale non-neutral kernel value survive
+// an Apply. Neutral (all sliders at rest) is instead handled by the caller as
+// a reset (DELETE), which actually removes the qdisc; see isNeutral.
 import type { Direction, Shaping, ShapingResult } from "./types";
 
 // The four raw slider values, in their display units.
@@ -18,21 +25,24 @@ export interface SliderValues {
 // no active shaping.
 export const NEUTRAL: SliderValues = { delay: 0, jitter: 0, loss: 0, rate: 100 };
 
-// buildShaping emits only the fields that depart from neutral (delay>0,
-// jitter>0, loss>0, rate<100), mirroring the mockup's null semantics: an
-// all-neutral slider set produces an empty payload (a clear).
+// buildShaping always returns all four fields explicitly, taken straight from
+// the slider values — never omitted — so a PUT can't be merged against stale
+// kernel state for a field the user moved back to neutral.
 export function buildShaping(v: SliderValues): Shaping {
-  const p: Shaping = {};
-  if (v.delay > 0) p.delay_ms = v.delay;
-  if (v.jitter > 0) p.jitter_ms = v.jitter;
-  if (v.loss > 0) p.loss_pct = v.loss;
-  if (v.rate < 100) p.rate_mbit = v.rate;
-  return p;
+  return {
+    delay_ms: v.delay,
+    jitter_ms: v.jitter,
+    loss_pct: v.loss,
+    rate_mbit: v.rate,
+  };
 }
 
-// isNeutral is true when buildShaping would send nothing (all sliders at rest).
-export function isNeutral(v: SliderValues): boolean {
-  return Object.keys(buildShaping(v)).length === 0;
+// isNeutral is true when all four slider values are at rest (no delay,
+// jitter, or loss, and the full 100 Mbit rate ceiling) — the caller should
+// treat this as a reset (DELETE the qdisc) rather than a PUT of all-neutral
+// values, since a PUT would still install a 100 Mbit netem cap.
+export function isNeutral(delay: number, jitter: number, loss: number, rate: number): boolean {
+  return delay === 0 && jitter === 0 && loss === 0 && rate === 100;
 }
 
 // shapingToValues seeds the sliders from a link's current shaping (from the
