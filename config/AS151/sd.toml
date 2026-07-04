@@ -12,7 +12,7 @@ connection = "/var/lib/scion/sd1-151.path.db"
 address = "10.20.3.151:30255"
 
 [metrics]
-prometheus = "10.20.3.1519:30455"
+prometheus = "10.20.3.151:30455"
 
 [features]
 experimental_idint = true

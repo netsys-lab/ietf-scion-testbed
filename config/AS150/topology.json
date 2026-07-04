@@ -58,8 +58,8 @@
         },
         "6300": {
           "underlay": {
-            "local": "[fd00:fade:4::150]:50000",
-            "remote": "[fd00:fade:4::154]:50000"
+            "local": "[fd00:fade:7::150]:50000",
+            "remote": "[fd00:fade:7::154]:50000"
           },
           "isd_as": "1-154",
           "link_to": "child",

@@ -23,13 +23,13 @@ pct create 151 $TEMPLATE $OPTIONS --description "AS151" \
     --net3,name=sci4,bridge=scion4,ip6=fd00:fade:4::151/64 \
     --net4,name=sci8,bridge=scion8,ip6=fd00:fade:8::151/64 \
     --net5,name=sci9,bridge=scion9,ip6=fd00:fade:9::151/64 \
-    --net6,name=sciA,bridge=scionA,ip6=fd00:fade:a::151/64
+    --net6,name=sci5,bridge=scion5,ip6=fd00:fade:5::151/64
 
 pct create 152 $TEMPLATE $OPTIONS --description "AS152" \
     --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:03,ip=dhcp,ip6=auto \
     --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto \
     --net2,name=sci4,bridge=scion4,ip6=fd00:fade:4::152/64 \
-    --net3,name=sci5,bridge=scion5,ip6=fd00:fade:5::152/64 \
+    --net3,name=sci2,bridge=scion2,ip6=fd00:fade:2::152/64 \
     --net4,name=sci6,bridge=scion6,ip6=fd00:fade:6::152/64 \
     --net5,name=sciA,bridge=scionA,ip6=fd00:fade:a::152/64 \
     --net6,name=sciB,bridge=scionB,ip6=fd00:fade:b::152/64 \
@@ -41,7 +41,7 @@ pct create 153 $TEMPLATE $OPTIONS --description "AS153" \
     --net2,name=sci3,bridge=scion3,ip6=fd00:fade:3::153/64 \
     --net3,name=sci5,bridge=scion5,ip6=fd00:fade:5::153/64 \
     --net4,name=sci6,bridge=scion6,ip6=fd00:fade:6::153/64 \
-    --net5,name=sciC,bridge=scionC,ip6=fd00:fade:c::153/64 \
+    --net5,name=sciD,bridge=scionD,ip6=fd00:fade:d::153/64 \
     --net6,name=sciE,bridge=scionE,ip6=fd00:fade:e::153/64
 
 pct create 154 $TEMPLATE $OPTIONS --description "AS154" \
@@ -56,7 +56,7 @@ pct create 155 $TEMPLATE $OPTIONS --description "AS155" \
     --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:06,ip=dhcp,ip6=auto \
     --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto \
     --net2,name=sci9,bridge=scion9,ip6=fd00:fade:9::155/64 \
-    --net3,name=sciA,bridge=scionA,ip6=fd00:fade:A::155/64 \
+    --net3,name=sciA,bridge=scionA,ip6=fd00:fade:a::155/64 \
     --net4,name=sci10,bridge=scion10,ip6=fd00:fade:10::155/64 \
     --net5,name=sci11,bridge=scion11,ip6=fd00:fade:11::155/64 \
     --net6,name=sci12,bridge=scion12,ip6=fd00:fade:12::155/64 \
@@ -68,14 +68,14 @@ pct create 156 $TEMPLATE $OPTIONS --description "AS156" \
     --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:07,ip=dhcp,ip6=auto \
     --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto \
     --net2,name=sciB,bridge=scionB,ip6=fd00:fade:b::156/64 \
-    --net3,name=sciC,bridge=scionC,ip6=fd00:fade:c::156/64 \
+    --net3,name=sciD,bridge=scionD,ip6=fd00:fade:d::156/64 \
     --net4,name=sci12,bridge=scion12,ip6=fd00:fade:12::156/64 \
     --net5,name=sci17,bridge=scion17,ip6=fd00:fade:17::156/64
 
 pct create 157 $TEMPLATE $OPTIONS --description "AS157" \
     --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:08,ip=dhcp,ip6=auto \
     --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto \
-    --net2,name=sciC,bridge=scionC,ip6=fd00:fade:d::157/64 \
+    --net2,name=sciC,bridge=scionC,ip6=fd00:fade:c::157/64 \
     --net3,name=sciE,bridge=scionE,ip6=fd00:fade:e::157/64 \
     --net4,name=sci18,bridge=scion18,ip6=fd00:fade:18::157/64
 
