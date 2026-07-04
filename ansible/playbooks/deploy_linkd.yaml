@@ -15,6 +15,15 @@
       ansible.builtin.apt:
         deb: /tmp/scion-linkd.deb
         state: present
+        force: true
+
+    - name: Configure scion-linkd to bind the management address
+      ansible.builtin.copy:
+        dest: /etc/scion-linkd/config.toml
+        mode: "0644"
+        content: |
+          listen = "{{ ansible_host }}:30480"
+          topology_glob = "/etc/scion/AS*/topology.json"
 
     - name: Ensure service is running
       ansible.builtin.systemd:

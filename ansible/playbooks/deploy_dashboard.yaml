@@ -15,11 +15,19 @@
       ansible.builtin.apt:
         deb: /tmp/fabricd.deb
         state: present
+        force: true
 
-    - name: Copy fabric topology config
+    - name: Copy AS topologies (fabricd reads only these)
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../config/"
-        dest: /etc/fabric/config/
+        src: "{{ item }}"
+        dest: "/etc/fabric/config/{{ item | dirname | basename }}/topology.json"
+        mode: "0644"
+      loop: "{{ query('fileglob', playbook_dir + '/../../config/AS*/topology.json') }}"
+
+    - name: Copy AS core list
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../config/as_list.yml"
+        dest: /etc/fabric/config/as_list.yml
         mode: "0644"
 
     - name: Ensure service is running
