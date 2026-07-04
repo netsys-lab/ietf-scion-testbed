@@ -42,6 +42,9 @@ const (
 	burstMbitMin = 20.0
 	burstMbitMax = 40.0
 
+	beaconsMinPerSec = 1.0
+	beaconsMaxPerSec = 3.0
+
 	// tickSeconds is the elapsed time each Step call is assumed to represent,
 	// used to convert an Mbit/s rate into a byte-counter delta. Run's ticker
 	// fires every second; Step does not derive the interval from `now` so
@@ -66,6 +69,8 @@ type linkGen struct {
 
 	cumOutA, cumInA float64 // A's output_bytes / input_bytes counters
 	cumOutB, cumInB float64 // B's output_bytes / input_bytes counters
+
+	beaconA, beaconB float64 // A's/B's cs/beacons_recv counters
 }
 
 // Generator produces synthetic samples for a fixed graph into a Store. Build
@@ -156,7 +161,9 @@ func Run(ctx context.Context, g topo.Graph, st *store.Store) {
 
 // maybeMoveBurst lets the burst path drift to an adjacent link index with
 // small probability each step, so the "hot" link wanders slowly across the
-// topology rather than teleporting or staying fixed.
+// topology rather than teleporting or staying fixed. Down links are skipped
+// since traffic on them is always forced to zero, so a burst parked there
+// would be invisible; if every link is down, the burst simply stays put.
 func (gen *Generator) maybeMoveBurst() {
 	n := len(gen.links)
 	if n < 2 {
@@ -165,19 +172,27 @@ func (gen *Generator) maybeMoveBurst() {
 	if gen.rng.Float64() >= burstMoveProb {
 		return
 	}
-	if gen.rng.Intn(2) == 0 {
-		gen.burstIdx = (gen.burstIdx + 1) % n
-	} else {
-		gen.burstIdx = (gen.burstIdx - 1 + n) % n
+	dir := 1
+	if gen.rng.Intn(2) != 0 {
+		dir = -1
 	}
+	idx := gen.burstIdx
+	for i := 0; i < n; i++ {
+		idx = (idx + dir + n) % n
+		if !gen.links[idx].down {
+			gen.burstIdx = idx
+			return
+		}
+	}
+	// every link is down: nothing to move to, leave burstIdx unchanged.
 }
 
 // stepLink advances one link's RTT/traffic random-walk state and writes its
 // samples. burst is true when this link currently carries the wandering
 // burst path.
 func (gen *Generator) stepLink(lg *linkGen, burst bool, now int64) {
-	lg.rttA = clamp(walk(gen.rng, lg.rttA, lg.rttBaselineA, 0.4, 0.2), rttMinMs, rttMaxMs)
-	lg.rttB = clamp(walk(gen.rng, lg.rttB, lg.rttBaselineB, 0.4, 0.2), rttMinMs, rttMaxMs)
+	lg.rttA = clamp(walk(gen.rng, lg.rttA, lg.rttBaselineA, 0.25, 0.2), rttMinMs, rttMaxMs)
+	lg.rttB = clamp(walk(gen.rng, lg.rttB, lg.rttBaselineB, 0.25, 0.2), rttMinMs, rttMaxMs)
 
 	ambientMid := (ambientMbitMin + ambientMbitMax) / 2
 	lg.ambientAB = clamp(walk(gen.rng, lg.ambientAB, ambientMid, 0.15, 0.1), ambientMbitMin, ambientMbitMax)
@@ -189,10 +204,25 @@ func (gen *Generator) stepLink(lg *linkGen, burst bool, now int64) {
 		mbitBA += gen.burstMbit
 	}
 
+	// A down link carries no traffic: force both directions to zero before
+	// accumulating so the cumulative counters freeze (still monotonic
+	// non-decreasing) and store.Rate reports 0, matching up=0 -- no
+	// particles on a down link in the dashboard.
+	beaconRateA, beaconRateB := 0.0, 0.0
+	if lg.down {
+		mbitAB, mbitBA = 0, 0
+	} else {
+		beaconRateA = beaconsMinPerSec + gen.rng.Float64()*(beaconsMaxPerSec-beaconsMinPerSec)
+		beaconRateB = beaconsMinPerSec + gen.rng.Float64()*(beaconsMaxPerSec-beaconsMinPerSec)
+	}
+
 	lg.cumOutA += mbitToBytes(mbitAB)
 	lg.cumInB += mbitToBytes(mbitAB)
 	lg.cumOutB += mbitToBytes(mbitBA)
 	lg.cumInA += mbitToBytes(mbitBA)
+
+	lg.beaconA += beaconRateA * tickSeconds
+	lg.beaconB += beaconRateB * tickSeconds
 
 	up := 1.0
 	if lg.down {
@@ -208,6 +238,8 @@ func (gen *Generator) stepLink(lg *linkGen, burst bool, now int64) {
 	gen.st.Put(inKey(b), now, lg.cumInB)
 	gen.st.Put(upKey(a), now, up)
 	gen.st.Put(upKey(b), now, up)
+	gen.st.Put(beaconsKey(a), now, lg.beaconA)
+	gen.st.Put(beaconsKey(b), now, lg.beaconB)
 }
 
 // walk performs one step of a mean-reverting random walk: cur moves by a
@@ -242,3 +274,4 @@ func outKey(e topo.Endpoint) string       { return fmt.Sprintf("%d/br/output_byt
 func inKey(e topo.Endpoint) string        { return fmt.Sprintf("%d/br/input_bytes/%s", e.AS, e.IfID) }
 func upKey(e topo.Endpoint) string        { return fmt.Sprintf("%d/br/up/%s", e.AS, e.IfID) }
 func healthKey(as int, svc string) string { return fmt.Sprintf("%d/%s/_up/", as, svc) }
+func beaconsKey(e topo.Endpoint) string   { return fmt.Sprintf("%d/cs/beacons_recv/%s", e.AS, e.IfID) }

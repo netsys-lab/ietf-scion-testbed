@@ -50,8 +50,9 @@ type config struct {
 	Mock             bool   `toml:"mock"`
 }
 
-// loadConfig decodes path over these defaults; a missing/empty file is fine
-// (every field keeps its default), but a malformed file is an error.
+// loadConfig decodes path over these defaults: an empty file is fine
+// (defaults apply); a missing file is an error -- the deb always ships
+// /etc/fabricd/config.toml.
 func loadConfig(path string) (config, error) {
 	c := config{
 		Listen:           ":8080",

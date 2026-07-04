@@ -126,3 +126,50 @@ func TestStepValueRangesAndMonotonicCounters(t *testing.T) {
 		}
 	}
 }
+
+// TestDownLinkTrafficFrozen ticks a seeded Generator three times and checks
+// that the down 150-154 link's A-side output_bytes counter never advances
+// (so store.Rate reads exactly 0, matching what the dashboard shows: no
+// particles on a down link), while a healthy link's counter strictly
+// increases every tick.
+func TestDownLinkTrafficFrozen(t *testing.T) {
+	g := testGraph()
+	st := store.New(60)
+	gen := New(g, st, 42)
+
+	downEP := topo.Endpoint{AS: 150, IfID: "2"}    // 150-154 A-side
+	healthyEP := topo.Endpoint{AS: 150, IfID: "1"} // 150-151 A-side
+
+	now := int64(3_000_000)
+	var downVals, healthyVals []float64
+	for i := 0; i < 3; i++ {
+		gen.Step(now + int64(i)*1000)
+
+		d, ok := st.Last(outKey(downEP))
+		if !ok {
+			t.Fatalf("tick %d: missing down-link output_bytes", i)
+		}
+		downVals = append(downVals, d.V)
+
+		h, ok := st.Last(outKey(healthyEP))
+		if !ok {
+			t.Fatalf("tick %d: missing healthy-link output_bytes", i)
+		}
+		healthyVals = append(healthyVals, h.V)
+	}
+
+	for i := 1; i < len(downVals); i++ {
+		if downVals[i] != downVals[0] {
+			t.Fatalf("down-link output_bytes counter changed across ticks: %v", downVals)
+		}
+	}
+	for i := 1; i < len(healthyVals); i++ {
+		if healthyVals[i] <= healthyVals[i-1] {
+			t.Fatalf("healthy-link output_bytes counter did not strictly increase: %v", healthyVals)
+		}
+	}
+
+	if rate := st.Rate(outKey(downEP), 10); rate != 0 {
+		t.Fatalf("want down-link rate 0, got %v", rate)
+	}
+}
