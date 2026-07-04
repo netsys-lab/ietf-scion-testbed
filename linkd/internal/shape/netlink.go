@@ -59,12 +59,18 @@ func (netlinkShaper) Get(dev string) (Params, error) {
 			continue
 		}
 		p := Params{}
+		// The write path (NewNetem) runs the µs latency/jitter through
+		// time2Tick before handing it to the kernel, and the kernel
+		// reports the values back in those scheduler ticks. The netlink
+		// lib copies them out verbatim (no tick2Time), so convert here:
+		// ticks -> µs via the exported TickInUsec(), then µs -> ms.
+		// tick2Time is unexported, hence the explicit division.
 		if ne.Latency > 0 {
-			v := float64(ne.Latency) / 1000
+			v := float64(ne.Latency) / netlink.TickInUsec() / 1000
 			p.DelayMs = &v
 		}
 		if ne.Jitter > 0 {
-			v := float64(ne.Jitter) / 1000
+			v := float64(ne.Jitter) / netlink.TickInUsec() / 1000
 			p.JitterMs = &v
 		}
 		// Write-path NetemQdiscAttrs.Loss is a float32 percent, but the

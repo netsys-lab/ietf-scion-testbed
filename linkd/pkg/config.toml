@@ -1,0 +1,3 @@
+# scion-linkd default configuration
+listen = ":30480"
+topology_glob = "/etc/scion/AS*/topology.json"
