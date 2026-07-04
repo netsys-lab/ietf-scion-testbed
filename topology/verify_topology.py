@@ -57,6 +57,22 @@ for f in sorted(glob.glob(os.path.join(root, "config/AS*/*.toml"))):
         if m and m.group(1) != f"10.20.3.{asnum}":
             fail.append(f"{os.path.relpath(f, root)}: prometheus addr {m.group(1)} != 10.20.3.{asnum}")
 
+# 5. Control/discovery service and BR internal addresses must live on the
+#    AS's own management IP.
+for f in sorted(glob.glob(os.path.join(root, "config/AS*/topology.json"))):
+    asnum = int(re.search(r"AS(\d+)", f).group(1))
+    t = json.load(open(f))
+    addrs = []
+    for svc in ("control_service", "discovery_service"):
+        for name, entry in t.get(svc, {}).items():
+            addrs.append((f"{svc}.{name}.addr", entry["addr"]))
+    for name, br in t.get("border_routers", {}).items():
+        addrs.append((f"border_routers.{name}.internal_addr", br["internal_addr"]))
+    for where, addr in addrs:
+        host = addr.rsplit(":", 1)[0]
+        if host != f"10.20.3.{asnum}":
+            fail.append(f"{os.path.relpath(f, root)}: {where} host {host} != 10.20.3.{asnum}")
+
 if fail:
     print("\n".join(fail)); sys.exit(1)
 print(f"OK: {len(links)} links consistent")
