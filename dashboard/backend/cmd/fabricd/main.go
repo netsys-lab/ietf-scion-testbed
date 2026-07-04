@@ -41,10 +41,18 @@ const (
 	pollInterval  = 5 * time.Second
 )
 
-// demoShapedLink is preshaped at startup in mock mode so the dashboard shows
-// a shaped link (elevated band, "+12MS" chip) immediately rather than only
-// after someone drives the shaping UI.
+// demoShapedLink is preshaped (after a warmup delay -- see the mock branch
+// below) in mock mode so the dashboard shows a shaped link (elevated band,
+// "+12MS" chip) without anyone needing to drive the shaping UI first.
 const demoShapedLink = "155-160"
+
+// demoShapedLinkWarmup is how long demoShapedLink runs unshaped before
+// SetShaping is applied. derive.Deriver's per-side RTT baseline is the
+// minimum ever observed for that key (see internal/derive.(*Deriver).baseline),
+// so shaping a link from t=0 gives it no unshaped history: its baseline
+// becomes the shaped floor itself, and the RTT band never crosses the
+// elevated threshold. Waiting for real unshaped samples first fixes that.
+const demoShapedLinkWarmup = 10 * time.Second
 
 // config is fabricd's on-disk configuration.
 type config struct {
@@ -96,11 +104,16 @@ func main() {
 	if cfg.Mock {
 		log.Printf("mock mode: synthesizing telemetry instead of scraping")
 		gen := mock.New(g, st, time.Now().UnixNano())
-		// Preshape one link so the demo has a visibly shaped ("+12MS" chip,
-		// elevated band) link the moment the dashboard connects, without
-		// waiting on someone to drive the shaping UI first.
-		gen.SetShaping(demoShapedLink, &derive.Shaping{DelayMs: f64(12), JitterMs: f64(2)})
 		go gen.Run(ctx)
+		// Preshape one link once the fabric has real unshaped history (see
+		// demoShapedLinkWarmup) so the dashboard shows a visibly shaped
+		// ("+12MS" chip, elevated band) link without anyone driving the
+		// shaping UI. The timer runs for the process lifetime; that's fine
+		// here since SetShaping has no ctx-scoped resource to clean up.
+		time.AfterFunc(demoShapedLinkWarmup, func() {
+			gen.SetShaping(demoShapedLink, &derive.Shaping{DelayMs: f64(12), JitterMs: f64(2)})
+			log.Printf("mock: preshaped link %s (+12ms) for the demo", demoShapedLink)
+		})
 		lc = mock.NewController(g, gen)
 	} else {
 		targets := scrape.Targets(g)
