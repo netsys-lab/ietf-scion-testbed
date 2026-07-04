@@ -1,0 +1,6 @@
+# fabricd default configuration
+listen = ":8080"
+config_dir = "/etc/fabric/config"
+static_dir = "/usr/share/fabricd/web"
+scrape_interval_ms = 1000
+mock = false

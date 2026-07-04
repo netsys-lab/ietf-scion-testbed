@@ -1,0 +1,15 @@
+[Unit]
+Description=SCION Fabrik dashboard backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/fabricd -config /etc/fabricd/config.toml
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
