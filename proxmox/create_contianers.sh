@@ -103,3 +103,7 @@ pct create 161 $TEMPLATE $OPTIONS --description "AS161" \
     --net2,name=sci16,bridge=scion16,ip6=fd00:fade:16::161/64 \
     --net3,name=sci17,bridge=scion17,ip6=fd00:fade:17::161/64 \
     --net4,name=sci18,bridge=scion18,ip6=fd00:fade:18::161/64
+
+pct create 200 $TEMPLATE $OPTIONS --description "Dashboard" \
+    --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:C8,ip=10.20.3.200/24,ip6=auto \
+    --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto

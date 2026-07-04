@@ -1,0 +1,37 @@
+---
+- name: Deploy fabricd dashboard backend to the dashboard container
+  hosts: dashboard
+  become: true
+  vars:
+    fabricd_deb: "{{ playbook_dir }}/../../dashboard/backend/dist/fabricd_0.1.0_amd64.deb"
+  tasks:
+    - name: Copy fabricd package
+      ansible.builtin.copy:
+        src: "{{ fabricd_deb }}"
+        dest: /tmp/fabricd.deb
+        mode: "0644"
+
+    - name: Install fabricd
+      ansible.builtin.apt:
+        deb: /tmp/fabricd.deb
+        state: present
+
+    - name: Copy fabric topology config
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../config/"
+        dest: /etc/fabric/config/
+        mode: "0644"
+
+    - name: Ensure service is running
+      ansible.builtin.systemd:
+        name: fabricd
+        state: restarted
+        enabled: true
+
+    - name: Wait for API
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:8080/api/health"
+      register: health
+      retries: 5
+      delay: 2
+      until: health.status == 200
