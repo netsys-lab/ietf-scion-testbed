@@ -16,12 +16,12 @@
 .station .as-eyebrow { font-size: 9px; font-weight: 400; letter-spacing: 0.16em; fill: var(--ink-mute); }
 .station { cursor: pointer; }
 .station:hover .station-disc, .station:focus-visible .station-disc { stroke: var(--brass); }
-.station:focus-visible { outline: none; }
+.station:focus, .station:focus-visible { outline: none; }
 .station.selected .station-disc { stroke: var(--brass); }
 
 /* ── Links ────────────────────────────────────────────── */
 .link { cursor: pointer; }
-.link:focus-visible { outline: none; }
+.link:focus, .link:focus-visible { outline: none; }
 .link .hit { fill: none; stroke: #000; stroke-opacity: 0; stroke-width: 24; }
 .link .trunk { fill: none; stroke-width: 7; stroke-linecap: round; transition: stroke .4s ease; }
 .link .gap { fill: none; stroke: var(--page); stroke-width: 1.6; stroke-linecap: round; }
