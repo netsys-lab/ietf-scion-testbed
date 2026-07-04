@@ -3,6 +3,7 @@ module github.com/netsys-lab/ietf-scion-testbed/dashboard/backend
 go 1.26.1
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/prometheus/client_model v0.6.1
 	github.com/prometheus/common v0.63.0
 	gopkg.in/yaml.v3 v3.0.1

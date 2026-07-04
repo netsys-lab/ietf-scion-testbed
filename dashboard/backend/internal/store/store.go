@@ -11,10 +11,11 @@ import (
 )
 
 // Sample is a single (timestamp, value) observation. T is a unix
-// millisecond timestamp.
+// millisecond timestamp. The json tags are the history endpoint's wire
+// protocol ([{"t":..,"v":..}]); do not change them without updating the API.
 type Sample struct {
-	T int64
-	V float64
+	T int64   `json:"t"`
+	V float64 `json:"v"`
 }
 
 // ring is a fixed-capacity circular buffer of samples for one key.
