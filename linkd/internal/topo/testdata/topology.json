@@ -1,0 +1,18 @@
+{
+  "isd_as": "1-155",
+  "border_routers": {
+    "br1-155-1": {
+      "internal_addr": "10.20.3.155:31022",
+      "interfaces": {
+        "6049": {
+          "underlay": {"local": "[fd00:fade:9::155]:50000", "remote": "[fd00:fade:9::151]:50000"},
+          "isd_as": "1-151", "link_to": "parent", "mtu": 1452
+        },
+        "64100": {
+          "underlay": {"local": "[fd00:fade:12::155]:50000", "remote": "[fd00:fade:12::156]:50000"},
+          "isd_as": "1-156", "link_to": "child", "mtu": 1452
+        }
+      }
+    }
+  }
+}
