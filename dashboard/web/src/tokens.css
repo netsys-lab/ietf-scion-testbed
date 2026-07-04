@@ -1,0 +1,43 @@
+/* Design tokens for SCION Fabrik. The color block below is the "## Color
+ * tokens (validated 2026-07-04)" set from docs/superpowers/specs/
+ * 2026-07-04-dashboard-ui-design.md, reproduced verbatim. The short-name
+ * aliases beneath it (--steel/--good/--warn/--bad/--crit) bridge those
+ * canonical names to the names the ported mockup map CSS (fabric.css) uses,
+ * so that stylesheet ports byte-for-byte; the values are identical. Font
+ * stacks and color-scheme are the mockup's :root. Imported first in main.tsx
+ * so every other stylesheet resolves against these. */
+:root {
+  --page:        #07090F;  /* deep blue-black night — not neutral black */
+  --surface:     #0D1119;  /* map surface, cards */
+  --raised:      #131A26;  /* panels, tiles */
+  --hairline:    rgba(255,255,255,0.08);
+  --ink:         #F2F4F8;  /* 17.2:1 on page */
+  --ink-2:       #9AA3B2;  /*  7.4:1 */
+  --ink-mute:    #5C6675;  /*  3.3:1 — hairline labels only */
+  --brass:       #C9B37E;  /* accent: chrome, selection, shaping chips. 9.2:1.
+                              Never a data encoding; low-chroma so it cannot
+                              impersonate warning amber. */
+  --link-steel:  #5A7A9E;  /* healthy link. 4.2:1 */
+  --status-good: #0CA30C;  /* recovery pulse only */
+  --status-warn: #FAB219;  /* elevated */
+  --status-bad:  #EC835A;  /* degraded */
+  --status-crit: #D03B3B;  /* critical */
+  --particle:    #FFF3DC;  /* traffic dots, warm white, additive glow */
+
+  /* Short aliases consumed by the ported mockup map styles (fabric.css). */
+  --steel: var(--link-steel);
+  --good:  var(--status-good);
+  --warn:  var(--status-warn);
+  --bad:   var(--status-bad);
+  --crit:  var(--status-crit);
+
+  /* Font stacks (mockup :root fallbacks; self-hosted D-DIN / IBM Plex land later). */
+  --din: Bahnschrift, "DIN Alternate", "Franklin Gothic Medium", "Arial Narrow", ui-sans-serif, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  color-scheme: dark;
+}
+
+/* Deliberate single-look: a booth instrument is dark in both viewer themes. */
+:root[data-theme="light"] { color-scheme: dark; }

@@ -1,11 +1,18 @@
-:root {
-  color-scheme: dark light;
-}
-
-* {
-  box-sizing: border-box;
-}
-
+/* Global reset + app shell, ported from the mockup's :root/body/#app/#stage
+ * rules. color-scheme lives in tokens.css (imported first). Header/footer
+ * rows and the side panel land in Tasks 10-11; for now the stage owns the
+ * whole viewport. */
+* { box-sizing: border-box; margin: 0; }
+html, body, #root { height: 100%; }
 body {
-  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  overflow: hidden;
 }
+
+#app { display: grid; grid-template-rows: 1fr; height: 100dvh; }
+
+#stage { position: relative; min-width: 0; }
+#stage > svg#map { position: absolute; inset: 0; width: 100%; height: 100%; }

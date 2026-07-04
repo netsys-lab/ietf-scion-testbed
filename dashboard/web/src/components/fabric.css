@@ -1,0 +1,73 @@
+/* Fabric map styles — ported verbatim from the approved mockup's <style>
+ * (docs/superpowers/specs/mockups/fabric-mockup.html, the .station / .link /
+ * .break-glyph / .linklabel / .chip / .peer-glyph / #legend blocks and the
+ * reduced-motion override). Class names are identical to the mockup so the
+ * React markup and any future port stay drop-in compatible. */
+
+/* ── Stations ─────────────────────────────────────────── */
+.station-disc { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; }
+.station.core .station-disc { stroke-width: 3.5; }
+.station .core-ring { fill: none; stroke: var(--ink-mute); stroke-width: 1; }
+.station text {
+  font-family: var(--din); font-size: 15px; font-weight: 700;
+  letter-spacing: 0.06em; fill: var(--ink);
+  paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round;
+}
+.station .as-eyebrow { font-size: 9px; font-weight: 400; letter-spacing: 0.16em; fill: var(--ink-mute); }
+.station { cursor: pointer; }
+.station:hover .station-disc, .station:focus-visible .station-disc { stroke: var(--brass); }
+.station:focus-visible { outline: none; }
+.station.selected .station-disc { stroke: var(--brass); }
+
+/* ── Links ────────────────────────────────────────────── */
+.link { cursor: pointer; }
+.link:focus-visible { outline: none; }
+.link .hit { fill: none; stroke: #000; stroke-opacity: 0; stroke-width: 24; }
+.link .trunk { fill: none; stroke-width: 7; stroke-linecap: round; transition: stroke .4s ease; }
+.link .gap { fill: none; stroke: var(--page); stroke-width: 1.6; stroke-linecap: round; }
+.link[data-band="nominal"]  .trunk { stroke: var(--steel); }
+.link[data-band="elevated"] .trunk { stroke: var(--warn); }
+.link[data-band="degraded"] .trunk { stroke: var(--bad); }
+.link[data-band="critical"] .trunk { stroke: var(--crit); animation: critpulse 2.2s ease-in-out infinite; }
+.link[data-band="down"] .trunk { stroke: #2A3140; }
+.link[data-band="down"] .gap { stroke: transparent; }
+.link[data-band="stale"] .trunk { stroke: var(--steel); stroke-opacity: 0.4; }
+@keyframes critpulse { 50% { stroke-opacity: 0.55; } }
+.link:hover .trunk, .link:focus-visible .trunk { filter: brightness(1.35); }
+.link.selected .trunk {
+  stroke-width: 8;
+  filter: brightness(1.35) drop-shadow(0 0 7px rgba(201,179,126,0.45));
+}
+.flash .trunk { filter: brightness(2) saturate(1.4); }
+
+/* ── Overlays ─────────────────────────────────────────── */
+.break-glyph line { stroke: var(--crit); stroke-width: 2.4; stroke-linecap: round; }
+.break-glyph circle { fill: var(--page); stroke: #2A3140; stroke-width: 1.5; }
+
+.linklabel rect { fill: var(--raised); stroke: var(--hairline); rx: 4; }
+.linklabel text { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-2); }
+.linklabel .val { fill: var(--ink); }
+
+.chip rect { fill: var(--surface); stroke: var(--brass); stroke-width: 1; rx: 4; }
+.chip text {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.03em;
+  fill: var(--brass); text-anchor: middle;
+}
+
+.peer-glyph {
+  font-family: var(--mono); font-size: 11px; fill: var(--ink-2); text-anchor: middle;
+  paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round;
+}
+
+/* ── Legend ───────────────────────────────────────────── */
+#legend {
+  position: absolute; left: 18px; bottom: 14px;
+  display: flex; gap: 16px; align-items: center;
+  font-family: var(--din); font-size: 10px; letter-spacing: 0.1em;
+  color: var(--ink-2); text-transform: uppercase;
+}
+#legend .sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .link[data-band="critical"] .trunk { animation: none; }
+}
