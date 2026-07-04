@@ -1,7 +1,7 @@
-/* Global reset + app shell, ported from the mockup's :root/body/#app/#stage
- * rules. color-scheme lives in tokens.css (imported first). Header/footer
- * rows and the side panel land in Tasks 10-11; for now the stage owns the
- * whole viewport. */
+/* Global reset + app shell, ported from the mockup's :root/body/#app/#stage/
+ * main/aside rules. color-scheme lives in tokens.css (imported first); the
+ * masthead/KPI/ticker/screen-mode chrome lives in components/chrome.css. The
+ * app is the mockup's three-row grid: masthead / map stage / ticker. */
 * { box-sizing: border-box; margin: 0; }
 html, body, #root { height: 100%; }
 body {
@@ -12,7 +12,30 @@ body {
   overflow: hidden;
 }
 
-#app { display: grid; grid-template-rows: 1fr; height: 100dvh; }
+#app { display: grid; grid-template-rows: auto 1fr auto; height: 100dvh; }
+
+/* ── Map stage ────────────────────────────────────────── */
+main { display: grid; grid-template-columns: 1fr 0; min-height: 0; transition: grid-template-columns .25s ease; }
+main.has-panel { grid-template-columns: 1fr 380px; }
 
 #stage { position: relative; min-width: 0; }
-#stage > svg#map { position: absolute; inset: 0; width: 100%; height: 100%; }
+#stage > svg#map, #stage > canvas#fx { position: absolute; inset: 0; width: 100%; height: 100%; }
+#stage > canvas#fx { pointer-events: none; }
+/* Keep the decorative legend above the additive particle canvas. */
+#stage > #legend { z-index: 1; }
+
+/* ── Side panel (Task 11 fills it; stays hidden until has-panel) ── */
+aside {
+  border-left: 1px solid var(--hairline); background: var(--surface);
+  overflow-y: auto; min-width: 0; display: none;
+}
+main.has-panel aside { display: block; }
+
+@media (max-width: 900px) {
+  main.has-panel { grid-template-columns: 1fr 0; }
+  main.has-panel aside {
+    display: block; position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    max-height: 55dvh; border-left: 0; border-top: 1px solid var(--hairline);
+    border-radius: 14px 14px 0 0; z-index: 5;
+  }
+}

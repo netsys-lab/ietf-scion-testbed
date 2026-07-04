@@ -35,6 +35,7 @@ export default function FabricMap() {
   const linksById = useFabricStore((s) => s.linksById);
   const selected = useFabricStore((s) => s.selected);
   const select = useFabricStore((s) => s.select);
+  const setBooted = useFabricStore((s) => s.setBooted);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [mids, setMids] = useState<Record<string, Mid>>({});
@@ -64,6 +65,74 @@ export default function FabricMap() {
     }
     setMids(next);
   }, [links]);
+
+  // Boot draw-in, ported from the mockup's boot(): each link's trunk+gap draws
+  // in via stroke-dashoffset over 1.1s, staggered 0.02s/link, while stations
+  // fade in staggered; inline styles are cleared and the store's booted flag
+  // flips after 1.7s (which is what releases the particle layer). Under reduced
+  // motion the whole animation is skipped and booted flips immediately. Runs
+  // once — guarded on the store flag so a reconnect's re-snapshot won't replay
+  // it — and is StrictMode-safe (cleanup cancels the pending rAF/timer).
+  const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bootRaf = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || links.length === 0) return;
+    if (useFabricStore.getState().booted) return;
+
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setBooted(true);
+      return;
+    }
+
+    const pairs = Array.from(svg.querySelectorAll<SVGGElement>("g.link"))
+      .map((g) => ({
+        trunk: g.querySelector<SVGPathElement>(".trunk"),
+        gap: g.querySelector<SVGPathElement>(".gap"),
+      }))
+      .filter((p): p is { trunk: SVGPathElement; gap: SVGPathElement } => !!p.trunk && !!p.gap);
+    const stations = Array.from(svg.querySelectorAll<SVGGElement>("g.station"));
+
+    pairs.forEach(({ trunk, gap }, i) => {
+      const len = trunk.getTotalLength();
+      for (const p of [trunk, gap]) {
+        p.style.strokeDasharray = String(len);
+        p.style.strokeDashoffset = String(len);
+        p.style.transition = `stroke-dashoffset 1.1s ease ${i * 0.02}s`;
+      }
+    });
+    stations.forEach((g, i) => {
+      g.style.opacity = "0";
+      g.style.transition = `opacity .4s ease ${0.5 + i * 0.05}s`;
+    });
+
+    bootRaf.current = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        pairs.forEach(({ trunk, gap }) => {
+          trunk.style.strokeDashoffset = "0";
+          gap.style.strokeDashoffset = "0";
+        });
+        stations.forEach((g) => {
+          g.style.opacity = "1";
+        });
+      }),
+    );
+    bootTimer.current = setTimeout(() => {
+      pairs.forEach(({ trunk, gap }) => {
+        for (const p of [trunk, gap]) {
+          p.style.strokeDasharray = "";
+          p.style.strokeDashoffset = "";
+          p.style.transition = "";
+        }
+      });
+      setBooted(true);
+    }, 1700);
+
+    return () => {
+      if (bootTimer.current !== null) clearTimeout(bootTimer.current);
+      if (bootRaf.current !== null) cancelAnimationFrame(bootRaf.current);
+    };
+  }, [links, setBooted]);
 
   // Escape clears the current selection (close button lives in Task 11's panel).
   useEffect(() => {

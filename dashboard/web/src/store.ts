@@ -16,6 +16,9 @@ export interface FabricState {
   frame?: Frame;
   selected?: Selection;
   connected: boolean;
+  /** True once the boot draw-in has finished (or immediately under reduced
+   * motion); the particle layer only spawns traffic after this flips. */
+  booted: boolean;
   events: TickerEvent[];
   /** Derived map for cheap O(1) component access, kept in sync with frame. */
   linksById: Record<string, LinkVM>;
@@ -24,6 +27,10 @@ export interface FabricState {
   applyFrame: (frame: Frame) => void;
   select: (selection: Selection | undefined) => void;
   setConnected: (connected: boolean) => void;
+  setBooted: (booted: boolean) => void;
+  /** Prepend a ready-made ticker event (used for the boot "FABRIC ONLINE"
+   * line, and later the shaping-applied lines from Task 11's panel). */
+  pushEvent: (event: TickerEvent) => void;
 }
 
 const MAX_EVENTS = 9;
@@ -98,6 +105,7 @@ export const useFabricStore = create<FabricState>((set, get) => ({
   frame: undefined,
   selected: undefined,
   connected: false,
+  booted: false,
   events: [],
   linksById: {},
 
@@ -132,4 +140,8 @@ export const useFabricStore = create<FabricState>((set, get) => ({
   select: (selected) => set({ selected }),
 
   setConnected: (connected) => set({ connected }),
+
+  setBooted: (booted) => set({ booted }),
+
+  pushEvent: (event) => set((s) => ({ events: [event, ...s.events].slice(0, MAX_EVENTS) })),
 }));

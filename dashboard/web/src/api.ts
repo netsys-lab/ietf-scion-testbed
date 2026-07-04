@@ -19,10 +19,16 @@ function liveURL(): string {
  * exponential backoff (0.5s -> 8s cap), resetting the backoff to its floor
  * after a successful connection. Returns a disposer that stops reconnecting
  * and closes the socket.
+ *
+ * onStatusChange (optional) fires true on every successful open and false on
+ * every disconnect, so the caller can drive a LIVE/RECONNECTING indicator. It
+ * is deliberately silenced after dispose(): a disposer-triggered close is an
+ * intentional teardown, not a lost connection.
  */
 export function connectLive(
   onSnapshot: (topology: Graph, frame: Frame) => void,
   onFrame: (frame: Frame) => void,
+  onStatusChange?: (connected: boolean) => void,
 ): () => void {
   let disposed = false;
   let socket: WebSocket | null = null;
@@ -36,6 +42,7 @@ export function connectLive(
 
     ws.onopen = () => {
       backoff = MIN_BACKOFF_MS;
+      onStatusChange?.(true);
     };
 
     ws.onmessage = (ev) => {
@@ -54,6 +61,7 @@ export function connectLive(
 
     ws.onclose = () => {
       if (disposed) return;
+      onStatusChange?.(false);
       scheduleReconnect();
     };
 

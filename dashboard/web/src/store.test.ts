@@ -43,6 +43,7 @@ function resetStore() {
     frame: undefined,
     selected: undefined,
     connected: false,
+    booted: false,
     events: [],
     linksById: {},
   });
@@ -147,5 +148,26 @@ describe("setConnected", () => {
     expect(useFabricStore.getState().connected).toBe(true);
     useFabricStore.getState().setConnected(false);
     expect(useFabricStore.getState().connected).toBe(false);
+  });
+});
+
+describe("setBooted", () => {
+  it("flips the booted flag", () => {
+    expect(useFabricStore.getState().booted).toBe(false);
+    useFabricStore.getState().setBooted(true);
+    expect(useFabricStore.getState().booted).toBe(true);
+  });
+});
+
+describe("pushEvent", () => {
+  it("prepends the event newest-first and caps the log at 9", () => {
+    const push = useFabricStore.getState().pushEvent;
+    for (let i = 0; i < 11; i++) {
+      push({ t: i, text: `E${i}`, cls: "good" });
+    }
+    const { events } = useFabricStore.getState();
+    expect(events).toHaveLength(9);
+    expect(events[0].text).toBe("E10");
+    expect(events[8].text).toBe("E2");
   });
 });
