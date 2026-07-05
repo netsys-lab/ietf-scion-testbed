@@ -1,0 +1,79 @@
+{
+ "Bandwidth": {
+  "48164": {
+   "Inter": 500000,
+   "Intra": {
+    "48610": 100000000,
+    "59691": 100000000
+   }
+  },
+  "48610": {
+   "Inter": 1000000,
+   "Intra": {
+    "59691": 100000000
+   }
+  },
+  "59691": {
+   "Inter": 1000000,
+   "Intra": {}
+  }
+ },
+ "Geo": {
+  "48164": {
+   "Address": "Stockholm",
+   "Latitude": 59.3293,
+   "Longitude": 18.0686
+  },
+  "48610": {
+   "Address": "Stockholm",
+   "Latitude": 59.3293,
+   "Longitude": 18.0686
+  },
+  "59691": {
+   "Address": "Stockholm",
+   "Latitude": 59.3293,
+   "Longitude": 18.0686
+  }
+ },
+ "Hops": {
+  "48164": {
+   "Intra": {
+    "48610": 0,
+    "59691": 0
+   }
+  },
+  "48610": {
+   "Intra": {
+    "59691": 0
+   }
+  },
+  "59691": {
+   "Intra": {}
+  }
+ },
+ "Latency": {
+  "48164": {
+   "Inter": "5.6ms",
+   "Intra": {
+    "48610": "0ms",
+    "59691": "0ms"
+   }
+  },
+  "48610": {
+   "Inter": "7.7ms",
+   "Intra": {
+    "59691": "0ms"
+   }
+  },
+  "59691": {
+   "Inter": "13ms",
+   "Intra": {}
+  }
+ },
+ "LinkType": {
+  "48164": "direct",
+  "48610": "direct",
+  "59691": "direct"
+ },
+ "Note": "IETF 126 SCION testbed - emulated AS at Stockholm; links tc-shaped to story"
+}

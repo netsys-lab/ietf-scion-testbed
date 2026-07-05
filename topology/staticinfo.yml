@@ -1,0 +1,32 @@
+# Story data for beacon metadata (StaticInfoExtension) generation.
+# Consumed by gen_staticinfo.py. Edit, then re-run the generator.
+model:
+  speed_km_per_s: 200000   # light in fiber
+  floor_ms: 1.0            # min one-way latency
+  round_ms: 0.1
+tiers_mbit:
+  core: 10000
+  parent_child: 1000
+  peer: 500
+intra:
+  latency_ms: 0.0          # single BR per AS
+  bandwidth_mbit: 100000
+  hops: 0
+note: "IETF 126 SCION testbed - emulated AS at {city}; links tc-shaped to story"
+ases:
+  150: { city: Vienna,    lat: 48.2082, lon: 16.3738 }
+  151: { city: Zurich,    lat: 47.3769, lon: 8.5417 }
+  152: { city: Frankfurt, lat: 50.1109, lon: 8.6821 }
+  153: { city: Prague,    lat: 50.0755, lon: 14.4378 }
+  154: { city: Madrid,    lat: 40.4168, lon: -3.7038 }
+  155: { city: Amsterdam, lat: 52.3676, lon: 4.9041 }
+  156: { city: Milan,     lat: 45.4642, lon: 9.1900 }
+  157: { city: Warsaw,    lat: 52.2297, lon: 21.0122 }
+  158: { city: Stockholm, lat: 59.3293, lon: 18.0686 }
+  159: { city: Paris,     lat: 48.8566, lon: 2.3522 }
+  160: { city: Budapest,  lat: 47.4979, lon: 19.0402 }
+  161: { city: Athens,    lat: 37.9838, lon: 23.7275 }
+# Per-link overrides win over the model. Keys "<lowerAS>-<higherAS>".
+# overrides:
+#   "155-158": { latency_ms: 25.0, bandwidth_mbit: 200 }
+overrides: {}

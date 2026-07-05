@@ -1,0 +1,22 @@
+{
+ "13941": {
+  "delay_ms": 3.0,
+  "rate_mbit": 10000
+ },
+ "48024": {
+  "delay_ms": 6.2,
+  "rate_mbit": 1000
+ },
+ "54502": {
+  "delay_ms": 1.5,
+  "rate_mbit": 10000
+ },
+ "59120": {
+  "delay_ms": 3.1,
+  "rate_mbit": 1000
+ },
+ "6691": {
+  "delay_ms": 2.6,
+  "rate_mbit": 10000
+ }
+}

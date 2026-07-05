@@ -1,0 +1,79 @@
+{
+ "Bandwidth": {
+  "2427": {
+   "Inter": 1000000,
+   "Intra": {
+    "53174": 100000000,
+    "59974": 100000000
+   }
+  },
+  "53174": {
+   "Inter": 1000000,
+   "Intra": {
+    "59974": 100000000
+   }
+  },
+  "59974": {
+   "Inter": 1000000,
+   "Intra": {}
+  }
+ },
+ "Geo": {
+  "2427": {
+   "Address": "Warsaw",
+   "Latitude": 52.2297,
+   "Longitude": 21.0122
+  },
+  "53174": {
+   "Address": "Warsaw",
+   "Latitude": 52.2297,
+   "Longitude": 21.0122
+  },
+  "59974": {
+   "Address": "Warsaw",
+   "Latitude": 52.2297,
+   "Longitude": 21.0122
+  }
+ },
+ "Hops": {
+  "2427": {
+   "Intra": {
+    "53174": 0,
+    "59974": 0
+   }
+  },
+  "53174": {
+   "Intra": {
+    "59974": 0
+   }
+  },
+  "59974": {
+   "Intra": {}
+  }
+ },
+ "Latency": {
+  "2427": {
+   "Inter": "2.6ms",
+   "Intra": {
+    "53174": "0ms",
+    "59974": "0ms"
+   }
+  },
+  "53174": {
+   "Inter": "8ms",
+   "Intra": {
+    "59974": "0ms"
+   }
+  },
+  "59974": {
+   "Inter": "4.5ms",
+   "Intra": {}
+  }
+ },
+ "LinkType": {
+  "2427": "direct",
+  "53174": "direct",
+  "59974": "direct"
+ },
+ "Note": "IETF 126 SCION testbed - emulated AS at Warsaw; links tc-shaped to story"
+}

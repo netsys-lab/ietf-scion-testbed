@@ -1,0 +1,79 @@
+{
+ "Bandwidth": {
+  "27736": {
+   "Inter": 1000000,
+   "Intra": {
+    "58233": 100000000,
+    "58271": 100000000
+   }
+  },
+  "58233": {
+   "Inter": 1000000,
+   "Intra": {
+    "58271": 100000000
+   }
+  },
+  "58271": {
+   "Inter": 1000000,
+   "Intra": {}
+  }
+ },
+ "Geo": {
+  "27736": {
+   "Address": "Athens",
+   "Latitude": 37.9838,
+   "Longitude": 23.7275
+  },
+  "58233": {
+   "Address": "Athens",
+   "Latitude": 37.9838,
+   "Longitude": 23.7275
+  },
+  "58271": {
+   "Address": "Athens",
+   "Latitude": 37.9838,
+   "Longitude": 23.7275
+  }
+ },
+ "Hops": {
+  "27736": {
+   "Intra": {
+    "58233": 0,
+    "58271": 0
+   }
+  },
+  "58233": {
+   "Intra": {
+    "58271": 0
+   }
+  },
+  "58271": {
+   "Intra": {}
+  }
+ },
+ "Latency": {
+  "27736": {
+   "Inter": "7.3ms",
+   "Intra": {
+    "58233": "0ms",
+    "58271": "0ms"
+   }
+  },
+  "58233": {
+   "Inter": "8ms",
+   "Intra": {
+    "58271": "0ms"
+   }
+  },
+  "58271": {
+   "Inter": "10.8ms",
+   "Intra": {}
+  }
+ },
+ "LinkType": {
+  "27736": "direct",
+  "58233": "direct",
+  "58271": "direct"
+ },
+ "Note": "IETF 126 SCION testbed - emulated AS at Athens; links tc-shaped to story"
+}

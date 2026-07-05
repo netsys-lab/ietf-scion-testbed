@@ -1,0 +1,53 @@
+{
+ "Bandwidth": {
+  "33031": {
+   "Inter": 1000000,
+   "Intra": {
+    "46101": 100000000
+   }
+  },
+  "46101": {
+   "Inter": 1000000,
+   "Intra": {}
+  }
+ },
+ "Geo": {
+  "33031": {
+   "Address": "Paris",
+   "Latitude": 48.8566,
+   "Longitude": 2.3522
+  },
+  "46101": {
+   "Address": "Paris",
+   "Latitude": 48.8566,
+   "Longitude": 2.3522
+  }
+ },
+ "Hops": {
+  "33031": {
+   "Intra": {
+    "46101": 0
+   }
+  },
+  "46101": {
+   "Intra": {}
+  }
+ },
+ "Latency": {
+  "33031": {
+   "Inter": "7.7ms",
+   "Intra": {
+    "46101": "0ms"
+   }
+  },
+  "46101": {
+   "Inter": "2.1ms",
+   "Intra": {}
+  }
+ },
+ "LinkType": {
+  "33031": "direct",
+  "46101": "direct"
+ },
+ "Note": "IETF 126 SCION testbed - emulated AS at Paris; links tc-shaped to story"
+}

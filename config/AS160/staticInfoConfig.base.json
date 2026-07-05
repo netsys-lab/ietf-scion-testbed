@@ -1,0 +1,30 @@
+{
+ "Bandwidth": {
+  "39652": {
+   "Inter": 1000000,
+   "Intra": {}
+  }
+ },
+ "Geo": {
+  "39652": {
+   "Address": "Budapest",
+   "Latitude": 47.4979,
+   "Longitude": 19.0402
+  }
+ },
+ "Hops": {
+  "39652": {
+   "Intra": {}
+  }
+ },
+ "Latency": {
+  "39652": {
+   "Inter": "5.7ms",
+   "Intra": {}
+  }
+ },
+ "LinkType": {
+  "39652": "direct"
+ },
+ "Note": "IETF 126 SCION testbed - emulated AS at Budapest; links tc-shaped to story"
+}
