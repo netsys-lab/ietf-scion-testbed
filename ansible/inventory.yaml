@@ -63,9 +63,25 @@ playground:
     ansible_user: ietf
     ansible_python_interpreter: auto_silent
 
+hub:
+  hosts:
+    wg-hub:
+      ansible_host: 10.20.3.201
+  vars:
+    ansible_user: ietf
+    ansible_python_interpreter: auto_silent
+
+leafases:
+  hosts:
+    AS1-158:
+    AS1-159:
+    AS1-160:
+    AS1-161:
+
 nodes:
   children:
     ases:
     service:
     dashboard:
     playground:
+    hub:

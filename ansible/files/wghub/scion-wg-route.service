@@ -1,0 +1,12 @@
+[Unit]
+Description=Return route to WG attendee subnet via wg-hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip route replace 10.20.5.0/24 via 10.20.3.201
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

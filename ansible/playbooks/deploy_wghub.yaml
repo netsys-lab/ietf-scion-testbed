@@ -1,0 +1,95 @@
+---
+- name: Deploy the WireGuard attendee hub (thin, daemonless)
+  hosts: hub
+  become: true
+  vars:
+    wghub_build: "{{ playbook_dir }}/../../.build/wghub"
+  pre_tasks:
+    - name: Fail fast if the pool has not been generated
+      ansible.builtin.stat:
+        path: "{{ wghub_build }}/wg0.conf"
+      register: wgconf
+      delegate_to: localhost
+      become: false
+    - ansible.builtin.assert:
+        that: wgconf.stat.exists
+        fail_msg: "run ./tools/gen-wg-pool.sh first"
+  tasks:
+    - name: Install wireguard + nftables + iproute2
+      ansible.builtin.apt:
+        name: [wireguard, nftables, iproute2]
+        state: present
+        update_cache: true
+
+    - name: Enable IPv4 forwarding
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-wghub.conf
+        mode: "0644"
+        content: "net.ipv4.ip_forward = 1\n"
+      notify: apply sysctl
+
+    - name: Install wg0.conf (server key + 50 peers)
+      ansible.builtin.copy:
+        src: "{{ wghub_build }}/wg0.conf"
+        dest: /etc/wireguard/wg0.conf
+        mode: "0600"
+
+    - name: Install nftables policy
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/wghub/nftables.conf"
+        dest: /etc/nftables.conf
+        mode: "0644"
+
+    - name: Enable + start nftables and wg-quick@wg0
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: restarted
+        daemon_reload: true
+      loop: [nftables, wg-quick@wg0]
+
+    - name: Verify wg0 is up with 50 peers
+      ansible.builtin.shell: wg show wg0 | grep -c '^peer:'
+      register: peers
+      changed_when: false
+      failed_when: peers.stdout != "50"
+  handlers:
+    # Apply only our drop-in: `sysctl --system` re-reads every sysctl.d file and
+    # fails in an unprivileged LXC on host-owned read-only keys (kernel.pid_max,
+    # fs.protected_*). Loading just our file sets net.ipv4.ip_forward cleanly.
+    - name: apply sysctl
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/90-wghub.conf
+      changed_when: true
+
+- name: Push the conf pool to the dashboard container
+  hosts: dashboard
+  become: true
+  tasks:
+    - name: Copy pool.json for fabricd
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/wghub/pool.json"
+        dest: /var/lib/fabricd/wg-pool.json
+        owner: root
+        group: root
+        mode: "0600"
+
+- name: Install return routes on the leaf ASes
+  hosts: leafases
+  become: true
+  tasks:
+    - name: Install route unit
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/wghub/scion-wg-route.service"
+        dest: /etc/systemd/system/scion-wg-route.service
+        mode: "0644"
+    - name: Enable + start route unit
+      ansible.builtin.systemd:
+        name: scion-wg-route
+        enabled: true
+        state: restarted
+        daemon_reload: true
+    - name: Verify route present
+      ansible.builtin.command: ip route show 10.20.5.0/24
+      register: rt
+      changed_when: false
+      failed_when: "'via 10.20.3.201' not in rt.stdout"
