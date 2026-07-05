@@ -29,10 +29,11 @@ type fakeController struct {
 	lastDirection string
 	lastClear     bool
 	lastShaping   derive.Shaping
+	baseline      map[string]*derive.Shaping
 }
 
-func (f *fakeController) Poll(ctx context.Context) map[string]*derive.Shaping {
-	return f.shaping
+func (f *fakeController) Poll(ctx context.Context) (shaping, baseline map[string]*derive.Shaping) {
+	return f.shaping, f.baseline
 }
 
 func (f *fakeController) Apply(ctx context.Context, link topo.Link, direction string, p derive.Shaping, clear bool) []linkdclient.Result {

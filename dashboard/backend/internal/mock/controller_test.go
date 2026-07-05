@@ -32,7 +32,7 @@ func TestControllerApplyBoth(t *testing.T) {
 		t.Fatalf("want results ordered A(%d) then B(%d), got %+v", link.A.AS, link.B.AS, results)
 	}
 
-	shaping := c.Poll(ctx)
+	shaping, _ := c.Poll(ctx)
 	p, ok := shaping[link.ID]
 	if !ok || p == nil || p.DelayMs == nil || *p.DelayMs != 20 {
 		t.Fatalf("want Poll/CurrentShaping to reflect applied shaping, got %+v", shaping)
@@ -46,7 +46,7 @@ func TestControllerApplyBoth(t *testing.T) {
 	if len(clearResults) != 2 || !clearResults[0].OK || !clearResults[1].OK {
 		t.Fatalf("want 2 OK results on clear, got %+v", clearResults)
 	}
-	shaping2 := c.Poll(ctx)
+	shaping2, _ := c.Poll(ctx)
 	if shaping2[link.ID] != nil {
 		t.Fatalf("want shaping cleared after Apply(clear=true), got %+v", shaping2[link.ID])
 	}

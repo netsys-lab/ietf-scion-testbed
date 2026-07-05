@@ -57,6 +57,12 @@ export interface LinkVM {
   up: boolean;
   stale: boolean;
   shaping?: Shaping;
+  // The link's declared baseline (story) shape: nominal one-way delay and rate
+  // tier. The shaping sliders bound to these (delay can't go below the
+  // baseline, rate can't go above it) since a link can only be shaped worse
+  // than its default. Absent if the backend reports no baseline.
+  baseline_delay_ms?: number;
+  baseline_rate_mbit?: number;
 }
 
 export interface ASVM {

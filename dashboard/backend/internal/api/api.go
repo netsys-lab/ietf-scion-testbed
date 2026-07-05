@@ -35,7 +35,7 @@ const writeWait = 2 * time.Second
 // Controller is the subset of *linkdclient.Client the API depends on. Keeping
 // it an interface lets tests inject a fake linkd without a real HTTP backend.
 type Controller interface {
-	Poll(ctx context.Context) map[string]*derive.Shaping
+	Poll(ctx context.Context) (shaping, baseline map[string]*derive.Shaping)
 	Apply(ctx context.Context, link topo.Link, direction string, p derive.Shaping, clear bool) []linkdclient.Result
 	AllHealth(ctx context.Context) map[int]bool
 }
@@ -295,7 +295,9 @@ func RunBroadcast(ctx context.Context, h http.Handler, frameInterval, pollInterv
 			if s.pollInFlight.CompareAndSwap(false, true) {
 				go func() {
 					defer s.pollInFlight.Store(false)
-					s.d.SetShaping(s.lc.Poll(ctx))
+					shaping, baseline := s.lc.Poll(ctx)
+					s.d.SetShaping(shaping)
+					s.d.SetBaselineShaping(baseline)
 				}()
 			}
 		}

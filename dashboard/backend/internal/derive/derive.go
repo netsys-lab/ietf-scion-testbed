@@ -43,6 +43,12 @@ type LinkVM struct {
 	Up         bool     `json:"up"`
 	Stale      bool     `json:"stale"`
 	Shaping    *Shaping `json:"shaping,omitempty"`
+	// BaselineDelayMs / BaselineRateMbit are the link's declared story shape
+	// (one-way delay and rate tier), the nominal state the RTT band and the
+	// shaping sliders are measured against. Omitted when linkd reports no
+	// baseline for the link.
+	BaselineDelayMs  *float64 `json:"baseline_delay_ms,omitempty"`
+	BaselineRateMbit *float64 `json:"baseline_rate_mbit,omitempty"`
 }
 
 // ASVM is the derived per-AS view: service-health LEDs and beaconing rate.
@@ -123,9 +129,10 @@ type Deriver struct {
 	g  topo.Graph
 	st *store.Store
 
-	mu      sync.Mutex
-	state   map[string]*linkState
-	shaping map[string]*Shaping
+	mu             sync.Mutex
+	state          map[string]*linkState
+	shaping        map[string]*Shaping
+	baselineShaping map[string]*Shaping // linkID -> declared story (baseline) shape from linkd
 
 	// baselineMin is the running-minimum RTT ever observed per rttKey(...)
 	// side, surviving store ring rollover (see baseline). It can be seeded
@@ -141,9 +148,10 @@ func New(g topo.Graph, st *store.Store) *Deriver {
 	d := &Deriver{
 		g:           g,
 		st:          st,
-		state:       make(map[string]*linkState, len(g.Links)),
-		shaping:     make(map[string]*Shaping),
-		baselineMin: make(map[string]float64),
+		state:           make(map[string]*linkState, len(g.Links)),
+		shaping:         make(map[string]*Shaping),
+		baselineShaping: make(map[string]*Shaping),
+		baselineMin:     make(map[string]float64),
 	}
 	for _, l := range g.Links {
 		d.state[l.ID] = &linkState{band: bandNominal}
@@ -160,6 +168,20 @@ func (d *Deriver) SetShaping(m map[string]*Shaping) {
 		m = make(map[string]*Shaping)
 	}
 	d.shaping = m
+}
+
+// SetBaselineShaping replaces the linkID -> declared baseline (story) shape
+// snapshot, polled from linkd alongside the current shaping. The baseline is
+// a link's nominal state: deriveLink bands RTT relative to 2x the baseline
+// one-way delay (round trip on a symmetric link) and surfaces the baseline
+// delay/rate to the frontend so the shaping sliders can bound to it.
+func (d *Deriver) SetBaselineShaping(m map[string]*Shaping) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if m == nil {
+		m = make(map[string]*Shaping)
+	}
+	d.baselineShaping = m
 }
 
 // Frame computes the view models and KPIs for the current store contents,
@@ -235,6 +257,22 @@ func (d *Deriver) deriveLink(l topo.Link) LinkVM {
 	baseA := d.baseline(rttKey(l.A))
 	baseB := d.baseline(rttKey(l.B))
 
+	// Prefer linkd's declared baseline (the story shape) over the observed
+	// running-min: it is the true nominal and is immune to the transient low
+	// RTT samples that otherwise pin the running-min low and read a link at
+	// its normal shape as degraded. On a symmetric link the round-trip
+	// baseline is 2x the one-way baseline delay.
+	bl := d.baselineShaping[l.ID]
+	var blDelay, blRate *float64
+	if bl != nil {
+		blDelay, blRate = bl.DelayMs, bl.RateMbit
+		if bl.DelayMs != nil {
+			if declared := 2 * *bl.DelayMs; declared >= baselineFloor {
+				baseA, baseB = declared, declared
+			}
+		}
+	}
+
 	rateAB := d.rateMbit(outKey(l.A))
 	rateBA := d.rateMbit(outKey(l.B))
 	// Wire loss per direction: what A sent toward B minus what B received,
@@ -265,9 +303,11 @@ func (d *Deriver) deriveLink(l topo.Link) LinkVM {
 		RateABMbit: rateAB,
 		RateBAMbit: rateBA,
 		LossPct:    loss,
-		Up:         !down,
-		Stale:      stale,
-		Shaping:    d.shaping[l.ID],
+		Up:               !down,
+		Stale:            stale,
+		Shaping:          d.shaping[l.ID],
+		BaselineDelayMs:  blDelay,
+		BaselineRateMbit: blRate,
 	}
 }
 
@@ -377,12 +417,19 @@ func (d *Deriver) rateMbit(key string) float64 {
 func (d *Deriver) baseline(key string) float64 {
 	ringMin := math.Inf(1)
 	for _, s := range d.st.Series(key, math.MinInt64) {
+		// A non-positive RTT means "no BFD measurement yet" (border routers
+		// report 0 until their BFD sessions converge at startup), NOT a 0ms
+		// link. Letting it into the running-min collapses the baseline to
+		// zero, which then flags every shaped link as degraded. Skip it.
+		if s.V <= 0 {
+			continue
+		}
 		if s.V < ringMin {
 			ringMin = s.V
 		}
 	}
 	m := ringMin
-	if prev, ok := d.baselineMin[key]; ok && prev < m {
+	if prev, ok := d.baselineMin[key]; ok && prev > 0 && prev < m {
 		m = prev
 	}
 	if !math.IsInf(m, 1) {
@@ -416,6 +463,12 @@ func (d *Deriver) SeedBaselines(m map[string]float64) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for k, v := range m {
+		// Never seed a non-positive baseline: a persisted 0 (from a prior run
+		// that recorded pre-BFD-convergence RTT) would pin the running-min at
+		// zero and read every shaped link as degraded.
+		if v <= 0 {
+			continue
+		}
 		if cur, ok := d.baselineMin[k]; !ok || v < cur {
 			d.baselineMin[k] = v
 		}

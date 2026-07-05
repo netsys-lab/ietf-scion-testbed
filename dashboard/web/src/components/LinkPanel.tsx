@@ -108,7 +108,8 @@ export default function LinkPanel({ id }: { id: string }) {
     setResults(null);
     setNetError(null);
     setDir("both");
-    setVals(shapingToValues(useFabricStore.getState().linksById[id]?.shaping));
+    const lk0 = useFabricStore.getState().linksById[id];
+    setVals(shapingToValues(lk0?.shaping, lk0?.baseline_delay_ms, lk0?.baseline_rate_mbit));
 
     if (aAs === undefined || aIfid === undefined) return;
     let cancelled = false;
@@ -190,7 +191,9 @@ export default function LinkPanel({ id }: { id: string }) {
     setBusy(true);
     setResults(null);
     setNetError(null);
-    const asReset = clear || isNeutral(vals.delay, vals.jitter, vals.loss, vals.rate);
+    const asReset =
+      clear ||
+      isNeutral(vals.delay, vals.jitter, vals.loss, vals.rate, link.baseline_delay_ms, link.baseline_rate_mbit);
     const params = asReset ? {} : buildShaping(vals);
     try {
       const res = asReset ? await resetShaping(id, dir) : await putShaping(id, dir, params);
@@ -257,7 +260,7 @@ export default function LinkPanel({ id }: { id: string }) {
           <input
             id="s-delay"
             type="range"
-            min={0}
+            min={link.baseline_delay_ms ?? 0}
             max={500}
             value={vals.delay}
             onChange={(e) => setVals((v) => ({ ...v, delay: Number(e.target.value) }))}
@@ -295,7 +298,7 @@ export default function LinkPanel({ id }: { id: string }) {
             id="s-rate"
             type="range"
             min={1}
-            max={100}
+            max={link.baseline_rate_mbit ?? 100}
             value={vals.rate}
             onChange={(e) => setVals((v) => ({ ...v, rate: Number(e.target.value) }))}
           />

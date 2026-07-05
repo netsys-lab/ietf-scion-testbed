@@ -27,8 +27,11 @@ func NewController(g topo.Graph, gen *Generator) *Controller {
 
 // Poll returns the Generator's current shaping snapshot, standing in for a
 // poll of every AS's linkd.
-func (c *Controller) Poll(ctx context.Context) map[string]*derive.Shaping {
-	return c.gen.CurrentShaping()
+func (c *Controller) Poll(ctx context.Context) (shaping, baseline map[string]*derive.Shaping) {
+	// The mock has no declared baseline profile; a nil baseline map makes the
+	// deriver fall back to its observed-min RTT baseline, which is fine for
+	// synthetic demo data.
+	return c.gen.CurrentShaping(), nil
 }
 
 // Apply sets or clears shaping on the Generator for link.ID. Unlike the real

@@ -412,3 +412,81 @@ func TestSetShapingCountsShaped(t *testing.T) {
 		t.Fatalf("shaping = %+v, want delay 5", f.Links[0].Shaping)
 	}
 }
+
+// TestZeroRTTDoesNotPoisonBaseline verifies that RTT=0 samples (which border
+// routers emit before their BFD sessions converge at startup) are excluded
+// from the running-min baseline. Otherwise the baseline collapses to zero and
+// a link at its normal (shaped) latency reads as a huge regression.
+func TestZeroRTTDoesNotPoisonBaseline(t *testing.T) {
+	st := store.New(64)
+	d := New(oneCoreLink(), st)
+
+	// Pre-convergence: the border router reports RTT=0 for a few frames.
+	var ti int64
+	for i := 0; i < 4; i++ {
+		ti = int64(i * 1000)
+		putRTT(st, ti, 0, 0)
+		putBytes(st, ti, i, 1*mbit, 1*mbit)
+		health(st, ti)
+		d.Frame(ti)
+	}
+	// BFD converged: every sample is the link's real 12ms shaped latency.
+	// With zeros excluded the baseline is ~12ms, so 12ms must read nominal.
+	var f Frame
+	for i := 4; i < 8; i++ {
+		ti = int64(i * 1000)
+		putRTT(st, ti, 12, 12)
+		putBytes(st, ti, i, 1*mbit, 1*mbit)
+		health(st, ti)
+		f = d.Frame(ti)
+	}
+	if b := f.Links[0].Band; b != bandNominal {
+		t.Fatalf("band = %q, want nominal (0-RTT must not become the baseline)", b)
+	}
+}
+
+// TestDeclaredBaselineBandsAndExposes verifies that linkd's declared baseline
+// (story) shape, when present, is used as the RTT band reference (2x one-way
+// delay for the round trip) and is surfaced on the LinkVM for the frontend's
+// shaping-slider bounds — so a link sitting at its normal shape reads nominal
+// and one shaped worse than the story reads degraded.
+func TestDeclaredBaselineBandsAndExposes(t *testing.T) {
+	st := store.New(64)
+	d := New(oneCoreLink(), st)
+	fp := func(v float64) *float64 { return &v }
+	d.SetBaselineShaping(map[string]*Shaping{
+		"150-151": {DelayMs: fp(6), RateMbit: fp(100)}, // RTT baseline = 12ms
+	})
+
+	var f Frame
+	for i := 0; i < 3; i++ {
+		ti := int64(i * 1000)
+		putRTT(st, ti, 12, 12) // at the declared baseline RTT
+		putBytes(st, ti, i, 1*mbit, 1*mbit)
+		health(st, ti)
+		f = d.Frame(ti)
+	}
+	l := f.Links[0]
+	if l.Band != bandNominal {
+		t.Fatalf("at baseline RTT band = %q, want nominal", l.Band)
+	}
+	if l.BaselineDelayMs == nil || *l.BaselineDelayMs != 6 {
+		t.Fatalf("BaselineDelayMs = %v, want 6", l.BaselineDelayMs)
+	}
+	if l.BaselineRateMbit == nil || *l.BaselineRateMbit != 100 {
+		t.Fatalf("BaselineRateMbit = %v, want 100", l.BaselineRateMbit)
+	}
+
+	// Shaped worse than the story (60ms vs 12ms baseline: +48ms >= 40) -> degraded.
+	var ti int64
+	for i := 3; i < 7; i++ {
+		ti = int64(i * 1000)
+		putRTT(st, ti, 60, 60)
+		putBytes(st, ti, i, 1*mbit, 1*mbit)
+		health(st, ti)
+		f = d.Frame(ti)
+	}
+	if f.Links[0].Band != bandDegraded {
+		t.Fatalf("shaped-worse band = %q, want degraded", f.Links[0].Band)
+	}
+}

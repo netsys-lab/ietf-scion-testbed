@@ -132,3 +132,31 @@ describe("resultsFromErrorBody", () => {
     expect(resultsFromErrorBody(JSON.stringify({ error: "boom" }))).toBeNull();
   });
 });
+
+describe("baseline-anchored sliders", () => {
+  it("isNeutral treats the baseline (not zero) as at-rest", () => {
+    // Baseline delay 6ms, rate 100: at rest means delay=6, rate=100.
+    expect(isNeutral(6, 0, 0, 100, 6, 100)).toBe(true);
+    // Delay below the baseline or rate below the tier is NOT neutral.
+    expect(isNeutral(0, 0, 0, 100, 6, 100)).toBe(false);
+    expect(isNeutral(6, 0, 0, 50, 6, 100)).toBe(false);
+  });
+
+  it("shapingToValues seeds an unshaped link to its baseline", () => {
+    expect(shapingToValues(undefined, 6, 100)).toEqual({
+      delay: 6,
+      jitter: 0,
+      loss: 0,
+      rate: 100,
+    });
+  });
+
+  it("shapingToValues still reflects active shaping over the baseline", () => {
+    expect(shapingToValues({ delay_ms: 50, rate_mbit: 40 }, 6, 100)).toEqual({
+      delay: 50,
+      jitter: 0,
+      loss: 0,
+      rate: 40,
+    });
+  });
+});

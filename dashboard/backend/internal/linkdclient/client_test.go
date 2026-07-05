@@ -134,7 +134,7 @@ func TestPollReturnsASideShaping(t *testing.T) {
 	g := testGraph(aSrv.URL, bSrv.URL)
 	c := New(g, testClient())
 
-	got := c.Poll(context.Background())
+	got, _ := c.Poll(context.Background())
 	sh, ok := got["150-151"]
 	if !ok || sh == nil {
 		t.Fatalf("want shaping present for 150-151, got %+v ok=%v", sh, ok)
@@ -152,7 +152,7 @@ func TestPollNilsShapingWhenNotFlaggedShaped(t *testing.T) {
 	bSrv, _ := newFakeLinkd(`[]`)
 	defer bSrv.Close()
 	c := New(testGraph(aSrv.URL, bSrv.URL), testClient())
-	got := c.Poll(context.Background())
+	got, _ := c.Poll(context.Background())
 	sh, ok := got["150-151"]
 	if !ok {
 		t.Fatal("link key must stay present (nil-not-absent contract)")
@@ -173,7 +173,7 @@ func TestPollUnshapedASideIsNilNotAbsent(t *testing.T) {
 	g := testGraph(aSrv.URL, bSrv.URL)
 	c := New(g, testClient())
 
-	got := c.Poll(context.Background())
+	got, _ := c.Poll(context.Background())
 	sh, ok := got["150-151"]
 	if !ok {
 		t.Fatalf("want key present for 150-151 (A side reachable), got absent")
@@ -192,7 +192,7 @@ func TestPollSkipsUnreachableAS(t *testing.T) {
 	g := testGraph(aSrv.URL, bSrv.URL)
 	c := New(g, testClient())
 
-	got := c.Poll(context.Background())
+	got, _ := c.Poll(context.Background())
 	if _, ok := got["150-151"]; ok {
 		t.Fatalf("want no entry for 150-151 when AS150's linkd is unreachable, got %+v", got)
 	}

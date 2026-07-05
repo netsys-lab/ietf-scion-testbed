@@ -37,22 +37,48 @@ export function buildShaping(v: SliderValues): Shaping {
   };
 }
 
-// isNeutral is true when all four slider values are at rest (no delay,
-// jitter, or loss, and the full 100 Mbit rate ceiling) — the caller should
-// treat this as a reset (DELETE the qdisc) rather than a PUT of all-neutral
-// values, since a PUT would still install a 100 Mbit netem cap.
-export function isNeutral(delay: number, jitter: number, loss: number, rate: number): boolean {
-  return delay === 0 && jitter === 0 && loss === 0 && rate === 100;
+// baselineRest returns the "at rest" delay/rate for a link: its declared
+// baseline (story) shape when the frame carries one, else the legacy 0-delay /
+// 100-Mbit neutral. A link at rest sits at its baseline, not at 0 delay —
+// linkd preshapes every link to its story latency, and you can only shape a
+// link worse than that default.
+export function baselineRest(baselineDelayMs?: number, baselineRateMbit?: number): {
+  delay: number;
+  rate: number;
+} {
+  return { delay: baselineDelayMs ?? 0, rate: baselineRateMbit ?? 100 };
+}
+
+// isNeutral is true when the sliders are at the link's baseline (no added
+// jitter or loss, delay at the baseline delay, rate at the baseline rate) —
+// the caller treats this as a reset (DELETE the qdisc, restoring the baseline
+// preshape) rather than a PUT. The baseline args default to 0/100 for links
+// with no reported baseline, preserving the original neutral semantics.
+export function isNeutral(
+  delay: number,
+  jitter: number,
+  loss: number,
+  rate: number,
+  baselineDelayMs?: number,
+  baselineRateMbit?: number,
+): boolean {
+  const b = baselineRest(baselineDelayMs, baselineRateMbit);
+  return delay === b.delay && jitter === 0 && loss === 0 && rate === b.rate;
 }
 
 // shapingToValues seeds the sliders from a link's current shaping (from the
 // live frame), defaulting each missing field to its neutral position.
-export function shapingToValues(s: Shaping | undefined): SliderValues {
+export function shapingToValues(
+  s: Shaping | undefined,
+  baselineDelayMs?: number,
+  baselineRateMbit?: number,
+): SliderValues {
+  const b = baselineRest(baselineDelayMs, baselineRateMbit);
   return {
-    delay: s?.delay_ms ?? 0,
+    delay: s?.delay_ms ?? b.delay,
     jitter: s?.jitter_ms ?? 0,
     loss: s?.loss_pct ?? 0,
-    rate: s?.rate_mbit ?? 100,
+    rate: s?.rate_mbit ?? b.rate,
   };
 }
 

@@ -67,9 +67,10 @@ func New(g topo.Graph, client *http.Client) *Client {
 // links to the baseline), so Shaped -- not Shaping's nilness -- is what
 // distinguishes user-applied shaping from baseline preshape.
 type linkEntry struct {
-	IfID    string          `json:"ifid"`
-	Shaping *derive.Shaping `json:"shaping"`
-	Shaped  bool            `json:"shaped"`
+	IfID     string          `json:"ifid"`
+	Shaping  *derive.Shaping `json:"shaping"`
+	Shaped   bool            `json:"shaped"`
+	Baseline *derive.Shaping `json:"baseline"`
 }
 
 // baseURL returns the "http://host:port" prefix for AS as, and whether as is
@@ -88,7 +89,12 @@ func (c *Client) baseURL(as int) (string, bool) {
 // on a skipped AS is simply absent from the result. Callers (derive.Deriver)
 // treat a missing key the same as "unshaped" -- acceptable v1 semantics per
 // the design brief.
-func (c *Client) Poll(ctx context.Context) map[string]*derive.Shaping {
+// Poll returns two linkID-keyed maps: the current user-applied shaping (nil
+// for an unshaped link) and the declared baseline (story) shape linkd
+// preshapes every link to. The baseline is what the dashboard treats as a
+// link's nominal state — the RTT band and the shaping-slider bounds are both
+// relative to it.
+func (c *Client) Poll(ctx context.Context) (map[string]*derive.Shaping, map[string]*derive.Shaping) {
 	// aSideIdx maps "AS/ifid" to the link ID for every link's A side, so the
 	// per-AS interface lists can be matched back to links in O(1).
 	aSideIdx := make(map[string]string, len(c.g.Links))
@@ -114,6 +120,7 @@ func (c *Client) Poll(ctx context.Context) map[string]*derive.Shaping {
 	wg.Wait()
 
 	out := make(map[string]*derive.Shaping)
+	base := make(map[string]*derive.Shaping)
 	for _, r := range res {
 		if !r.ok {
 			continue
@@ -125,10 +132,11 @@ func (c *Client) Poll(ctx context.Context) map[string]*derive.Shaping {
 				} else {
 					out[linkID] = nil
 				}
+				base[linkID] = e.Baseline
 			}
 		}
 	}
-	return out
+	return out, base
 }
 
 func asIfKey(as int, ifid string) string { return strconv.Itoa(as) + "/" + ifid }
