@@ -3,6 +3,18 @@
 Build and deploy the SCION Fabrik dashboard (fabricd + web) and the
 link-shaping daemon (scion-linkd) to the IETF 126 testbed.
 
+## Host network
+
+The Proxmox host's testbed bridges are defined canonically in
+`proxmox/interfaces.d-scion-testbed`, installed to
+`/etc/network/interfaces.d/scion-testbed` and applied with `ifreload -a`. It
+defines the isolated `mgmt` bridge (host `10.20.3.1/24`, `bridge-ports none`)
+that carries the internal management plane `10.20.3.0/24` and NATs it out via
+the venue uplink (`vmbr0`), plus the 24 `scion*` inter-AS link bridges.
+Containers attach `eth0` to `mgmt` with static `10.20.3.<id>` addresses (see
+`proxmox/create_contianers.sh`); only the dashboard (CT200) and wg-hub
+(CT201) also carry a venue leg (`eth1` on `vmbr0`).
+
 ## Prereqs
 
 - Go 1.22+, Node 22+, `dpkg-deb` (build host).

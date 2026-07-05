@@ -1,0 +1,153 @@
+# SCION testbed bridges — install to /etc/network/interfaces.d/scion-testbed
+# mgmt: isolated internal plane 10.20.3.0/24, NATed out via the host uplink.
+auto mgmt
+iface mgmt inet static
+    address 10.20.3.1/24
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+    post-up iptables -t nat -C POSTROUTING -s 10.20.3.0/24 ! -d 10.20.3.0/24 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.20.3.0/24 ! -d 10.20.3.0/24 -j MASQUERADE
+
+auto scion1
+iface scion1 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion2
+iface scion2 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion3
+iface scion3 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion4
+iface scion4 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion5
+iface scion5 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion6
+iface scion6 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion7
+iface scion7 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion8
+iface scion8 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion9
+iface scion9 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scionA
+iface scionA inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scionB
+iface scionB inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scionC
+iface scionC inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scionD
+iface scionD inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scionE
+iface scionE inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scionF
+iface scionF inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion10
+iface scion10 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion11
+iface scion11 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion12
+iface scion12 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion13
+iface scion13 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion14
+iface scion14 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion15
+iface scion15 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion16
+iface scion16 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion17
+iface scion17 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
+
+auto scion18
+iface scion18 inet manual
+    bridge-ports none
+    bridge-stp off
+    bridge-fd 0
