@@ -18,11 +18,20 @@
           - booth_code | length > 0
         fail_msg: "booth_code is not set — copy ansible/group_vars/playground.yml.example to ansible/group_vars/playground.yml and set booth_code before deploying."
   tasks:
-    - name: Install ttyd + nftables
+    - name: Install nftables
       ansible.builtin.apt:
-        name: [ttyd, nftables]
+        name: [nftables]
         state: present
         update_cache: true
+
+    # ttyd is not packaged in Debian 12 (bookworm); install the upstream
+    # static release binary to /usr/local/bin (matches ttyd.service.j2's
+    # ExecStart path).
+    - name: Install ttyd static binary
+      ansible.builtin.get_url:
+        url: https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
+        dest: /usr/local/bin/ttyd
+        mode: "0755"
 
     - name: Copy endhost binaries
       ansible.builtin.copy:

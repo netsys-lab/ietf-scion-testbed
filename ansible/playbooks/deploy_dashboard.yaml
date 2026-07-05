@@ -17,12 +17,19 @@
         state: present
         force: true
 
+    - name: Ensure fabricd config dirs exist (deb ships no config tree)
+      ansible.builtin.file:
+        path: "/etc/fabric/config/AS{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ range(150, 162) | list }}"
+
     - name: Copy AS topologies (fabricd reads only these)
       ansible.builtin.copy:
-        src: "{{ item }}"
-        dest: "/etc/fabric/config/{{ item | dirname | basename }}/topology.json"
+        src: "{{ playbook_dir }}/../../config/AS{{ item }}/topology.json"
+        dest: "/etc/fabric/config/AS{{ item }}/topology.json"
         mode: "0644"
-      loop: "{{ query('fileglob', playbook_dir + '/../../config/AS*/topology.json') }}"
+      loop: "{{ range(150, 162) | list }}"
 
     - name: Copy AS core list
       ansible.builtin.copy:

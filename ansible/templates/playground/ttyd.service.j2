@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 # %I is not used; ExecStart is templated by ansible with credential + bind.
 ExecStart=/usr/local/bin/ttyd --port 7681 --interface {{ pubnet_addr }} \
-  --credential scion:{{ booth_code }} --max-clients 30 \
+  --writable --credential scion:{{ booth_code }} --max-clients 30 \
   --client-option titleFixed="SCION Playground AS1-{{ playground_as }}" \
   /usr/local/bin/guest-login.sh
 Restart=on-failure

@@ -35,8 +35,9 @@
           listen = "{{ ansible_host }}:30480"
           topology_glob = "/etc/scion/AS*/topology.json"
           staticinfo_base = "/etc/scion/AS*/staticInfoConfig.base.json"
+          staticinfo_out = "/etc/scion/AS*/staticInfoConfig.json"
           baseline_profile = "/etc/scion/AS*/linkd-baseline.json"
-          cs_reload_unit = "{{ linkd_cs_unit | default('') }}"
+          cs_reload_unit = "{{ linkd_cs_unit | default('scion-control@cs1-' + asnum + '-1') }}"
 
     - name: Ensure service is running
       ansible.builtin.systemd:
