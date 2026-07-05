@@ -1,0 +1,96 @@
+---
+- name: Deploy SCION playground endhosts (Tier 1 attendee access)
+  hosts: playground
+  become: true
+  vars:
+    scion_bin_src: "{{ playbook_dir }}/../../.build/endhost/bin"
+    # ttyd must bind the PUBNET (attendee-facing) interface. On these
+    # dual-DHCP containers eth0=mgmt, eth1=pubnet (per create_contianers.sh),
+    # so the default route is ambiguous — bind eth1 explicitly by name.
+    # Venue caveat: if pubnet is IPv6-only, set this to the eth1 v6 address
+    # (ansible_eth1.ipv6[0].address) or drop --interface to bind all.
+    pubnet_addr: "{{ ansible_eth1.ipv4.address }}"
+  tasks:
+    - name: Install ttyd + nftables
+      ansible.builtin.apt:
+        name: [ttyd, nftables]
+        state: present
+        update_cache: true
+
+    - name: Copy endhost binaries
+      ansible.builtin.copy:
+        src: "{{ scion_bin_src }}/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+      loop: [scion, sciond, shim-dispatcher]
+
+    - name: Copy guest login wrapper + setup script
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/playground/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+      loop: [guest-login.sh, guest-setup.sh]
+
+    - name: Create SCION config dir
+      ansible.builtin.file:
+        path: /etc/scion/certs
+        state: directory
+        mode: "0755"
+
+    - name: Copy AS topology + TRC (public material only)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../config/AS{{ playground_as }}/{{ item.s }}"
+        dest: "/etc/scion/{{ item.d }}"
+        mode: "0644"
+      loop:
+        - { s: "topology.json", d: "topology.json" }
+        - { s: "certs/ISD1-B1-S1.trc", d: "certs/ISD1-B1-S1.trc" }
+
+    - name: Render sciond + shim config
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/playground/{{ item.s }}"
+        dest: "{{ item.d }}"
+        mode: "0644"
+      loop:
+        - { s: "sd.toml.j2",  d: "/etc/scion/sd.toml" }
+        - { s: "shim.toml.j2", d: "/etc/scion/shim.toml" }
+        - { s: "motd.j2",      d: "/etc/motd" }
+
+    - name: Run guest sandbox setup
+      ansible.builtin.command: /usr/local/bin/guest-setup.sh
+      changed_when: false
+
+    - name: Install SCION + ttyd systemd units
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/playground/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop: [scion-shim.service, scion-sciond.service]
+
+    - name: Render ttyd unit (booth code + pubnet bind)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/playground/ttyd.service.j2"
+        dest: /etc/systemd/system/ttyd.service
+        mode: "0644"
+
+    - name: Install nftables containment
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/playground/nftables.conf"
+        dest: /etc/nftables.conf
+        mode: "0644"
+
+    - name: Enable + start everything
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: restarted
+        daemon_reload: true
+      loop: [nftables, scion-shim, scion-sciond, ttyd]
+
+    - name: Verify sciond answers locally
+      ansible.builtin.command: /usr/local/bin/scion showpaths 1-159 --sciond 127.0.0.1:30255 --maxpaths 1
+      register: sp
+      changed_when: false
+      failed_when: sp.rc != 0
+      # AS159->159 self is degenerate; for play-158 target a different AS.
+      when: playground_as != "159"
