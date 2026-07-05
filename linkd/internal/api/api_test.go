@@ -23,18 +23,18 @@ func (f *fakeShaper) Clear(dev string) error {
 	return nil
 }
 
-func newTestServer() (*httptest.Server, *fakeShaper) {
+func newTestServer(opts Options) (*httptest.Server, *fakeShaper) {
 	fs := &fakeShaper{state: map[string]shape.Params{}}
 	ifs := []ManagedIface{{
 		Interface: topo.Interface{IfID: "6049", Neighbor: "1-151", LinkTo: "parent",
 			LocalIP: netip.MustParseAddr("fd00:fade:9::155")},
 		Dev: "sci9",
 	}}
-	return httptest.NewServer(New(ifs, fs)), fs
+	return httptest.NewServer(New(ifs, fs, opts)), fs
 }
 
 func TestListLinks(t *testing.T) {
-	srv, _ := newTestServer()
+	srv, _ := newTestServer(Options{})
 	defer srv.Close()
 	res, err := srv.Client().Get(srv.URL + "/api/v1/links")
 	if err != nil || res.StatusCode != 200 {
@@ -60,7 +60,7 @@ func doJSON(t *testing.T, srv *httptest.Server, method, path, body string) *http
 }
 
 func TestPutMergeAndValidate(t *testing.T) {
-	srv, fs := newTestServer()
+	srv, fs := newTestServer(Options{})
 	defer srv.Close()
 	if rr := doJSON(t, srv, "PUT", "/api/v1/links/6049", `{"delay_ms":50}`); rr.Code != 200 {
 		t.Fatalf("apply: %d %s", rr.Code, rr.Body)
@@ -81,7 +81,7 @@ func TestPutMergeAndValidate(t *testing.T) {
 }
 
 func TestDeleteAndHealth(t *testing.T) {
-	srv, fs := newTestServer()
+	srv, fs := newTestServer(Options{})
 	defer srv.Close()
 	fs.state["sci9"] = shape.Params{}
 	if rr := doJSON(t, srv, "DELETE", "/api/v1/links/6049", ""); rr.Code != 200 {
@@ -93,5 +93,91 @@ func TestDeleteAndHealth(t *testing.T) {
 	res, _ := srv.Client().Get(srv.URL + "/healthz")
 	if res.StatusCode != 200 {
 		t.Fatalf("healthz %d", res.StatusCode)
+	}
+}
+
+func f64(v float64) *float64 { return &v }
+
+func listJSON(t *testing.T, srv *httptest.Server) []map[string]any {
+	t.Helper()
+	res, err := srv.Client().Get(srv.URL + "/api/v1/links")
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("list: %v %v", res.StatusCode, err)
+	}
+	var got []map[string]any
+	json.NewDecoder(res.Body).Decode(&got)
+	return got
+}
+
+func TestDeleteRestoresBaseline(t *testing.T) {
+	bl := map[string]shape.Params{"6049": {DelayMs: f64(3), RateMbit: f64(500)}}
+	var changed int
+	srv, fs := newTestServer(Options{Baseline: bl, OnChange: func() { changed++ }})
+	defer srv.Close()
+	fs.state["sci9"] = shape.Params{DelayMs: f64(60)}
+	if rr := doJSON(t, srv, "DELETE", "/api/v1/links/6049", ""); rr.Code != 200 {
+		t.Fatalf("delete: %d %s", rr.Code, rr.Body)
+	}
+	got := fs.state["sci9"]
+	if got.DelayMs == nil || *got.DelayMs != 3 || got.RateMbit == nil || *got.RateMbit != 500 {
+		t.Fatalf("baseline not applied: %+v", got)
+	}
+	if changed != 1 {
+		t.Fatalf("OnChange calls = %d, want 1", changed)
+	}
+}
+
+func TestDeleteWithoutBaselineClears(t *testing.T) {
+	srv, fs := newTestServer(Options{})
+	defer srv.Close()
+	fs.state["sci9"] = shape.Params{DelayMs: f64(9)}
+	if rr := doJSON(t, srv, "DELETE", "/api/v1/links/6049", ""); rr.Code != 200 {
+		t.Fatalf("delete: %d", rr.Code)
+	}
+	if _, ok := fs.state["sci9"]; ok {
+		t.Fatal("state not cleared")
+	}
+}
+
+func TestListReportsBaselineAndShaped(t *testing.T) {
+	bl := map[string]shape.Params{"6049": {DelayMs: f64(3), RateMbit: f64(500)}}
+	srv, fs := newTestServer(Options{Baseline: bl})
+	defer srv.Close()
+	// at baseline (kernel rounding tolerated) -> shaped=false
+	fs.state["sci9"] = shape.Params{DelayMs: f64(3.0), RateMbit: f64(499.9)}
+	got := listJSON(t, srv)
+	if got[0]["shaped"] != false {
+		t.Fatalf("shaped = %v, want false at baseline", got[0]["shaped"])
+	}
+	if got[0]["baseline"] == nil {
+		t.Fatal("baseline missing from list")
+	}
+	// deviating -> shaped=true
+	fs.state["sci9"] = shape.Params{DelayMs: f64(60), RateMbit: f64(500)}
+	if got = listJSON(t, srv); got[0]["shaped"] != true {
+		t.Fatalf("shaped = %v, want true when deviating", got[0]["shaped"])
+	}
+}
+
+func TestPutCallsOnChange(t *testing.T) {
+	var changed int
+	srv, _ := newTestServer(Options{OnChange: func() { changed++ }})
+	defer srv.Close()
+	if rr := doJSON(t, srv, "PUT", "/api/v1/links/6049", `{"delay_ms":42}`); rr.Code != 200 {
+		t.Fatalf("put: %d", rr.Code)
+	}
+	if changed != 1 {
+		t.Fatalf("OnChange calls = %d, want 1", changed)
+	}
+}
+
+func TestHealthReportsMetadataStatus(t *testing.T) {
+	srv, _ := newTestServer(Options{Status: func() (bool, bool) { return true, false }})
+	defer srv.Close()
+	res, _ := srv.Client().Get(srv.URL + "/healthz")
+	var body map[string]any
+	json.NewDecoder(res.Body).Decode(&body)
+	if body["metadata_ok"] != true || body["reload_ok"] != false {
+		t.Fatalf("health = %v", body)
 	}
 }

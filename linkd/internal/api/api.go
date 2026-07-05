@@ -4,6 +4,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/shape"
@@ -15,22 +16,40 @@ type ManagedIface struct {
 	Dev string
 }
 
+// Options carries the optional metadata-sync collaborators.
+type Options struct {
+	Baseline map[string]shape.Params // ifid -> story profile
+	OnChange func()                  // called after successful Apply/Clear
+	Status   func() (metadataOK, reloadOK bool)
+}
+
 type linkJSON struct {
 	IfID     string        `json:"ifid"`
 	Neighbor string        `json:"neighbor_isd_as"`
 	LinkTo   string        `json:"link_to"`
 	Device   string        `json:"device"`
 	Shaping  *shape.Params `json:"shaping"`
+	Baseline *shape.Params `json:"baseline,omitempty"`
+	Shaped   bool          `json:"shaped"`
 }
 
 type server struct {
-	ifaces map[string]ManagedIface
-	order  []string
-	shaper shape.Shaper
+	ifaces   map[string]ManagedIface
+	order    []string
+	shaper   shape.Shaper
+	baseline map[string]shape.Params
+	onChange func()
+	status   func() (bool, bool)
 }
 
-func New(ifaces []ManagedIface, s shape.Shaper) http.Handler {
-	sv := &server{ifaces: map[string]ManagedIface{}, shaper: s}
+func New(ifaces []ManagedIface, s shape.Shaper, opts Options) http.Handler {
+	sv := &server{
+		ifaces:   map[string]ManagedIface{},
+		shaper:   s,
+		baseline: opts.Baseline,
+		onChange: opts.OnChange,
+		status:   opts.Status,
+	}
 	for _, i := range ifaces {
 		sv.ifaces[i.IfID] = i
 		sv.order = append(sv.order, i.IfID)
@@ -41,6 +60,12 @@ func New(ifaces []ManagedIface, s shape.Shaper) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/links/{ifid}", sv.del)
 	mux.HandleFunc("GET /healthz", sv.health)
 	return mux
+}
+
+func (s *server) changed() {
+	if s.onChange != nil {
+		s.onChange()
+	}
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -67,8 +92,19 @@ func (s *server) list(w http.ResponseWriter, r *http.Request) {
 	for _, ifid := range s.order {
 		m := s.ifaces[ifid]
 		lj := linkJSON{IfID: m.IfID, Neighbor: m.Neighbor, LinkTo: m.LinkTo, Device: m.Dev}
-		if p, err := s.shaper.Get(m.Dev); err == nil && !p.Empty() {
-			lj.Shaping = &p
+		var cur shape.Params
+		if p, err := s.shaper.Get(m.Dev); err == nil {
+			cur = p
+			if !p.Empty() {
+				lj.Shaping = &p
+			}
+		}
+		if b, ok := s.baseline[m.IfID]; ok {
+			b := b
+			lj.Baseline = &b
+			lj.Shaped = !paramsEqual(cur, b)
+		} else {
+			lj.Shaped = !cur.Empty()
 		}
 		out = append(out, lj)
 	}
@@ -99,6 +135,7 @@ func (s *server) put(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, "apply %s: %v", m.Dev, err)
 		return
 	}
+	s.changed()
 	writeJSON(w, http.StatusOK, merged)
 }
 
@@ -107,13 +144,48 @@ func (s *server) del(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if base, ok := s.baseline[m.IfID]; ok {
+		if err := s.shaper.Apply(m.Dev, base); err != nil {
+			writeErr(w, http.StatusBadGateway, "restore baseline %s: %v", m.Dev, err)
+			return
+		}
+		s.changed()
+		writeJSON(w, http.StatusOK, base)
+		return
+	}
 	if err := s.shaper.Clear(m.Dev); err != nil {
 		writeErr(w, http.StatusBadGateway, "clear %s: %v", m.Dev, err)
 		return
 	}
+	s.changed()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 }
 
 func (s *server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "interfaces": len(s.ifaces)})
+	body := map[string]any{"status": "ok", "interfaces": len(s.ifaces)}
+	if s.status != nil {
+		m, rl := s.status()
+		body["metadata_ok"] = m
+		body["reload_ok"] = rl
+	}
+	writeJSON(w, http.StatusOK, body)
+}
+
+// approxEq compares tc-derived values with kernel-rounding tolerance: netem
+// stores ticks, so Get returns approximations of what was Applied.
+func approxEq(a, b *float64) bool {
+	av, bv := 0.0, 0.0
+	if a != nil {
+		av = *a
+	}
+	if b != nil {
+		bv = *b
+	}
+	diff := math.Abs(av - bv)
+	return diff <= 0.1 || diff <= 0.01*math.Max(math.Abs(av), math.Abs(bv))
+}
+
+func paramsEqual(a, b shape.Params) bool {
+	return approxEq(a.DelayMs, b.DelayMs) && approxEq(a.JitterMs, b.JitterMs) &&
+		approxEq(a.LossPct, b.LossPct) && approxEq(a.RateMbit, b.RateMbit)
 }

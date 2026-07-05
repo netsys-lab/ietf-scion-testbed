@@ -31,7 +31,7 @@ func Validate(p Params) error {
 	if err := check("loss_pct", p.LossPct, 0, 100); err != nil {
 		return err
 	}
-	if err := check("rate_mbit", p.RateMbit, 0.1, 1000); err != nil {
+	if err := check("rate_mbit", p.RateMbit, 0.1, 10000); err != nil {
 		return err
 	}
 	if p.JitterMs != nil && *p.JitterMs > 0 && (p.DelayMs == nil || *p.DelayMs == 0) {
