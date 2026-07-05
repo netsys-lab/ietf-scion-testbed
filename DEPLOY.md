@@ -238,8 +238,9 @@ Verify (from a laptop on pubnet):
    `curl https://example.com` → blocked (nft drop). `nft list ruleset` on the
    container shows a non-zero drop counter after these.
 
-Reset a wedged playground: `ansible-playbook ... deploy_playground.yaml
---limit play-159`, or recreate the container from `create_contianers.sh`.
+Reset a wedged playground: `ansible-playbook -i ansible/inventory.yaml
+ansible/playbooks/deploy_playground.yaml --limit play-159`, or recreate the
+container from `create_contianers.sh`.
 
 ## Dev loop
 

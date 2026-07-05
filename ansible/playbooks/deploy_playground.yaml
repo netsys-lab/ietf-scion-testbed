@@ -10,6 +10,13 @@
     # Venue caveat: if pubnet is IPv6-only, set this to the eth1 v6 address
     # (ansible_eth1.ipv6[0].address) or drop --interface to bind all.
     pubnet_addr: "{{ ansible_eth1.ipv4.address }}"
+  pre_tasks:
+    - name: Fail fast if booth_code is not set
+      ansible.builtin.assert:
+        that:
+          - booth_code is defined
+          - booth_code | length > 0
+        fail_msg: "booth_code is not set — copy ansible/group_vars/playground.yml.example to ansible/group_vars/playground.yml and set booth_code before deploying."
   tasks:
     - name: Install ttyd + nftables
       ansible.builtin.apt:
