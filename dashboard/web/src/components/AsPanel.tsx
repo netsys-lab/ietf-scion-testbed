@@ -4,6 +4,11 @@
 // interface table: one row per inter-AS link touching this AS, with the peer
 // AS, the fade: subnet, the link RTT (or DOWN), and this AS's own In/Out rates
 // (direction-corrected so "In" is always traffic arriving at this AS).
+//
+// No-data shell: if the selected AS drops out of the topology (mid-selection
+// during a WS drop), the panel still renders a header with the usual close
+// button plus a "NO LIVE DATA" line instead of returning null — an empty
+// aside with no close affordance strands touch users.
 import { useFabricStore } from "../store";
 
 export default function AsPanel({ num }: { num: number }) {
@@ -14,7 +19,18 @@ export default function AsPanel({ num }: { num: number }) {
   const linksById = useFabricStore((s) => s.linksById);
   const select = useFabricStore((s) => s.select);
 
-  if (!topoAS) return null;
+  if (!topoAS) {
+    return (
+      <div className="panel-inner">
+        <div className="panel-head">
+          <button className="closebtn" aria-label="Close panel" onClick={() => select(undefined)}>
+            ✕
+          </button>
+        </div>
+        <span className="daemon-note">NO LIVE DATA</span>
+      </div>
+    );
+  }
 
   const core = topoAS.core;
   // Every inter-AS link with this AS on either endpoint, in topology order.

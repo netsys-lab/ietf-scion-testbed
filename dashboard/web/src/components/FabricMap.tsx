@@ -7,6 +7,11 @@
 // Overlay glyphs (break ✕, shaping chips, hover/selected label, peer marker)
 // are positioned at each trunk path's length-midpoint, measured from the
 // rendered <path> the same way the mockup does (getPointAtLength).
+//
+// Before the first topology snapshot arrives (cold boot, or the backend is
+// down at load), no links or stations are drawn — a dim "CONNECTING TO
+// FABRIC…" label stands in for the map instead of the mockup's stationList
+// floating with no links (there's nothing live to show yet).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Band, LinkVM } from "../types";
 import { useFabricStore } from "../store";
@@ -36,6 +41,7 @@ export default function FabricMap() {
   const selected = useFabricStore((s) => s.selected);
   const select = useFabricStore((s) => s.select);
   const setBooted = useFabricStore((s) => s.setBooted);
+  const screen = useFabricStore((s) => s.screen);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [mids, setMids] = useState<Record<string, Mid>>({});
@@ -243,48 +249,65 @@ export default function FabricMap() {
             if (meta.kind !== "peer" || !m) return null;
             return (
               <text key={l.id} className="peer-glyph" x={m.x + 14} y={m.y - 16}>
-                ⇄ peer
+                PEER
               </text>
             );
           })}
         </g>
 
-        {/* Stations: core ring, disc, halo'd label + eyebrow. */}
+        {/* Stations: core ring, disc, halo'd label + eyebrow. Nothing renders
+            here until the first topology snapshot arrives — stationList is
+            static layout data, not live state, so drawing it before then
+            would show all 12 stations floating with no links (cold-boot /
+            backend-down false-positive); the placeholder text below covers
+            that gap instead. */}
         <g>
-          {stationList.map((st) => {
-            const selectedAS = selected?.kind === "as" && selected.id === String(st.num);
-            const cls = "station" + (st.core ? " core" : "") + (selectedAS ? " selected" : "");
-            return (
-              <g
-                key={st.num}
-                className={cls}
-                tabIndex={0}
-                role="button"
-                aria-label={`AS ${st.num}`}
-                onClick={() => selectAS(st.num)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    selectAS(st.num);
-                  }
-                }}
-              >
-                {st.core && <circle className="core-ring" cx={st.x} cy={st.y} r={21} />}
-                <circle className="station-disc" cx={st.x} cy={st.y} r={st.core ? 15 : 12} />
-                <text x={st.x} y={st.y - (st.core ? 30 : 24)} textAnchor="middle">
-                  {st.num}
-                </text>
-                <text
-                  className="as-eyebrow"
-                  x={st.x}
-                  y={st.y - (st.core ? 44 : 37)}
-                  textAnchor="middle"
+          {topology === undefined ? (
+            <text x={760} y={420} textAnchor="middle" className="connecting-label">
+              CONNECTING TO FABRIC…
+            </text>
+          ) : (
+            stationList.map((st) => {
+              const selectedAS = selected?.kind === "as" && selected.id === String(st.num);
+              const cls = "station" + (st.core ? " core" : "") + (selectedAS ? " selected" : "");
+              // Screen mode bumps the disc radius +2 for booth-distance
+              // legibility; `r` is a plain SVG attribute (not a CSS
+              // custom-prop hook like the map's font-sizes/stroke-widths in
+              // fabric.css), so the bump is computed here instead.
+              const rBase = st.core ? 15 : 12;
+              const r = screen ? rBase + 2 : rBase;
+              return (
+                <g
+                  key={st.num}
+                  className={cls}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`AS ${st.num}`}
+                  onClick={() => selectAS(st.num)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      selectAS(st.num);
+                    }
+                  }}
                 >
-                  {st.core ? "CORE" : "AS"}
-                </text>
-              </g>
-            );
-          })}
+                  {st.core && <circle className="core-ring" cx={st.x} cy={st.y} r={21} />}
+                  <circle className="station-disc" cx={st.x} cy={st.y} r={r} />
+                  <text x={st.x} y={st.y - (st.core ? 30 : 24)} textAnchor="middle">
+                    {st.num}
+                  </text>
+                  <text
+                    className="as-eyebrow"
+                    x={st.x}
+                    y={st.y - (st.core ? 44 : 37)}
+                    textAnchor="middle"
+                  >
+                    {st.core ? "CORE" : "AS"}
+                  </text>
+                </g>
+              );
+            })
+          )}
         </g>
 
         {/* Overlays: break glyph for down links, else a shaping chip. */}

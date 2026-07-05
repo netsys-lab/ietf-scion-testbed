@@ -11,11 +11,16 @@
 //   • Path geometry is sampled every 6px from the rendered SVG paths that
 //     FabricMap draws (<path id="link-path-<id>">), re-sampled whenever the
 //     topology changes.
-//   • Live rate/loss/up state and the booted flag are read from the store via
-//     getState() inside the rAF loop, so fresh frames drive the animation with
-//     zero React re-renders. Down links spawn nothing; particles only start
-//     once booted flips (after the boot draw-in, or immediately under reduced
-//     motion — where this layer runs no loop at all and the map stays static).
+//   • Live rate/loss/up state, the booted flag, and the connected flag are
+//     read from the store via getState() inside the rAF loop, so fresh frames
+//     drive the animation with zero React re-renders. Down links spawn
+//     nothing; particles only start once booted flips (after the boot
+//     draw-in, or immediately under reduced motion — where this layer runs no
+//     loop at all and the map stays static). A dropped WS connection freezes
+//     spawning only (no new particles on now-stale rate/loss data) while
+//     particles already in flight keep advancing and drain off naturally over
+//     the next couple of seconds — the stale veil (App.tsx's #stage.stale)
+//     is what actually signals the freeze.
 import { useEffect, useRef } from "react";
 import { useFabricStore } from "../store";
 
@@ -132,28 +137,36 @@ export default function ParticleLayer() {
 
       const state = useFabricStore.getState();
       if (state.booted) {
-        const linksById = state.linksById;
-        for (const l of links) {
-          const vm = linksById[l.id];
-          if (!vm || !vm.up) continue; // down links spawn nothing
-          const rates = [vm.rate_ab_mbit, vm.rate_ba_mbit];
-          const loss = vm.loss_pct;
-          const a = acc.get(l.id)!;
-          for (const dir of [0, 1] as const) {
-            a[dir] += spawnRate(rates[dir]) * dt;
-            while (a[dir] >= 1) {
-              a[dir] -= 1;
-              const popAt =
-                loss > 0 && Math.random() * 100 < loss * 6
-                  ? (0.3 + Math.random() * 0.4) * l.len
-                  : -1;
-              particles.push({
-                id: l.id,
-                dir,
-                pos: 0,
-                popAt,
-                a: Math.min(1, 0.4 + rates[dir] / 25),
-              });
+        // Spawning is gated on `connected` — a WS drop must not keep pumping
+        // fresh particles onto frozen rate/loss data (that reads as live
+        // traffic when it's actually stale). Particles already spawned still
+        // advance and drain below regardless of connection state, so a drop
+        // fades the animation out over a couple of seconds rather than
+        // snapping it to a dead stop.
+        if (state.connected) {
+          const linksById = state.linksById;
+          for (const l of links) {
+            const vm = linksById[l.id];
+            if (!vm || !vm.up) continue; // down links spawn nothing
+            const rates = [vm.rate_ab_mbit, vm.rate_ba_mbit];
+            const loss = vm.loss_pct;
+            const a = acc.get(l.id)!;
+            for (const dir of [0, 1] as const) {
+              a[dir] += spawnRate(rates[dir]) * dt;
+              while (a[dir] >= 1) {
+                a[dir] -= 1;
+                const popAt =
+                  loss > 0 && Math.random() * 100 < loss * 6
+                    ? (0.3 + Math.random() * 0.4) * l.len
+                    : -1;
+                particles.push({
+                  id: l.id,
+                  dir,
+                  pos: 0,
+                  popAt,
+                  a: Math.min(1, 0.4 + rates[dir] / 25),
+                });
+              }
             }
           }
         }

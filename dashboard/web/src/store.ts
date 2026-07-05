@@ -19,6 +19,12 @@ export interface FabricState {
   /** True once the boot draw-in has finished (or immediately under reduced
    * motion); the particle layer only spawns traffic after this flips. */
   booted: boolean;
+  /** Wall-display mode (?mode=screen or the OPERATE/SCREEN toggle). Lives here
+   * rather than as component-local state so both Chrome (which writes it,
+   * toggling document.body's "screen" class) and FabricMap (which reads it,
+   * for the booth-distance disc-radius bump — see fabric.css for the
+   * font/stroke bumps that stay CSS-only) can see the current mode. */
+  screen: boolean;
   events: TickerEvent[];
   /** Derived map for cheap O(1) component access, kept in sync with frame. */
   linksById: Record<string, LinkVM>;
@@ -28,6 +34,7 @@ export interface FabricState {
   select: (selection: Selection | undefined) => void;
   setConnected: (connected: boolean) => void;
   setBooted: (booted: boolean) => void;
+  setScreen: (screen: boolean) => void;
   /** Prepend a ready-made ticker event (used for the boot "FABRIC ONLINE"
    * line, and later the shaping-applied lines from Task 11's panel). */
   pushEvent: (event: TickerEvent) => void;
@@ -100,12 +107,21 @@ function indexLinks(links: LinkVM[]): Record<string, LinkVM> {
   return map;
 }
 
+// Mirrors Chrome's own initialScreen(): ?mode=screen boots straight into the
+// wall-display layout. Guarded the same way for SSR/non-browser evaluation
+// (also lets this module load safely under vitest's node test environment).
+function initialScreen(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("mode") === "screen";
+}
+
 export const useFabricStore = create<FabricState>((set, get) => ({
   topology: undefined,
   frame: undefined,
   selected: undefined,
   connected: false,
   booted: false,
+  screen: initialScreen(),
   events: [],
   linksById: {},
 
@@ -142,6 +158,8 @@ export const useFabricStore = create<FabricState>((set, get) => ({
   setConnected: (connected) => set({ connected }),
 
   setBooted: (booted) => set({ booted }),
+
+  setScreen: (screen) => set({ screen }),
 
   pushEvent: (event) => set((s) => ({ events: [event, ...s.events].slice(0, MAX_EVENTS) })),
 }));

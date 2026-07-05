@@ -56,7 +56,15 @@
 
 .peer-glyph {
   font-family: var(--mono); font-size: 11px; fill: var(--ink-2); text-anchor: middle;
+  letter-spacing: 0.1em;
   paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round;
+}
+
+/* Cold-boot / backend-down placeholder, shown instead of the map while no
+ * topology snapshot has arrived yet (FabricMap.tsx). */
+.connecting-label {
+  font-family: var(--mono); font-size: 15px; letter-spacing: 0.14em;
+  fill: var(--ink-mute); text-anchor: middle; text-transform: uppercase;
 }
 
 /* ── Legend ───────────────────────────────────────────── */
@@ -66,8 +74,27 @@
   font-family: var(--din); font-size: 10px; letter-spacing: 0.1em;
   color: var(--ink-2); text-transform: uppercase;
 }
-#legend .sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: 2px; }
+/* Wider/taller than the mockup's 18×4 sliver: at that size the degraded
+ * (orange) and critical (red) swatches read as near-identical smudges —
+ * same two hues, just not enough area to tell apart at a glance. Colors
+ * themselves already come straight from the band custom props used on the
+ * map trunks (var(--bad)/var(--crit) etc. below), so this is a size-only fix. */
+#legend .sw { display: inline-block; width: 22px; height: 6px; border-radius: 3px; margin-right: 6px; vertical-align: 1px; }
 
 @media (prefers-reduced-motion: reduce) {
   .link[data-band="critical"] .trunk { animation: none; }
 }
+
+/* ── Screen mode (booth-distance legibility; body.screen set by Chrome.tsx) ──
+ * Font-sizes bumped ~+30% and trunks slightly thickened. The station disc
+ * radius bump lives in FabricMap.tsx instead (`r` is a plain SVG attribute,
+ * not reachable from a CSS custom prop here). Layout geometry (layout.ts) is
+ * untouched — this is a scale-up of the existing marks, not a redesign. */
+body.screen .station text { font-size: 19.5px; }
+body.screen .station .as-eyebrow { font-size: 12px; }
+body.screen .peer-glyph { font-size: 14px; }
+body.screen .linklabel text { font-size: 13.5px; }
+body.screen .chip text { font-size: 12px; }
+body.screen .connecting-label { font-size: 19px; }
+body.screen .link .trunk { stroke-width: 8.5px; }
+body.screen .link.selected .trunk { stroke-width: 9.5px; }

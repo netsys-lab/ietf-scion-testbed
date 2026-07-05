@@ -15,6 +15,12 @@
 // A total failure comes back as an HTTP 502 that the api client throws — its
 // message is the {"results":[...]} body, which resultsFromErrorBody recovers,
 // so mock mode (no real linkd) still shows structured, readable errors.
+//
+// No-data shell: if the selected link's VM disappears (mid-selection during a
+// WS drop, or it drops out of a reconnect's re-snapshot), the panel still
+// renders a header with the usual close button plus a "NO LIVE DATA" line
+// instead of returning null — an empty aside with no close affordance strands
+// touch users.
 import { useEffect, useRef, useState } from "react";
 import type { Band, Direction, Shaping, ShapingResult } from "../types";
 import { useFabricStore } from "../store";
@@ -62,6 +68,15 @@ interface Series {
 
 function cap(a: number[]): number[] {
   return a.length > RING ? a.slice(a.length - RING) : a;
+}
+
+// The loss sparkline defaults to the panel's neutral series color (steel,
+// matching the RTT/throughput sparks and the map's nominal band) and only
+// switches to the alarm orange once there is actual loss to report — a flat
+// 0.0% line drawn in the same orange used for real loss reads as an active
+// alarm on a perfectly healthy link (screenshot evidence from review).
+export function lossColor(lossPct: number): string {
+  return lossPct > 0 ? "#EC835A" : "#5A7A9E";
 }
 
 export default function LinkPanel({ id }: { id: string }) {
@@ -122,7 +137,23 @@ export default function LinkPanel({ id }: { id: string }) {
     }));
   }, [frameT, id]);
 
-  if (!link || !topoLink || aAs === undefined || bAs === undefined) return null;
+  // No live VM for this link (e.g. mid-selection during a WS drop, or the
+  // link dropped out of a reconnect's re-snapshot): keep the panel open with
+  // a minimal shell — a close button so touch/keyboard users aren't stuck
+  // with an unresponsive 380px aside — rather than silently rendering
+  // nothing.
+  if (!link || !topoLink || aAs === undefined || bAs === undefined) {
+    return (
+      <div className="panel-inner">
+        <div className="panel-head">
+          <button className="closebtn" aria-label="Close panel" onClick={() => select(undefined)}>
+            ✕
+          </button>
+        </div>
+        <span className="daemon-note">NO LIVE DATA</span>
+      </div>
+    );
+  }
 
   const band = link.band;
   const down = band === "down";
@@ -212,7 +243,7 @@ export default function LinkPanel({ id }: { id: string }) {
           <span className="name">Loss</span>
           <span className="reading">{lossReading}</span>
         </div>
-        <Spark data={series.loss} color="#EC835A" />
+        <Spark data={series.loss} color={lossColor(link.loss_pct)} />
       </div>
 
       <div className="shapingbox">
