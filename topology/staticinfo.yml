@@ -5,12 +5,12 @@ model:
   floor_ms: 1.0            # min one-way latency
   round_ms: 0.1
 tiers_mbit:
-  core: 10000
-  parent_child: 1000
-  peer: 500
+  core: 100
+  parent_child: 100
+  peer: 100
 intra:
   latency_ms: 0.0          # single BR per AS
-  bandwidth_mbit: 100000
+  bandwidth_mbit: 1000
   hops: 0
 note: "IETF 126 SCION testbed - emulated AS at {city}; links tc-shaped to story"
 ases:

@@ -1,10 +1,10 @@
 {
  "33031": {
   "delay_ms": 7.7,
-  "rate_mbit": 1000
+  "rate_mbit": 100
  },
  "46101": {
   "delay_ms": 2.1,
-  "rate_mbit": 1000
+  "rate_mbit": 100
  }
 }
