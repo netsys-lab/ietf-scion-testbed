@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/api"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/baseline"
@@ -15,6 +16,11 @@ import (
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/staticinfo"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/topo"
 )
+
+// reloadCoalesceWindow bounds how often a burst of dashboard edits can
+// SIGHUP the control service: at most one immediate reload plus one
+// trailing reload per window, instead of one per click.
+const reloadCoalesceWindow = time.Second
 
 func main() {
 	cfgPath := flag.String("config", "/etc/scion-linkd/config.toml", "config file")
@@ -102,7 +108,12 @@ func main() {
 		regen() // converge on startup
 	}
 
+	// regen already ran once directly above to converge on startup; OnChange
+	// gets a coalesced wrapper so rapid API edits collapse into at most one
+	// immediate + one trailing regen (and CS signal) per window.
+	onChange := staticinfo.Coalesce(reloadCoalesceWindow, regen)
+
 	log.Printf("scion-linkd listening on %s, %d interfaces", cfg.Listen, len(managed))
 	log.Fatal(http.ListenAndServe(cfg.Listen, api.New(managed, shaper,
-		api.Options{Baseline: blm, OnChange: regen, Status: status})))
+		api.Options{Baseline: blm, OnChange: onChange, Status: status})))
 }

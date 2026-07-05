@@ -5,6 +5,8 @@
 package staticinfo
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -12,9 +14,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/shape"
 )
+
+// signalTimeout bounds DefaultSignal's systemctl invocation: a wedged PID1
+// or systemd must not be able to hang the caller (and therefore pin the
+// Writer mutex behind /healthz) indefinitely. Var so tests can shrink it.
+var signalTimeout = 5 * time.Second
 
 type Writer struct {
 	BasePath string
@@ -27,9 +35,22 @@ type Writer struct {
 }
 
 // DefaultSignal asks PID1 to SIGHUP the unit (no CAP_KILL needed in linkd).
+// The call is bounded by signalTimeout so a wedged systemd can't hang the
+// caller forever.
 func DefaultSignal(unit string) error {
-	out, err := exec.Command("systemctl", "kill", "--signal=SIGHUP", unit).CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), signalTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "systemctl", "kill", "--signal=SIGHUP", unit)
+	// Bound the time spent waiting for systemctl's stdout/stderr pipes to
+	// close after cancellation: without this, a systemctl that spawns a
+	// lingering helper (or is itself reparented) can hold the pipe open
+	// past the process's own death, silently defeating the ctx timeout.
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("systemctl kill %s: timed out after %s", unit, signalTimeout)
+		}
 		return fmt.Errorf("systemctl kill %s: %v: %s", unit, err, out)
 	}
 	return nil
@@ -48,6 +69,18 @@ func (w *Writer) Write(live map[string]shape.Params) error {
 		w.hupFail = true // no signal attempted: don't report a stale reload_ok
 		return err
 	}
+
+	// If the rebuilt document is byte-identical to what's already on disk,
+	// skip both the atomic write and the CS signal: a crash-looping linkd
+	// that reconverges on the same live state must not SIGHUP the control
+	// service every restart, and a no-op OnChange should be free.
+	if existing, err := os.ReadFile(w.OutPath); err == nil &&
+		bytes.Equal(bytes.TrimSuffix(existing, []byte("\n")), doc) {
+		w.metaFail = false
+		w.hupFail = false
+		return nil
+	}
+
 	if err := writeAtomic(w.OutPath, doc); err != nil {
 		w.metaFail = true
 		w.hupFail = true // no signal attempted: don't report a stale reload_ok
