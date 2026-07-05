@@ -4,14 +4,20 @@ package config
 import "github.com/BurntSushi/toml"
 
 type Config struct {
-	Listen       string `toml:"listen"`
-	TopologyGlob string `toml:"topology_glob"`
+	Listen          string `toml:"listen"`
+	TopologyGlob    string `toml:"topology_glob"`
+	StaticinfoBase  string `toml:"staticinfo_base"`
+	StaticinfoOut   string `toml:"staticinfo_out"`
+	BaselineProfile string `toml:"baseline_profile"`
+	CSReloadUnit    string `toml:"cs_reload_unit"`
 }
 
 func Load(path string) (Config, error) {
 	c := Config{
-		Listen:       ":30480",
-		TopologyGlob: "/etc/scion/AS*/topology.json",
+		Listen:          ":30480",
+		TopologyGlob:    "/etc/scion/AS*/topology.json",
+		StaticinfoBase:  "/etc/scion/AS*/staticInfoConfig.base.json",
+		BaselineProfile: "/etc/scion/AS*/linkd-baseline.json",
 	}
 	if _, err := toml.DecodeFile(path, &c); err != nil {
 		return Config{}, err
