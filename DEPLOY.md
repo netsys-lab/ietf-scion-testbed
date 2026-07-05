@@ -215,6 +215,32 @@ linkd rather than the reverse, so getting the order backwards self-heals on
 fabricd's next poll, but the dashboard looks empty for the few seconds until
 that happens.
 
+## Playground (Tier 1)
+
+Hosted SCION endhosts attendees reach as a browser shell. Containers 210–213
+(`play-158`…`play-161`) on the mgmt+pubnet nets.
+
+Build + deploy:
+
+```sh
+./tools/build-endhost.sh
+cp ansible/group_vars/playground.yml.example ansible/group_vars/playground.yml  # set booth_code
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_playground.yaml
+```
+
+Verify (from a laptop on pubnet):
+
+1. Browse `http://<play-158 pubnet addr>:7681`, log in `scion` / booth code.
+2. At the prompt: `scion showpaths 1-160 --extended` → paths listed.
+3. `scion ping 1-161,127.0.0.1` → replies (proves the shim answers).
+4. Watch the dashboard map — traffic appears on 158↔ links.
+5. Confinement check: `ssh 10.20.3.150` from the shell → hangs/blocked;
+   `curl https://example.com` → blocked (nft drop). `nft list ruleset` on the
+   container shows a non-zero drop counter after these.
+
+Reset a wedged playground: `ansible-playbook ... deploy_playground.yaml
+--limit play-159`, or recreate the container from `create_contianers.sh`.
+
 ## Dev loop
 
 Run the backend against mock data and the frontend dev server side by side,
