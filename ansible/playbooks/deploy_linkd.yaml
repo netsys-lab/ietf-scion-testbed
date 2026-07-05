@@ -3,7 +3,8 @@
   hosts: ases
   become: true
   vars:
-    linkd_deb: "{{ playbook_dir }}/../../linkd/dist/scion-linkd_0.1.0_amd64.deb"
+    linkd_deb: "{{ playbook_dir }}/../../linkd/dist/scion-linkd_0.2.0_amd64.deb"
+    asnum: "{{ ansible_host.split('.')[-1] }}"
   tasks:
     - name: Copy scion-linkd package
       ansible.builtin.copy:
@@ -17,6 +18,15 @@
         state: present
         force: true
 
+    - name: Copy beacon metadata base and baseline profile
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../config/AS{{ asnum }}/{{ item }}"
+        dest: "/etc/scion/AS{{ asnum }}/{{ item }}"
+        mode: "0644"
+      loop:
+        - staticInfoConfig.base.json
+        - linkd-baseline.json
+
     - name: Configure scion-linkd to bind the management address
       ansible.builtin.copy:
         dest: /etc/scion-linkd/config.toml
@@ -24,6 +34,9 @@
         content: |
           listen = "{{ ansible_host }}:30480"
           topology_glob = "/etc/scion/AS*/topology.json"
+          staticinfo_base = "/etc/scion/AS*/staticInfoConfig.base.json"
+          baseline_profile = "/etc/scion/AS*/linkd-baseline.json"
+          cs_reload_unit = "{{ linkd_cs_unit | default('') }}"
 
     - name: Ensure service is running
       ansible.builtin.systemd:

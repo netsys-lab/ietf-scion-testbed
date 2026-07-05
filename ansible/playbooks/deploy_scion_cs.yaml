@@ -1,0 +1,31 @@
+---
+# Ship the patched control-service binary (staticinfo SIGHUP reload).
+# Required inventory vars (see DEPLOY.md): cs_binary_src, cs_binary_dest,
+# linkd_cs_unit.
+- name: Deploy patched SCION control service
+  hosts: ases
+  become: true
+  tasks:
+    - name: Stop control service
+      ansible.builtin.systemd:
+        name: "{{ linkd_cs_unit }}"
+        state: stopped
+
+    - name: Copy control binary
+      ansible.builtin.copy:
+        src: "{{ cs_binary_src }}"
+        dest: "{{ cs_binary_dest }}"
+        mode: "0755"
+
+    - name: Start control service
+      ansible.builtin.systemd:
+        name: "{{ linkd_cs_unit }}"
+        state: started
+
+    - name: Verify reload works (SIGHUP + log line)
+      ansible.builtin.shell: |
+        systemctl kill --signal=SIGHUP {{ linkd_cs_unit }}
+        sleep 2
+        journalctl -u {{ linkd_cs_unit }} --since "-30s" | grep -q "Reloaded static info"
+      register: reload_check
+      changed_when: false
