@@ -53,18 +53,23 @@ containers) natively from the same fork:
 
 The patched control service is built from a fork, not upstream scionproto:
 
-- Fork: `$SCION_FORK`, default `/home/tony/lshulz/scion`.
-- Branch: `staticinfo-sighup`.
+- Fork remote: `https://github.com/lschulz/scion` (public).
+- Branch: `ietf-126`.
 - Commit: `158d2060b`, based on upstream `8ce7ed2f8` (the commit pinned for
   this deploy).
+- Local build checkout: `$SCION_FORK`, default `/home/tony/lshulz/scion`
+  (already tracks `origin/ietf-126`).
 
-**This branch is currently local-only** — it has not been pushed to any
-remote. The CS binary already running on the testbed was built from it on
-the original build host, but anyone else (a fresh checkout, a different
-build host, a teammate picking this up) cannot build a reload-capable CS
-until the branch is pushed somewhere shared. Pushing it is the deploying
-operator's call to make by hand; nothing in this repo's automation does it
-for you.
+**This branch is pushed** to `github.com/lschulz/scion` (branch `ietf-126`),
+so a fresh checkout or a different build host can reproduce the
+reload-capable CS and the endhost binaries:
+
+```sh
+git clone -b ietf-126 https://github.com/lschulz/scion "$SCION_FORK"
+```
+
+The CS binary running on the testbed and the attendee endhost binaries
+(`tools/build-endhost.sh`) are both built from this commit.
 
 ## Deploy
 

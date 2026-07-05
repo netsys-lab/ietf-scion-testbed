@@ -1,0 +1,144 @@
+---
+# Install the core SCION stack (border router + control service + sciond +
+# shim dispatcher) on every AS container, built from the lschulz fork
+# (ietf-126). Uses the fork's STOCK systemd units, which read
+# /etc/scion/<id>.toml (flat) while each toml's config_dir points at
+# /etc/scion/AS<n>/ for topology + crypto. This is the base-provisioning
+# layer that was previously done outside the repo.
+- name: Deploy core SCION stack to AS containers
+  hosts: ases
+  become: true
+  vars:
+    asnum: "{{ ansible_host.split('.')[-1] }}"
+    scion_bin_src: "{{ playbook_dir }}/../../.build/scion-stack"
+    scion_unit_src: "{{ playbook_dir }}/../files/scion-units"
+    cfg_src: "{{ playbook_dir }}/../../config/AS{{ asnum }}"
+  tasks:
+    - name: Install SCION binaries
+      ansible.builtin.copy:
+        src: "{{ scion_bin_src }}/{{ item }}"
+        dest: "/usr/bin/{{ item }}"
+        mode: "0755"
+      loop: [scion, scion-control, scion-router, scion-daemon, scion-dispatcher]
+
+    - name: Create scion group
+      ansible.builtin.group:
+        name: scion
+        system: true
+
+    - name: Create scion user
+      ansible.builtin.user:
+        name: scion
+        system: true
+        group: scion
+        shell: /usr/sbin/nologin
+        home: /var/lib/scion
+        create_home: true
+
+    # Config dirs are root-owned (standard install layout). This is required
+    # so scion-linkd (runs as root but with CapabilityBoundingSet=CAP_NET_ADMIN,
+    # i.e. no CAP_DAC_OVERRIDE) can create /etc/scion/AS<n>/staticInfoConfig.json
+    # as the dir owner. A scion-owned dir would block linkd's staticinfo write.
+    # The CS reads config as 'scion' via other/group perms; secrets under
+    # crypto/ and keys/ stay scion-owned 0600 (copied below).
+    - name: Create /etc/scion and per-AS config dir (root-owned)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /etc/scion
+        - "/etc/scion/AS{{ asnum }}"
+
+    - name: Copy topology.json into config_dir
+      ansible.builtin.copy:
+        src: "{{ cfg_src }}/topology.json"
+        dest: "/etc/scion/AS{{ asnum }}/topology.json"
+        owner: scion
+        group: scion
+        mode: "0644"
+
+    - name: Copy crypto material dirs into config_dir (certs/crypto/keys)
+      ansible.builtin.copy:
+        src: "{{ cfg_src }}/{{ item }}"
+        dest: "/etc/scion/AS{{ asnum }}/"
+        owner: scion
+        group: scion
+        mode: "0600"
+        directory_mode: "0700"
+      loop: [certs, crypto, keys]
+
+    - name: Place flat service tomls (BR + CS) at /etc/scion/<id>.toml
+      ansible.builtin.copy:
+        src: "{{ cfg_src }}/{{ item }}"
+        dest: "/etc/scion/{{ item }}"
+        owner: scion
+        group: scion
+        mode: "0644"
+      loop:
+        - "br1-{{ asnum }}-1.toml"
+        - "cs1-{{ asnum }}-1.toml"
+
+    - name: Place daemon.toml (from sd.toml)
+      ansible.builtin.copy:
+        src: "{{ cfg_src }}/sd.toml"
+        dest: /etc/scion/daemon.toml
+        owner: scion
+        group: scion
+        mode: "0644"
+
+    - name: Render dispatcher.toml (shim, SCMP replies for this host)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/scion/dispatcher.toml.j2"
+        dest: /etc/scion/dispatcher.toml
+        owner: scion
+        group: scion
+        mode: "0644"
+
+    - name: Ensure /var/lib/scion (databases) exists
+      ansible.builtin.file:
+        path: /var/lib/scion
+        state: directory
+        owner: scion
+        group: scion
+        mode: "0755"
+
+    - name: Install SCION systemd units
+      ansible.builtin.copy:
+        src: "{{ scion_unit_src }}/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - scion-dispatcher.service
+        - "scion-router@.service"
+        - "scion-control@.service"
+        - scion-daemon.service
+
+    - name: Enable + start SCION services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: restarted
+        daemon_reload: true
+      loop:
+        - scion-dispatcher
+        - "scion-router@br1-{{ asnum }}-1"
+        - "scion-control@cs1-{{ asnum }}-1"
+        - scion-daemon
+
+    - name: Give services a moment, then check they are active
+      ansible.builtin.command: "systemctl is-active {{ item }}"
+      register: svc
+      changed_when: false
+      failed_when: false
+      loop:
+        - "scion-router@br1-{{ asnum }}-1"
+        - "scion-control@cs1-{{ asnum }}-1"
+        - scion-daemon
+        - scion-dispatcher
+
+    - name: Report service states
+      ansible.builtin.debug:
+        msg: "AS{{ asnum }}: {{ svc.results | map(attribute='item') | zip(svc.results | map(attribute='stdout')) | list }}"
