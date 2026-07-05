@@ -124,7 +124,7 @@ func testClient() *http.Client {
 }
 
 func TestPollReturnsASideShaping(t *testing.T) {
-	aJSON := `[{"ifid":"6049","neighbor_isd_as":"1-151","link_to":"child","device":"sci9","shaping":{"delay_ms":25}}]`
+	aJSON := `[{"ifid":"6049","neighbor_isd_as":"1-151","link_to":"child","device":"sci9","shaping":{"delay_ms":25},"shaped":true}]`
 	bJSON := `[{"ifid":"150","neighbor_isd_as":"1-150","link_to":"parent","device":"sci9","shaping":{"delay_ms":999}}]`
 	aSrv, _ := newFakeLinkd(aJSON)
 	defer aSrv.Close()
@@ -141,6 +141,24 @@ func TestPollReturnsASideShaping(t *testing.T) {
 	}
 	if sh.DelayMs == nil || *sh.DelayMs != 25 {
 		t.Fatalf("want A-side delay_ms=25, got %+v", sh)
+	}
+}
+
+func TestPollNilsShapingWhenNotFlaggedShaped(t *testing.T) {
+	// A side: preshaped-at-baseline (shaped=false) -> key present, value nil
+	aJSON := `[{"ifid":"6049","neighbor_isd_as":"1-151","link_to":"child","device":"sci9","shaping":{"delay_ms":3,"rate_mbit":10000},"shaped":false}]`
+	aSrv, _ := newFakeLinkd(aJSON)
+	defer aSrv.Close()
+	bSrv, _ := newFakeLinkd(`[]`)
+	defer bSrv.Close()
+	c := New(testGraph(aSrv.URL, bSrv.URL), testClient())
+	got := c.Poll(context.Background())
+	sh, ok := got["150-151"]
+	if !ok {
+		t.Fatal("link key must stay present (nil-not-absent contract)")
+	}
+	if sh != nil {
+		t.Fatalf("shaping = %+v, want nil for shaped=false", sh)
 	}
 }
 

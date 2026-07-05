@@ -61,10 +61,15 @@ func New(g topo.Graph, client *http.Client) *Client {
 
 // linkEntry is one element of a linkd GET /api/v1/links response. Shaping
 // reuses derive.Shaping directly: the wire shapes are identical (same
-// pointer fields, same json tags), so no separate type is needed.
+// pointer fields, same json tags), so no separate type is needed. Shaped
+// reports whether the interface's current tc state differs from linkd's
+// story baseline; every interface carries some Shaping (linkd preshapes all
+// links to the baseline), so Shaped -- not Shaping's nilness -- is what
+// distinguishes user-applied shaping from baseline preshape.
 type linkEntry struct {
 	IfID    string          `json:"ifid"`
 	Shaping *derive.Shaping `json:"shaping"`
+	Shaped  bool            `json:"shaped"`
 }
 
 // baseURL returns the "http://host:port" prefix for AS as, and whether as is
@@ -76,11 +81,13 @@ func (c *Client) baseURL(as int) (string, bool) {
 
 // Poll fetches GET /api/v1/links from every AS in the graph and returns a
 // linkID -> Shaping map using the A-side interface's shaping value: nil when
-// A's linkd reports that interface as present but unshaped, a non-nil
-// *derive.Shaping when shaped. ASes whose linkd cannot be reached are
-// skipped entirely; any link whose A side falls on a skipped AS is simply
-// absent from the result. Callers (derive.Deriver) treat a missing key the
-// same as "unshaped" -- acceptable v1 semantics per the design brief.
+// A's linkd reports that interface as present but not flagged shaped:true
+// (either genuinely unshaped or merely preshaped to the story baseline), a
+// non-nil *derive.Shaping only when linkd flags it shaped:true. ASes whose
+// linkd cannot be reached are skipped entirely; any link whose A side falls
+// on a skipped AS is simply absent from the result. Callers (derive.Deriver)
+// treat a missing key the same as "unshaped" -- acceptable v1 semantics per
+// the design brief.
 func (c *Client) Poll(ctx context.Context) map[string]*derive.Shaping {
 	// aSideIdx maps "AS/ifid" to the link ID for every link's A side, so the
 	// per-AS interface lists can be matched back to links in O(1).
@@ -113,7 +120,11 @@ func (c *Client) Poll(ctx context.Context) map[string]*derive.Shaping {
 		}
 		for _, e := range r.list {
 			if linkID, ok := aSideIdx[asIfKey(r.as, e.IfID)]; ok {
-				out[linkID] = e.Shaping
+				if e.Shaped {
+					out[linkID] = e.Shaping
+				} else {
+					out[linkID] = nil
+				}
 			}
 		}
 	}
