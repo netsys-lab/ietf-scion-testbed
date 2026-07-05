@@ -1,0 +1,11 @@
+================ SCION Playground — AS 1-{{ playground_as }} ================
+You are an endhost inside AS 1-{{ playground_as }} of the IETF testbed.
+Try these, and watch the dashboard map react:
+
+  scion showpaths 1-159 --extended     # paths to another AS
+  scion ping 1-160,127.0.0.1           # ping an endhost in AS 1-160
+  scion traceroute 1-161,127.0.0.1
+
+Hospitality ASes you can reach: 1-158, 1-159, 1-160, 1-161.
+Session is sandboxed and resets on disconnect. Have fun!
+=============================================================================
