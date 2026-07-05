@@ -44,3 +44,9 @@ dashboard:
       ansible_user: ietf
   vars:
     ansible_python_interpreter: auto_silent
+
+nodes:
+  children:
+    ases:
+    service:
+    dashboard:

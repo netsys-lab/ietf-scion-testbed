@@ -1,0 +1,23 @@
+# Example group_vars for the `ases` group (see DEPLOY.md's Deploy section).
+#
+# Copy this file to ansible/group_vars/ases.yml (dropping the .example
+# suffix so ansible actually loads it) and fill in the values below, as
+# discovered by running the one-time command from DEPLOY.md against a single
+# AS host (the CS binary path is identical across ASes, so one host's answer
+# applies to the whole `ases` group):
+#
+#   ansible -i ansible/inventory.yaml AS1-150 -b \
+#     -m shell -a 'systemctl list-units "*scion*" --no-legend; readlink /proc/$(pgrep -o -f cs1-150)/exe'
+
+# linkd_cs_unit — the CS systemd unit name (verify the actual name from the
+# discovery command above; this is a placeholder).
+linkd_cs_unit: scion-control@AS150
+
+# cs_binary_dest — the path the unit executes (from the `readlink` half of
+# the discovery command above; this is a placeholder).
+cs_binary_dest: /usr/bin/control
+
+# cs_binary_src — the freshly built patched binary, from $SCION_FORK/bin/control
+# (see DEPLOY.md's Build order / Fork provenance sections). Update this path
+# if you build with SCION_FORK pointed somewhere other than the default.
+cs_binary_src: /home/tony/lshulz/scion/bin/control

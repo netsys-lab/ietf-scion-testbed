@@ -30,9 +30,55 @@
         dest: /etc/fabric/config/as_list.yml
         mode: "0644"
 
+    - name: Ensure fabricd RTT-baseline persistence directory exists
+      ansible.builtin.file:
+        path: /var/lib/fabricd
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      # fabricd runs as root (fabricd.service sets no User=, and the deb
+      # ships no postinst creating a dedicated account), so root:root
+      # matches the process that will write baselines.json here.
+
+    - name: Create fabricd systemd override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/fabricd.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Allow fabricd to write baselines under ProtectSystem=strict
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/fabricd.service.d/override.conf
+        mode: "0644"
+        content: |
+          [Service]
+          ReadWritePaths=/var/lib/fabricd
+      # fabricd.service sets ProtectSystem=strict with no ReadWritePaths=,
+      # which makes the whole filesystem read-only to the process except
+      # /dev, /proc, /sys -- so without this drop-in, writes to
+      # baselines_path below fail silently into the unit's own log
+      # (scion-linkd.service uses the same ProtectSystem=strict + explicit
+      # ReadWritePaths=/etc/scion pattern for the same reason). Packaging
+      # this directly into pkg/fabricd.service is out of scope for this
+      # ansible-only wave; this override is the deploy-side equivalent.
+
+    - name: Configure fabricd (enable RTT-baseline persistence)
+      ansible.builtin.copy:
+        dest: /etc/fabricd/config.toml
+        mode: "0644"
+        content: |
+          listen = ":8080"
+          config_dir = "/etc/fabric/config"
+          static_dir = "/usr/share/fabricd/web"
+          scrape_interval_ms = 1000
+          mock = false
+          baselines_path = "/var/lib/fabricd/baselines.json"
+
     - name: Ensure service is running
       ansible.builtin.systemd:
         name: fabricd
+        daemon_reload: true
         state: restarted
         enabled: true
 
