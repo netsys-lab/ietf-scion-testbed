@@ -45,10 +45,12 @@ func (w *Writer) Write(live map[string]shape.Params) error {
 	doc, err := w.merged(live)
 	if err != nil {
 		w.metaFail = true
+		w.hupFail = true // no signal attempted: don't report a stale reload_ok
 		return err
 	}
 	if err := writeAtomic(w.OutPath, doc); err != nil {
 		w.metaFail = true
+		w.hupFail = true // no signal attempted: don't report a stale reload_ok
 		return err
 	}
 	w.metaFail = false

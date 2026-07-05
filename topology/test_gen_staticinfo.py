@@ -57,8 +57,10 @@ class TestGenerate(unittest.TestCase):
             "43214": {"underlay": {"local": "[fd00:fade:3::152]:50000",
                                    "remote": "[fd00:fade:3::150]:50000"},
                       "isd_as": "1-150", "link_to": "core"}}}}}
-        json.dump(topo150, open(os.path.join(root, "config/AS150/topology.json"), "w"))
-        json.dump(topo152, open(os.path.join(root, "config/AS152/topology.json"), "w"))
+        with open(os.path.join(root, "config/AS150/topology.json"), "w") as f:
+            json.dump(topo150, f)
+        with open(os.path.join(root, "config/AS152/topology.json"), "w") as f:
+            json.dump(topo152, f)
         self.story = {
             "model": dict(MODEL),
             "tiers_mbit": {"core": 10000, "parent_child": 1000, "peer": 500},
@@ -74,7 +76,8 @@ class TestGenerate(unittest.TestCase):
         self.dir.cleanup()
 
     def out(self, asnum, name):
-        return json.load(open(os.path.join(self.root, f"config/AS{asnum}/{name}")))
+        with open(os.path.join(self.root, f"config/AS{asnum}/{name}")) as f:
+            return json.load(f)
 
     def test_generate_files(self):
         files = g.generate(self.root, self.story)
@@ -126,7 +129,8 @@ class TestDurationFormat(unittest.TestCase):
         self.assertEqual(len(files), 12, f"expected 12 generated files, found {len(files)}: {files}")
         checked = 0
         for path in files:
-            doc = json.load(open(path))
+            with open(path) as f:
+                doc = json.load(f)
             for ifid, entry in doc["Latency"].items():
                 self.assertRegex(entry["Inter"], self.DURATION_RE,
                                   f"{path}: Latency[{ifid}].Inter = {entry['Inter']!r}")

@@ -53,7 +53,8 @@ def load_interfaces(root):
     """(asnum -> {ifid: {"nbr": int, "link_to": str}}), from committed topologies."""
     out = {}
     for f in sorted(glob.glob(os.path.join(root, "config/AS*/topology.json"))):
-        t = json.load(open(f))
+        with open(f) as fh:
+            t = json.load(fh)
         asnum = int(t["isd_as"].split("-")[1])
         ifs = {}
         for br in t["border_routers"].values():
@@ -120,12 +121,17 @@ def write_files(files):
 
 
 def main():
-    story = yaml.safe_load(open(os.path.join(ROOT, "topology/staticinfo.yml")))
+    with open(os.path.join(ROOT, "topology/staticinfo.yml")) as fh:
+        story = yaml.safe_load(fh)
     files = generate(ROOT, story)
     nas = len(files) // 2
     if "--check" in sys.argv[1:]:
-        drift = [p for p, obj in sorted(files.items())
-                 if not os.path.exists(p) or open(p).read() != render(obj)]
+        def stale(p, obj):
+            if not os.path.exists(p):
+                return True
+            with open(p) as fh:
+                return fh.read() != render(obj)
+        drift = [p for p, obj in sorted(files.items()) if stale(p, obj)]
         if drift:
             for p in drift:
                 print(f"DRIFT: {os.path.relpath(p, ROOT)}", file=sys.stderr)

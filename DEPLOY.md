@@ -41,11 +41,12 @@ reload support). The last command builds the patched control-service binary
 
 One-time, before the first deploy (or whenever the CS unit/binary naming on
 the containers is in doubt): discover the actual systemd unit name and binary
-path for the control service, since these vary by how the containers were
-provisioned:
+path for the control service. The CS binary path is identical across ASes, so
+a single host's answer applies to the whole `ases` group — run this against
+`AS1-150` only:
 
 ```sh
-ansible -i ansible/inventory.yaml ases -b \
+ansible -i ansible/inventory.yaml AS1-150 -b \
   -m shell -a 'systemctl list-units "*scion*" --no-legend; readlink /proc/$(pgrep -o -f cs1-150)/exe'
 ```
 

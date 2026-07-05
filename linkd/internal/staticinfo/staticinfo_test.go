@@ -148,7 +148,7 @@ func TestMissingBaseReported(t *testing.T) {
 	if err := w.Write(nil); err == nil {
 		t.Fatal("want error")
 	}
-	if m, _ := w.Status(); m {
-		t.Fatal("metadataOK must be false")
+	if m, r := w.Status(); m || r {
+		t.Fatalf("Status = %v,%v; want metadata failed, reload not attempted (false, false)", m, r)
 	}
 }
