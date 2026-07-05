@@ -42,6 +42,13 @@ reload support). The last command builds the patched control-service binary
 (staticinfo SIGHUP reload) from the fork at `$SCION_FORK` — override the env
 var if your checkout lives somewhere other than the default below.
 
+Build the attendee endhost binaries (used by the Tier 1 playground
+containers) natively from the same fork:
+
+```sh
+./tools/build-endhost.sh   # -> .build/endhost/bin/{scion,sciond,shim-dispatcher}
+```
+
 ### Fork provenance
 
 The patched control service is built from a fork, not upstream scionproto:
