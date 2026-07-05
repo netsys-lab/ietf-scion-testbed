@@ -150,7 +150,7 @@ func main() {
 
 	d := derive.New(g, st)
 	if cfg.BaselinesPath != "" {
-		go runBaselinePersistence(ctx, cfg.BaselinesPath, d)
+		go runBaselinePersistence(cfg.BaselinesPath, d)
 	}
 
 	var static fs.FS
@@ -205,12 +205,17 @@ func saveBaselines(path string, m map[string]float64) error {
 }
 
 // runBaselinePersistence loads baselines_path into d at startup if present,
-// then saves d's current baselines to it every baselinesSaveInterval until
-// ctx is done. It also arms a SIGINT/SIGTERM handler that saves once more
-// before the process exits, so a normal `systemctl stop`/Ctrl-C does not
-// lose up to baselinesSaveInterval of baseline history. Call only when
+// then saves d's current baselines to it every baselinesSaveInterval for the
+// life of the process. It also arms a SIGINT/SIGTERM handler that saves once
+// more before the process exits, so a normal `systemctl stop`/Ctrl-C does
+// not lose up to baselinesSaveInterval of baseline history. Call only when
 // cfg.BaselinesPath is non-empty.
-func runBaselinePersistence(ctx context.Context, path string, d *derive.Deriver) {
+//
+// There is no ctx-cancellation exit path: main runs until
+// log.Fatal(http.ListenAndServe(...)), which calls os.Exit and skips
+// deferred cancel(), so this goroutine only ever ends via the signal
+// handler's os.Exit(0) above.
+func runBaselinePersistence(path string, d *derive.Deriver) {
 	if m, err := loadBaselines(path); err != nil {
 		log.Printf("warning: baselines_path %q: %v (starting cold)", path, err)
 	} else if len(m) > 0 {
@@ -225,8 +230,6 @@ func runBaselinePersistence(ctx context.Context, path string, d *derive.Deriver)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-ctx.Done():
-			return
 		case <-ticker.C:
 			if err := saveBaselines(path, d.Baselines()); err != nil {
 				log.Printf("warning: saving baselines to %s: %v", path, err)

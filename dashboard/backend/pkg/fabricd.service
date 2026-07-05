@@ -9,6 +9,7 @@ Restart=on-failure
 RestartSec=2
 NoNewPrivileges=yes
 ProtectSystem=strict
+ReadWritePaths=/var/lib/fabricd
 ProtectHome=yes
 
 [Install]

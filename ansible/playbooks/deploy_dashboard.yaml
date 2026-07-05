@@ -41,28 +41,6 @@
       # ships no postinst creating a dedicated account), so root:root
       # matches the process that will write baselines.json here.
 
-    - name: Create fabricd systemd override directory
-      ansible.builtin.file:
-        path: /etc/systemd/system/fabricd.service.d
-        state: directory
-        mode: "0755"
-
-    - name: Allow fabricd to write baselines under ProtectSystem=strict
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/fabricd.service.d/override.conf
-        mode: "0644"
-        content: |
-          [Service]
-          ReadWritePaths=/var/lib/fabricd
-      # fabricd.service sets ProtectSystem=strict with no ReadWritePaths=,
-      # which makes the whole filesystem read-only to the process except
-      # /dev, /proc, /sys -- so without this drop-in, writes to
-      # baselines_path below fail silently into the unit's own log
-      # (scion-linkd.service uses the same ProtectSystem=strict + explicit
-      # ReadWritePaths=/etc/scion pattern for the same reason). Packaging
-      # this directly into pkg/fabricd.service is out of scope for this
-      # ansible-only wave; this override is the deploy-side equivalent.
-
     - name: Configure fabricd (enable RTT-baseline persistence)
       ansible.builtin.copy:
         dest: /etc/fabricd/config.toml

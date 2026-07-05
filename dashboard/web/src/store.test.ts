@@ -44,6 +44,7 @@ function resetStore() {
     selected: undefined,
     connected: false,
     booted: false,
+    screen: false,
     events: [],
     linksById: {},
   });

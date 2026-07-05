@@ -74,9 +74,12 @@ function cap(a: number[]): number[] {
 // matching the RTT/throughput sparks and the map's nominal band) and only
 // switches to the alarm orange once there is actual loss to report — a flat
 // 0.0% line drawn in the same orange used for real loss reads as an active
-// alarm on a perfectly healthy link (screenshot evidence from review).
+// alarm on a perfectly healthy link (screenshot evidence from review). The
+// threshold is gated on the same 1-decimal rounding as the text readout
+// (lossReading below), so a sub-0.05% loss that still displays as "0.0 %"
+// doesn't light up an orange spark that contradicts the number next to it.
 export function lossColor(lossPct: number): string {
-  return lossPct > 0 ? "#EC835A" : "#5A7A9E";
+  return Number(lossPct.toFixed(1)) > 0 ? "#EC835A" : "#5A7A9E";
 }
 
 export default function LinkPanel({ id }: { id: string }) {
