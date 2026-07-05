@@ -45,8 +45,27 @@ dashboard:
   vars:
     ansible_python_interpreter: auto_silent
 
+playground:
+  hosts:
+    play-158:
+      ansible_host: 10.20.3.210
+      playground_as: "158"
+    play-159:
+      ansible_host: 10.20.3.211
+      playground_as: "159"
+    play-160:
+      ansible_host: 10.20.3.212
+      playground_as: "160"
+    play-161:
+      ansible_host: 10.20.3.213
+      playground_as: "161"
+  vars:
+    ansible_user: ietf
+    ansible_python_interpreter: auto_silent
+
 nodes:
   children:
     ases:
     service:
     dashboard:
+    playground:

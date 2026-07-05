@@ -1,0 +1,6 @@
+# Copy to playground.yml (gitignored real secrets) and edit before deploy.
+# Shared booth code — also used by the WG join page and wghubd ttyd auth.
+booth_code: "changeme-at-booth"
+# Directory on the BUILD host holding the fork-built endhost binaries
+# (scion, sciond, shim-dispatcher) produced by Task 2.
+scion_bin_src: "{{ playbook_dir }}/../../.build/endhost/bin"

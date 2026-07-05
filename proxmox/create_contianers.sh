@@ -107,3 +107,20 @@ pct create 161 $TEMPLATE $OPTIONS --description "AS161" \
 pct create 200 $TEMPLATE $OPTIONS --description "Dashboard" \
     --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:C8,ip=10.20.3.200/24,ip6=auto \
     --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto
+
+# --- Attendee playground endhosts (Tier 1): one per hospitality AS ---
+pct create 210 $TEMPLATE $OPTIONS --description "play-158" \
+    --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:D2,ip=dhcp,ip6=auto \
+    --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto
+
+pct create 211 $TEMPLATE $OPTIONS --description "play-159" \
+    --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:D3,ip=dhcp,ip6=auto \
+    --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto
+
+pct create 212 $TEMPLATE $OPTIONS --description "play-160" \
+    --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:D4,ip=dhcp,ip6=auto \
+    --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto
+
+pct create 213 $TEMPLATE $OPTIONS --description "play-161" \
+    --net0,name=eth0,bridge=vmbr0,hwaddr=00:00:00:00:00:D5,ip=dhcp,ip6=auto \
+    --net1,name=eth1,bridge=pubnet,ip=dhcp,ip6=auto
