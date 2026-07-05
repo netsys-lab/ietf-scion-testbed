@@ -9,7 +9,7 @@ Emits, per AS, into config/AS<n>/:
 Usage: gen_staticinfo.py [--check]
   --check: regenerate in memory and diff against committed files (exit 1 on drift).
 """
-import json, glob, os, re, sys
+import json, glob, os, sys
 from math import radians, sin, cos, asin, sqrt
 
 import yaml
@@ -85,7 +85,10 @@ def generate(root, story):
                 (me["lat"], me["lon"]),
                 (ases[nbr]["lat"], ases[nbr]["lon"]), model))
             mbit = ov.get("bandwidth_mbit", tier_for(ic["link_to"], tiers))
-            fmt = lambda v: f"{v:g}ms"
+            # Deployed CS duration parser (scion fork pkg/private/util/duration.go)
+            # is integer-only (strconv.Atoi): emit integer microseconds, never
+            # fractional milliseconds, or json.Unmarshal aborts on the whole doc.
+            fmt = lambda v: f"{round(v * 1000)}us"
             # Intra entries once, under the numerically smaller ifid.
             smaller = {j: None for j in ifs if int(j) > int(ifid)}
             lat[ifid] = {"Inter": fmt(ms),

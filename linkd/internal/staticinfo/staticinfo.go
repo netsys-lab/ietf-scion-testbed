@@ -7,6 +7,7 @@ package staticinfo
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,7 +88,11 @@ func (w *Writer) merged(live map[string]shape.Params) ([]byte, error) {
 	}
 	for ifid, p := range live {
 		if p.DelayMs != nil {
-			setInter(doc, "Latency", ifid, fmt.Sprintf("%gms", *p.DelayMs))
+			// Integer microseconds: the deployed CS duration parser
+			// (scion fork pkg/private/util/duration.go) is integer-only
+			// (strconv.Atoi), so a fractional "%gms" value like "1.3ms"
+			// makes json.Unmarshal abort on the whole staticInfoConfig.json.
+			setInter(doc, "Latency", ifid, fmt.Sprintf("%dus", int64(math.Round(*p.DelayMs*1000))))
 		}
 		if p.RateMbit != nil && *p.RateMbit > 0 {
 			setInter(doc, "Bandwidth", ifid, uint64(*p.RateMbit*1000))

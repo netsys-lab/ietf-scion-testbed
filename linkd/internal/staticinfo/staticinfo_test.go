@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/shape"
@@ -14,10 +15,14 @@ const base = `{
  "Bandwidth": {"18982": {"Inter": 10000000, "Intra": {"20879": 100000000}}},
  "Geo": {"18982": {"Address": "Vienna", "Latitude": 48.2082, "Longitude": 16.3738}},
  "Hops": {"18982": {"Intra": {"20879": 0}}},
- "Latency": {"18982": {"Inter": "3ms", "Intra": {"20879": "0ms"}}},
+ "Latency": {"18982": {"Inter": "3000us", "Intra": {"20879": "0us"}}},
  "LinkType": {"18982": "direct"},
  "Note": "test"
 }`
+
+// durationRE mirrors the deployed CS fork's integer-only duration grammar
+// (scion fork pkg/private/util/duration.go): any value we write must match.
+var durationRE = regexp.MustCompile(`^-?[0-9]+(y|w|d|h|m|s|ms|us|µs|ns)$`)
 
 func f64(v float64) *float64 { return &v }
 
@@ -65,8 +70,12 @@ func TestWriteOverridesInter(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := readOut(t, w)
-	if got := inter(t, doc, "Latency", "18982"); got != "60.5ms" {
-		t.Fatalf("Latency Inter = %v, want 60.5ms", got)
+	got, _ := inter(t, doc, "Latency", "18982").(string)
+	if got != "60500us" {
+		t.Fatalf("Latency Inter = %v, want 60500us", got)
+	}
+	if !durationRE.MatchString(got) {
+		t.Fatalf("Latency Inter = %q does not match integer duration grammar %s", got, durationRE)
 	}
 	if got := inter(t, doc, "Bandwidth", "18982"); got != float64(500000) {
 		t.Fatalf("Bandwidth Inter = %v, want 500000", got)
@@ -75,7 +84,7 @@ func TestWriteOverridesInter(t *testing.T) {
 	if doc["Note"] != "test" || doc["LinkType"].(map[string]any)["18982"] != "direct" {
 		t.Fatal("static sections modified")
 	}
-	if got := doc["Latency"].(map[string]any)["18982"].(map[string]any)["Intra"].(map[string]any)["20879"]; got != "0ms" {
+	if got := doc["Latency"].(map[string]any)["18982"].(map[string]any)["Intra"].(map[string]any)["20879"]; got != "0us" {
 		t.Fatal("Intra modified")
 	}
 	if len(*signaled) != 1 || (*signaled)[0] != "cs.service" {
@@ -92,8 +101,8 @@ func TestWriteNilFieldsKeepBase(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := readOut(t, w)
-	if got := inter(t, doc, "Latency", "18982"); got != "3ms" {
-		t.Fatalf("Latency Inter = %v, want base 3ms", got)
+	if got := inter(t, doc, "Latency", "18982"); got != "3000us" {
+		t.Fatalf("Latency Inter = %v, want base 3000us", got)
 	}
 	if got := inter(t, doc, "Bandwidth", "18982"); got != float64(10000000) {
 		t.Fatalf("Bandwidth Inter = %v, want base 10000000", got)
@@ -106,8 +115,8 @@ func TestWriteUnknownIfidCreatesEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := readOut(t, w)
-	if got := inter(t, doc, "Latency", "999"); got != "5ms" {
-		t.Fatalf("Latency Inter = %v, want 5ms", got)
+	if got := inter(t, doc, "Latency", "999"); got != "5000us" {
+		t.Fatalf("Latency Inter = %v, want 5000us", got)
 	}
 }
 

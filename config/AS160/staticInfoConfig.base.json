@@ -19,7 +19,7 @@
  },
  "Latency": {
   "39652": {
-   "Inter": "5.7ms",
+   "Inter": "5700us",
    "Intra": {}
   }
  },

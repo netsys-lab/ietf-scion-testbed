@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for gen_staticinfo.py. Run: python3 -m unittest test_gen_staticinfo -v"""
-import json, os, sys, tempfile, unittest
+import glob, json, os, re, sys, tempfile, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_staticinfo as g
@@ -81,8 +81,10 @@ class TestGenerate(unittest.TestCase):
         g.write_files(files)
         base = self.out(150, "staticInfoConfig.base.json")
         # override wins over the model on both links of the pair
-        self.assertEqual(base["Latency"]["18982"]["Inter"], "9.9ms")
-        self.assertEqual(base["Latency"]["20879"]["Inter"], "9.9ms")
+        # (integer microseconds: the deployed CS duration parser is
+        # integer-only, so 9.9ms must round-trip as "9900us")
+        self.assertEqual(base["Latency"]["18982"]["Inter"], "9900us")
+        self.assertEqual(base["Latency"]["20879"]["Inter"], "9900us")
         # Intra entry only under the numerically smaller ifid
         self.assertIn("20879", base["Latency"]["18982"]["Intra"])
         self.assertNotIn("18982", base["Latency"]["20879"].get("Intra", {}))
@@ -99,13 +101,41 @@ class TestGenerate(unittest.TestCase):
         self.assertEqual(bl["18982"], {"delay_ms": 9.9, "rate_mbit": 10000})
         # peer file mirrors the story
         base152 = self.out(152, "staticInfoConfig.base.json")
-        self.assertEqual(base152["Latency"]["6957"]["Inter"], "9.9ms")
+        self.assertEqual(base152["Latency"]["6957"]["Inter"], "9900us")
         self.assertEqual(base152["Geo"]["6957"]["Address"], "Frankfurt")
 
     def test_unknown_as_fails(self):
         del self.story["ases"][152]
         with self.assertRaises(SystemExit):
             g.generate(self.root, self.story)
+
+
+class TestDurationFormat(unittest.TestCase):
+    """Round-trip guard: every emitted duration string must parse under the
+    deployed CS fork's integer-only grammar (scion fork
+    pkg/private/util/duration.go), never a fractional value like "1.3ms".
+    Exercises the real repo's committed generated files, not a synthetic
+    fixture, so a regression here is caught before it reaches config/.
+    """
+
+    DURATION_RE = re.compile(r"^-?[0-9]+(y|w|d|h|m|s|ms|us|\xb5s|ns)$")
+
+    def test_all_generated_latencies_are_integer_durations(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        files = sorted(glob.glob(os.path.join(root, "config/AS*/staticInfoConfig.base.json")))
+        self.assertEqual(len(files), 12, f"expected 12 generated files, found {len(files)}: {files}")
+        checked = 0
+        for path in files:
+            doc = json.load(open(path))
+            for ifid, entry in doc["Latency"].items():
+                self.assertRegex(entry["Inter"], self.DURATION_RE,
+                                  f"{path}: Latency[{ifid}].Inter = {entry['Inter']!r}")
+                checked += 1
+                for j, v in entry.get("Intra", {}).items():
+                    self.assertRegex(v, self.DURATION_RE,
+                                      f"{path}: Latency[{ifid}].Intra[{j}] = {v!r}")
+                    checked += 1
+        self.assertGreater(checked, 0, "no Latency entries found to check")
 
 
 if __name__ == "__main__":

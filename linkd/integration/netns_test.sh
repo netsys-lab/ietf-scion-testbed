@@ -29,7 +29,7 @@ baseline_profile = "$TMP/linkd-baseline.json"
 cs_reload_unit = ""
 EOF
 cat > "$TMP/staticInfoConfig.base.json" <<'EOF'
-{"Latency":{"6049":{"Inter":"3ms","Intra":{}}},
+{"Latency":{"6049":{"Inter":"3000us","Intra":{}}},
  "Bandwidth":{"6049":{"Inter":500000,"Intra":{}}},
  "LinkType":{"6049":"direct"},
  "Geo":{"6049":{"Latitude":52.4,"Longitude":4.9,"Address":"Amsterdam"}},
@@ -49,7 +49,7 @@ sleep 1
 QD0=$(ip netns exec $NS tc qdisc show dev sci9)
 echo "$QD0" | grep -q "delay 3ms"   || { echo "FAIL: no preshape delay: $QD0"; exit 1; }
 echo "$QD0" | grep -q "rate 500Mbit" || { echo "FAIL: no preshape rate: $QD0"; exit 1; }
-grep -q '"Inter": "3ms"' "$TMP/staticInfoConfig.json" || { echo "FAIL: initial metadata"; cat "$TMP/staticInfoConfig.json"; exit 1; }
+grep -q '"Inter": "3000us"' "$TMP/staticInfoConfig.json" || { echo "FAIL: initial metadata"; cat "$TMP/staticInfoConfig.json"; exit 1; }
 LIST0=$(ip netns exec $NS curl -fsS http://127.0.0.1:30480/api/v1/links)
 echo "$LIST0" | grep -q '"shaped":false' || { echo "FAIL: baseline must not count as shaped: $LIST0"; exit 1; }
 
@@ -68,7 +68,7 @@ echo "$GET" | grep -q '"delay_ms":5' || { echo "FAIL: GET does not reflect kerne
 echo "$GET" | grep -Eq '"loss_pct":(1|0\.9[0-9]*|1\.0[0-9]*)' || { echo "FAIL: GET does not reflect kernel loss: $GET"; exit 1; }
 echo "$GET" | grep -Eq '"rate_mbit":(50|49\.9[0-9]*|50\.0[0-9]*)' || { echo "FAIL: GET does not reflect kernel rate: $GET"; exit 1; }
 
-grep -q '"Inter": "50ms"' "$TMP/staticInfoConfig.json" || { echo "FAIL: metadata not updated after PUT"; exit 1; }
+grep -q '"Inter": "50000us"' "$TMP/staticInfoConfig.json" || { echo "FAIL: metadata not updated after PUT"; exit 1; }
 # kernel rate readback is approximate (see the existing rate_mbit tolerance
 # grep above): 50 Mbit may come back 49.8xx -> Kbit 49800..50000
 grep -Eq '"Inter": (49[89][0-9][0-9]|50000)' "$TMP/staticInfoConfig.json" || { echo "FAIL: bandwidth not updated after PUT"; exit 1; }
@@ -77,7 +77,7 @@ echo "$GET" | grep -q '"shaped":true' || { echo "FAIL: PUT state must be shaped:
 ip netns exec $NS curl -fsS -X DELETE http://127.0.0.1:30480/api/v1/links/6049 >/dev/null
 QD2=$(ip netns exec $NS tc qdisc show dev sci9)
 echo "$QD2" | grep -q "delay 3ms" || { echo "FAIL: DELETE must restore baseline: $QD2"; exit 1; }
-grep -q '"Inter": "3ms"' "$TMP/staticInfoConfig.json" || { echo "FAIL: metadata not restored: "; exit 1; }
+grep -q '"Inter": "3000us"' "$TMP/staticInfoConfig.json" || { echo "FAIL: metadata not restored: "; exit 1; }
 LIST2=$(ip netns exec $NS curl -fsS http://127.0.0.1:30480/api/v1/links)
 echo "$LIST2" | grep -q '"shaped":false' || { echo "FAIL: reset link still shaped: $LIST2"; exit 1; }
 
