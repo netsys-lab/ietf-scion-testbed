@@ -1,0 +1,13 @@
+[Unit]
+Description=SCION Daemon (playground endhost)
+After=network-online.target scion-shim.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/sciond --config /etc/scion/sd.toml
+Restart=on-failure
+User=root
+StateDirectory=scion
+
+[Install]
+WantedBy=multi-user.target
