@@ -126,6 +126,12 @@ type Deriver struct {
 	mu      sync.Mutex
 	state   map[string]*linkState
 	shaping map[string]*Shaping
+
+	// baselineMin is the running-minimum RTT ever observed per rttKey(...)
+	// side, surviving store ring rollover (see baseline). It can be seeded
+	// from a prior run via SeedBaselines and read back via Baselines for
+	// persistence (see cmd/fabricd's baselines_path config key).
+	baselineMin map[string]float64
 }
 
 // New builds a Deriver for graph g reading from store st. Every link starts
@@ -133,10 +139,11 @@ type Deriver struct {
 // subsequent Frame calls.
 func New(g topo.Graph, st *store.Store) *Deriver {
 	d := &Deriver{
-		g:       g,
-		st:      st,
-		state:   make(map[string]*linkState, len(g.Links)),
-		shaping: make(map[string]*Shaping),
+		g:           g,
+		st:          st,
+		state:       make(map[string]*linkState, len(g.Links)),
+		shaping:     make(map[string]*Shaping),
+		baselineMin: make(map[string]float64),
 	}
 	for _, l := range g.Links {
 		d.state[l.ID] = &linkState{band: bandNominal}
@@ -169,13 +176,18 @@ func (d *Deriver) Frame(now int64) Frame {
 		vm := d.deriveLink(l)
 		links = append(links, vm)
 		totalMbit += vm.RateABMbit + vm.RateBAMbit
-		if vm.Up {
+		// A dead AS freezes its interface-up gauge, so vm.Up can stay true
+		// even while vm.Stale is true. Gate both KPI contributions on
+		// !vm.Stale too, or a stale link silently keeps counting as up (KPI
+		// strip says N/N while the map shows it greyed out) and its frozen
+		// RTT keeps polluting the core-RTT average.
+		if vm.Up && !vm.Stale {
 			linksUp++
 		}
 		if vm.Shaping != nil {
 			shaped++
 		}
-		if l.Type == "core" && vm.Up {
+		if l.Type == "core" && vm.Up && !vm.Stale {
 			coreRttSum += (vm.RttMsA + vm.RttMsB) / 2
 			coreCount++
 		}
@@ -353,20 +365,61 @@ func (d *Deriver) rateMbit(key string) float64 {
 	return d.st.Rate(key, rateWindow) * 8 / 1e6
 }
 
-// baseline is the minimum RTT observed for key across the whole ring, floored
-// at baselineFloor. It is the reference the RTT bands compare against.
+// baseline is the reference RTT (ms) the RTT bands compare against for key,
+// floored at baselineFloor. It is min(ringMin, baselineMin[key]): ringMin is
+// the minimum over the samples currently held in the store's ring (bounded
+// by storeCapacity, ~1h in production), and baselineMin[key] is a running
+// minimum that survives ring rollover, so a link held shaped for longer than
+// the ring's window does not decay back toward nominal once its original
+// unshaped samples age out. baselineMin can be seeded at startup from a
+// prior run via SeedBaselines and persisted via Baselines (see
+// cmd/fabricd's baselines_path config key). Must be called with d.mu held.
 func (d *Deriver) baseline(key string) float64 {
-	samples := d.st.Series(key, math.MinInt64)
-	min := math.Inf(1)
-	for _, s := range samples {
-		if s.V < min {
-			min = s.V
+	ringMin := math.Inf(1)
+	for _, s := range d.st.Series(key, math.MinInt64) {
+		if s.V < ringMin {
+			ringMin = s.V
 		}
 	}
-	if math.IsInf(min, 1) || min < baselineFloor {
+	m := ringMin
+	if prev, ok := d.baselineMin[key]; ok && prev < m {
+		m = prev
+	}
+	if !math.IsInf(m, 1) {
+		d.baselineMin[key] = m
+	}
+	if math.IsInf(m, 1) || m < baselineFloor {
 		return baselineFloor
 	}
-	return min
+	return m
+}
+
+// Baselines returns a copy of the running per-key RTT baseline minimums
+// (keyed identically to baseline's argument, i.e. rttKey(endpoint)), for a
+// caller to persist to disk. Safe for concurrent use.
+func (d *Deriver) Baselines() map[string]float64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make(map[string]float64, len(d.baselineMin))
+	for k, v := range d.baselineMin {
+		out[k] = v
+	}
+	return out
+}
+
+// SeedBaselines merges m into the running baseline minimums: each key ends
+// up holding the smaller of its current value (if any) and m[key]. Intended
+// to restore baselines saved by a previous run at startup, so a fabricd
+// restart does not cold-start an already-shaped link's baseline back up to
+// its currently-shaped (not unshaped) RTT. Safe for concurrent use.
+func (d *Deriver) SeedBaselines(m map[string]float64) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for k, v := range m {
+		if cur, ok := d.baselineMin[k]; !ok || v < cur {
+			d.baselineMin[k] = v
+		}
+	}
 }
 
 // upZero reports whether key holds a present interface-up gauge reading 0

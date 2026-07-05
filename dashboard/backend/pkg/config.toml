@@ -4,3 +4,10 @@ config_dir = "/etc/fabric/config"
 static_dir = "/usr/share/fabricd/web"
 scrape_interval_ms = 1000
 mock = false
+
+# baselines_path: optional JSON file persisting derive's per-link RTT
+# baselines across restarts. Empty (default) disables persistence.
+# If the topology's real link characteristics legitimately change (e.g. a
+# staticinfo.yml redeploy), delete this file before restarting fabricd, or
+# the stale baseline keeps misclassifying the new RTT as shaped.
+# baselines_path = "/var/lib/fabricd/baselines.json"

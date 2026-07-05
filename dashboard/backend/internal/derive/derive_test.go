@@ -276,21 +276,119 @@ func TestStaleWhenHealthZero(t *testing.T) {
 	ti := baselineFrames(t, d, st, 4)
 
 	// Side B's border-router scrape fails (_up = 0). After two frames the
-	// band commits to stale and the Stale flag is set.
+	// band commits to stale and the Stale flag is set. Note the interface-up
+	// gauge (router_interface_up) is never zeroed here -- it just freezes at
+	// its last reading, which is exactly how a dead AS looks in practice:
+	// vm.Up stays true while vm.Stale becomes true.
 	var l LinkVM
+	var f Frame
 	for k := 0; k < 2; k++ {
 		ti += 1000
 		putRTT(st, ti, 2, 2)
 		putBytes(st, ti, 4+k, 1*mbit, 1*mbit)
 		st.Put(sfmt(150, "br", "_up", ""), ti, 1)
 		st.Put(sfmt(151, "br", "_up", ""), ti, 0)
-		l = d.Frame(ti).Links[0]
+		f = d.Frame(ti)
+		l = f.Links[0]
 	}
 	if l.Band != "stale" {
 		t.Fatalf("band = %q, want stale", l.Band)
 	}
 	if !l.Stale {
 		t.Fatalf("stale = false, want true")
+	}
+	if !l.Up {
+		t.Fatalf("up = false, want true (a frozen interface-up gauge stays truthy while stale)")
+	}
+	// A stale link must not count as up in the KPIs, even though vm.Up is
+	// still true: its numbers (including the RTT that feeds AvgCoreRttMs)
+	// are not trustworthy. Without the vm.Up && !vm.Stale gate, a dead AS
+	// would freeze its up gauge and the KPI strip would keep reporting
+	// links_up == links_total while the map shows the link greyed out.
+	if f.KPI.LinksUp != 0 {
+		t.Fatalf("KPI links up = %d, want 0 (stale link must not count as up)", f.KPI.LinksUp)
+	}
+	if f.KPI.AvgCoreRttMs != 0 {
+		t.Fatalf("KPI avg core rtt = %v, want 0 (stale core link must not contribute)", f.KPI.AvgCoreRttMs)
+	}
+}
+
+// TestBaselineSurvivesRingRollover reproduces the "held-shaped link decays to
+// nominal" bug: baseline() used to be a pure min-over-the-ring, so once a
+// link's original low-RTT samples aged out of the ring (storeCapacity, ~1h
+// in production), the baseline silently became whatever the currently-shaped
+// RTT is, and the band decayed back toward nominal even though the link is
+// still just as shaped as ever. The fix is a running minimum
+// (d.baselineMin) that survives ring rollover.
+func TestBaselineSurvivesRingRollover(t *testing.T) {
+	st := store.New(5) // tiny ring so it rolls over in a handful of frames
+	d := New(oneCoreLink(), st)
+
+	// Establish a true baseline of 2ms while the ring still holds it.
+	ti := baselineFrames(t, d, st, 3)
+
+	// Push far more 60ms samples than the ring's capacity, so the original
+	// 2ms samples are fully evicted from the ring. 60/2 = 30x >= the 25x
+	// critical ratio threshold, so as long as the true baseline is
+	// remembered the band must stay (and remain) critical.
+	var f Frame
+	for k := 0; k < 8; k++ {
+		ti += 1000
+		putRTT(st, ti, 60, 60)
+		putBytes(st, ti, 3+k, 1*mbit, 1*mbit)
+		health(st, ti)
+		f = d.Frame(ti)
+	}
+	if f.Links[0].Band != bandCritical {
+		t.Fatalf("band after ring rollover = %q, want %q (baseline must survive ring rollover)", f.Links[0].Band, bandCritical)
+	}
+}
+
+// TestSeedBaselinesMergeMin checks SeedBaselines' merge semantics directly:
+// each key ends up with the smaller of its existing value and the seeded
+// one, and Baselines() returns an independent copy.
+func TestSeedBaselinesMergeMin(t *testing.T) {
+	st := store.New(8)
+	d := New(oneCoreLink(), st)
+
+	d.SeedBaselines(map[string]float64{"150/br/rtt/1": 5, "151/br/rtt/1": 5})
+	d.SeedBaselines(map[string]float64{"150/br/rtt/1": 3, "151/br/rtt/1": 20})
+
+	got := d.Baselines()
+	if got["150/br/rtt/1"] != 3 {
+		t.Fatalf("150 baseline = %v, want 3 (merge-min must take the lower of the two seeds)", got["150/br/rtt/1"])
+	}
+	if got["151/br/rtt/1"] != 5 {
+		t.Fatalf("151 baseline = %v, want 5 (merge-min must not raise an existing lower value)", got["151/br/rtt/1"])
+	}
+
+	// Baselines() must return a copy: mutating it must not affect the Deriver.
+	got["150/br/rtt/1"] = 999
+	if d.Baselines()["150/br/rtt/1"] != 3 {
+		t.Fatalf("Baselines() leaked its internal map")
+	}
+}
+
+// TestSeededBaselineAffectsBand checks that a seeded baseline (as would be
+// restored from disk at startup via cmd/fabricd's baselines_path) actually
+// feeds into deriveLink's RTT classification, not just the Baselines() map.
+func TestSeededBaselineAffectsBand(t *testing.T) {
+	st := store.New(64)
+	d := New(oneCoreLink(), st)
+	// Seed a baseline lower than anything the ring will ever observe, so the
+	// classification can only be explained by the seed being honored.
+	d.SeedBaselines(map[string]float64{"150/br/rtt/1": baselineFloor, "151/br/rtt/1": baselineFloor})
+
+	var f Frame
+	for i := 0; i < 2; i++ {
+		ti := int64(i * 1000)
+		putRTT(st, ti, 2, 2)
+		putBytes(st, ti, i, 1*mbit, 1*mbit)
+		health(st, ti)
+		f = d.Frame(ti)
+	}
+	if f.Links[0].Band != bandElevated {
+		t.Fatalf("band = %q, want %q (seeded baseline should be honored: 2ms/0.5ms = 4x ratio)", f.Links[0].Band, bandElevated)
 	}
 }
 

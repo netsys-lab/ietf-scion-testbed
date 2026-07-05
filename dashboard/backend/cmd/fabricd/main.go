@@ -7,11 +7,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -54,6 +57,10 @@ const demoShapedLink = "155-160"
 // elevated threshold. Waiting for real unshaped samples first fixes that.
 const demoShapedLinkWarmup = 10 * time.Second
 
+// baselinesSaveInterval is how often the running RTT baselines are flushed
+// to baselines_path, when configured.
+const baselinesSaveInterval = 60 * time.Second
+
 // config is fabricd's on-disk configuration.
 type config struct {
 	Listen           string `toml:"listen"`
@@ -61,6 +68,24 @@ type config struct {
 	StaticDir        string `toml:"static_dir"`
 	ScrapeIntervalMs int    `toml:"scrape_interval_ms"`
 	Mock             bool   `toml:"mock"`
+
+	// BaselinesPath, if non-empty, is a JSON file (map[string]float64) used
+	// to persist derive.Deriver's per-link running-minimum RTT baselines
+	// (internal/derive.(*Deriver).Baselines / SeedBaselines) across fabricd
+	// restarts. It is loaded once at startup if present, then saved
+	// atomically every baselinesSaveInterval and once on SIGINT/SIGTERM.
+	// Default "" disables persistence entirely -- baselines are derived
+	// fresh from the store's ring on every restart, exactly as before this
+	// field existed.
+	//
+	// Operational note: if the topology's real link characteristics
+	// legitimately change (e.g. a topology/staticinfo.yml redeploy that
+	// changes a link's underlying delay), this file must be deleted by hand
+	// before restarting fabricd. Otherwise the stale, now-too-low persisted
+	// minimum keeps classifying the new, legitimately-higher RTT as
+	// shaped/elevated forever -- fabricd has no way to tell "real
+	// topology change" apart from "still shaped" on its own.
+	BaselinesPath string `toml:"baselines_path"`
 }
 
 // loadConfig decodes path over these defaults: an empty file is fine
@@ -124,6 +149,9 @@ func main() {
 	}
 
 	d := derive.New(g, st)
+	if cfg.BaselinesPath != "" {
+		go runBaselinePersistence(ctx, cfg.BaselinesPath, d)
+	}
 
 	var static fs.FS
 	if info, err := os.Stat(cfg.StaticDir); err == nil && info.IsDir() {
@@ -141,3 +169,74 @@ func main() {
 
 // f64 returns a pointer to v, for building derive.Shaping literals.
 func f64(v float64) *float64 { return &v }
+
+// loadBaselines reads the JSON map[string]float64 at path, for the
+// baselines_path config key. A missing file is not an error -- it just
+// means there is nothing to seed yet (first run, or the operator deleted it
+// per the reset note on the config key) -- and returns (nil, nil).
+func loadBaselines(path string) (map[string]float64, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m map[string]float64
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// saveBaselines atomically writes m as JSON to path: it writes to a
+// same-directory temp file and renames it over path, so a concurrent reader
+// or a crash mid-write never observes a partial file.
+func saveBaselines(path string, m map[string]float64) error {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// runBaselinePersistence loads baselines_path into d at startup if present,
+// then saves d's current baselines to it every baselinesSaveInterval until
+// ctx is done. It also arms a SIGINT/SIGTERM handler that saves once more
+// before the process exits, so a normal `systemctl stop`/Ctrl-C does not
+// lose up to baselinesSaveInterval of baseline history. Call only when
+// cfg.BaselinesPath is non-empty.
+func runBaselinePersistence(ctx context.Context, path string, d *derive.Deriver) {
+	if m, err := loadBaselines(path); err != nil {
+		log.Printf("warning: baselines_path %q: %v (starting cold)", path, err)
+	} else if len(m) > 0 {
+		d.SeedBaselines(m)
+		log.Printf("seeded %d RTT baselines from %s", len(m), path)
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	ticker := time.NewTicker(baselinesSaveInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := saveBaselines(path, d.Baselines()); err != nil {
+				log.Printf("warning: saving baselines to %s: %v", path, err)
+			}
+		case <-sigCh:
+			if err := saveBaselines(path, d.Baselines()); err != nil {
+				log.Printf("warning: saving baselines to %s on shutdown: %v", path, err)
+			}
+			signal.Stop(sigCh)
+			os.Exit(0)
+		}
+	}
+}

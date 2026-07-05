@@ -6,6 +6,7 @@ package scrape
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -159,7 +160,17 @@ func (s *Scraper) scrapeTarget(ctx context.Context, t Target) {
 			if ifID == "" {
 				continue
 			}
-			sums[ifID] += metricValue(m, rl.kind)
+			v := metricValue(m, rl.kind)
+			// A NaN or +/-Inf reading (e.g. router_bfd_rtt_estimate_seconds
+			// before BFD settles) must never reach the store: one non-finite
+			// value poisons derive's view model for the whole link, which
+			// makes json.Marshal fail for the entire websocket frame. Drop
+			// the sample and keep whatever was previously stored (stale is
+			// safer than poisoned).
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				continue
+			}
+			sums[ifID] += v
 		}
 		for ifID, v := range sums {
 			if rl.scaleMs {

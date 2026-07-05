@@ -101,6 +101,52 @@ func TestScrapeOnceHTTPErrorLeavesStale(t *testing.T) {
 	}
 }
 
+// TestScrapeOnceSkipsNonFiniteSamples feeds a metrics body containing NaN and
+// +Inf values (both valid in the Prometheus text exposition format) mixed
+// with finite ones. A single NaN reaching the store (e.g. from
+// router_bfd_rtt_estimate_seconds before BFD settles) poisons derive's view
+// model for that link, which in turn makes json.Marshal fail for the whole
+// websocket frame -- so non-finite samples must never reach the store.
+func TestScrapeOnceSkipsNonFiniteSamples(t *testing.T) {
+	body := `
+# TYPE router_bfd_rtt_estimate_seconds gauge
+router_bfd_rtt_estimate_seconds{interface="6049",isd_as="1-155",neighbor_isd_as="1-151"} NaN
+# TYPE router_output_bytes_total counter
+router_output_bytes_total{interface="6049",isd_as="1-155",neighbor_isd_as="1-151",sizeclass="128",type="out"} +Inf
+# TYPE router_input_bytes_total counter
+router_input_bytes_total{interface="6049",isd_as="1-155",neighbor_isd_as="1-151",sizeclass="128"} 500
+# TYPE router_interface_up gauge
+router_interface_up{interface="6049",isd_as="1-155",neighbor_isd_as="1-151"} 1
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	st := store.New(8)
+	targets := []Target{{AS: 155, Service: "br", URL: srv.URL + "/metrics"}}
+	sc := New(st, targets, time.Second, srv.Client())
+
+	sc.ScrapeOnce(context.Background())
+
+	if _, ok := st.Last("155/br/rtt/6049"); ok {
+		t.Fatalf("NaN rtt sample landed in the store")
+	}
+	if _, ok := st.Last("155/br/output_bytes/6049"); ok {
+		t.Fatalf("+Inf output_bytes sample landed in the store")
+	}
+	// Finite values in the same scrape body must still land normally.
+	if s, ok := st.Last("155/br/input_bytes/6049"); !ok || !closeEnough(s.V, 500) {
+		t.Fatalf("input_bytes: got %+v ok=%v, want 500", s, ok)
+	}
+	if s, ok := st.Last("155/br/up/6049"); !ok || !closeEnough(s.V, 1) {
+		t.Fatalf("up: got %+v ok=%v, want 1", s, ok)
+	}
+	if s, ok := st.Last("155/br/_up/"); !ok || s.V != 1 {
+		t.Fatalf("target health: got %+v ok=%v, want 1 (a bad sample must not fail the whole scrape)", s, ok)
+	}
+}
+
 func TestScrapeOnceCSBeaconFamilies(t *testing.T) {
 	body := `
 # TYPE control_beaconing_received_beacons_total counter
