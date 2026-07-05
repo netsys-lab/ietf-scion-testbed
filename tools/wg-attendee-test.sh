@@ -53,12 +53,19 @@ ip netns exec $NS $BIN/sciond --config "$WORK/sd.toml" &>"$WORK/sciond.log" &
 SD=$!; sleep 4
 ip netns exec $NS $BIN/scion showpaths 1-160 --sciond 127.0.0.1:30255 --maxpaths 1
 ip netns exec $NS $BIN/scion ping 1-161,10.20.3.213 --sciond 127.0.0.1:30255 -c 3
+# Negative check: hub pins attachment to ASes 158-161. TCP gives a decisive
+# signal (connect vs timeout); UDP scans cannot distinguish drop from open.
+if ip netns exec $NS timeout 3 bash -c "echo > /dev/tcp/10.20.3.158/31032"; then
+  echo "PINNING: AS158 CS reachable (expected)"
+else
+  echo "PINNING FAIL: AS158 CS unreachable"; exit 1
+fi
+if ip netns exec $NS timeout 3 bash -c "echo > /dev/tcp/10.20.3.150/31000" 2>/dev/null; then
+  echo "PINNING FAIL: AS150 CS reachable through the hub"; exit 1
+else
+  echo "PINNING: AS150 blocked (expected)"
+fi
+
 kill $SD
 echo "ATTENDEE E2E PASS"
-
-# Step 3: negative check (attachment pinning), same netns/tunnel as above.
-# AS150 is not a joinable leaf AS and must be unreachable through the hub;
-# AS158 is joinable and must not be blocked.
-ip netns exec $NS nc -uzvw2 10.20.3.150 31002 || true
-ip netns exec $NS nc -uzvw2 10.20.3.158 31034
 ip netns del $NS
