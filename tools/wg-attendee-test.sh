@@ -5,9 +5,11 @@
 set -euo pipefail
 EP="${1:?usage: wg-attendee-test.sh <hub-endpoint>}"
 NS=wgtest
-POOL=/root/ietf-scion-testbed/.build/wghub/pool.json
-BIN=/root/ietf-scion-testbed/.build/endhost/bin
+POOL="${POOL:-/root/ietf-scion-testbed/.build/wghub/pool.json}"
+BIN="${BIN:-/root/ietf-scion-testbed/.build/endhost/bin}"
 WORK=/tmp/wgtest; rm -rf "$WORK"; mkdir -p "$WORK"
+# A mid-run failure under `set -e` must not orphan the netns + sciond.
+trap 'kill "${SD:-}" 2>/dev/null; ip netns del "$NS" 2>/dev/null' EXIT
 
 PRIV=$(python3 -c "import json;print(json.load(open('$POOL'))['slots'][0]['private_key'])")
 SPUB=$(python3 -c "import json;print(json.load(open('$POOL'))['server_public_key'])")
@@ -66,6 +68,6 @@ else
   echo "PINNING: AS150 blocked (expected)"
 fi
 
-kill $SD
+kill $SD 2>/dev/null || true
 echo "ATTENDEE E2E PASS"
 ip netns del $NS
