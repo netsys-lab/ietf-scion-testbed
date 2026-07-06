@@ -1,9 +1,19 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/wgpool"
 )
 
 // Disabled join surface must be invisible: every join route 404s.
@@ -27,5 +37,110 @@ func TestASAllowed(t *testing.T) {
 	jc := JoinConfig{JoinableASes: []int{158, 159}}
 	if !jc.asAllowed(158) || jc.asAllowed(150) {
 		t.Fatal("asAllowed wrong")
+	}
+}
+
+func newJoinServer(t *testing.T, slots int) http.Handler {
+	t.Helper()
+	dir := t.TempDir()
+	pf := fmt.Sprintf(`{"server_public_key":"SPUB","listen_port":51820,"slots":[%s]}`,
+		strings.Join(func() []string {
+			var out []string
+			for i := 0; i < slots; i++ {
+				n := i + 2
+				out = append(out, fmt.Sprintf(`{"n":%d,"ip":"10.20.5.%d","private_key":"PRIV%d","public_key":"PUB%d"}`, n, n, n, n))
+			}
+			return out
+		}(), ","))
+	os.WriteFile(filepath.Join(dir, "pool.json"), []byte(pf), 0o600)
+	pool, err := wgpool.Open(filepath.Join(dir, "pool.json"), filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := loadGraph(t)
+	st := store.New(60)
+	d := derive.New(g, st)
+	jc := JoinConfig{
+		Enabled: true, BoothCode: "secret", ISD: 1,
+		JoinableASes: []int{158, 159, 160, 161},
+		EndpointV6:   "fd99::201", EndpointV4: "203.0.113.7", ListenPort: 51820,
+		RateMax: 100, RateWindow: time.Minute,
+	}
+	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, pool)
+}
+
+func postClaim(t *testing.T, h http.Handler, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/join/claim", strings.NewReader(body))
+	req.RemoteAddr = "203.0.113.9:1234"
+	h.ServeHTTP(rr, req)
+	return rr
+}
+
+func TestClaimHappyPath(t *testing.T) {
+	h := newJoinServer(t, 2)
+	rr := postClaim(t, h, `{"as":158,"code":"secret"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["ip"] != "10.20.5.2" || resp["isd_as"] != "1-158" {
+		t.Fatalf("resp: %v", resp)
+	}
+	if resp["fc00_identity"] != "fc00:1000:9e00::ffff:a14:502" {
+		t.Fatalf("fc00: %v", resp["fc00_identity"])
+	}
+	conf := resp["conf"].(string)
+	for _, want := range []string{"PrivateKey = PRIV2", "Address = 10.20.5.2/32", "MTU = 1380",
+		"PublicKey = SPUB", "AllowedIPs = 10.20.3.0/24, 10.20.5.0/24",
+		"Endpoint = [fd99::201]:51820", "PersistentKeepalive = 25"} {
+		if !strings.Contains(conf, want) {
+			t.Fatalf("conf missing %q:\n%s", want, conf)
+		}
+	}
+	if !strings.Contains(resp["conf_v4"].(string), "Endpoint = 203.0.113.7:51820") {
+		t.Fatalf("conf_v4 endpoint wrong")
+	}
+}
+
+func TestClaimBadCode403(t *testing.T) {
+	h := newJoinServer(t, 1)
+	if rr := postClaim(t, h, `{"as":158,"code":"wrong"}`); rr.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d", rr.Code)
+	}
+}
+
+func TestClaimNonJoinable404(t *testing.T) {
+	h := newJoinServer(t, 1)
+	if rr := postClaim(t, h, `{"as":150,"code":"secret"}`); rr.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d", rr.Code)
+	}
+}
+
+func TestClaimExhausted409(t *testing.T) {
+	h := newJoinServer(t, 1)
+	postClaim(t, h, `{"as":158,"code":"secret"}`)
+	if rr := postClaim(t, h, `{"as":158,"code":"secret"}`); rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d", rr.Code)
+	}
+}
+
+func TestMetaNoCodeNeeded(t *testing.T) {
+	h := newJoinServer(t, 2)
+	postClaim(t, h, `{"as":158,"code":"secret"}`)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/join/meta", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rr.Code)
+	}
+	var m map[string]any
+	json.Unmarshal(rr.Body.Bytes(), &m)
+	if m["slots_total"].(float64) != 2 || m["slots_claimed"].(float64) != 1 {
+		t.Fatalf("meta: %v", m)
+	}
+	if m["endpoint_v6"] != "[fd99::201]:51820" {
+		t.Fatalf("endpoint_v6: %v", m["endpoint_v6"])
 	}
 }

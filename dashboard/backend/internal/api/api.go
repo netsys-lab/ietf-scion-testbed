@@ -23,6 +23,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/linkdclient"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/ratelimit"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/topo"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/wgpool"
@@ -93,8 +94,9 @@ type server struct {
 	lc        Controller
 	linksByID map[string]topo.Link
 
-	join JoinConfig
-	pool PoolStore
+	join    JoinConfig
+	pool    PoolStore
+	limiter *ratelimit.Limiter
 
 	hub      *hub
 	upgrader websocket.Upgrader
@@ -117,6 +119,12 @@ type server struct {
 // wire the attendee join flow (Plan B); pass JoinConfig{} and nil to disable
 // it, which 404s every /api/join and /api/instructions route.
 func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static fs.FS, jc JoinConfig, pool PoolStore) http.Handler {
+	if jc.RateMax <= 0 {
+		jc.RateMax = 5
+	}
+	if jc.RateWindow <= 0 {
+		jc.RateWindow = time.Minute
+	}
 	s := &server{
 		g:         g,
 		st:        st,
@@ -125,6 +133,7 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 		linksByID: make(map[string]topo.Link, len(g.Links)),
 		join:      jc,
 		pool:      pool,
+		limiter:   ratelimit.New(jc.RateMax, jc.RateWindow, nil),
 		hub:       newHub(),
 		upgrader: websocket.Upgrader{
 			// The dashboard is served same-origin in production, but the dev
@@ -263,10 +272,9 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // The handlers below are skeletons: while the join flow is being built out
 // task by task, each must behave as if the route doesn't exist at all when
 // join is disabled (the default), and as a stub once enabled. Real bodies
-// land in later tasks (B4-B7); joinStub is what they replace.
+// land in later tasks (B5-B7); joinStub is what they replace. handleJoinMeta
+// and handleJoinClaim have real implementations in join.go (B4).
 
-func (s *server) handleJoinMeta(w http.ResponseWriter, r *http.Request)         { s.joinStub(w, r) }
-func (s *server) handleJoinClaim(w http.ResponseWriter, r *http.Request)        { s.joinStub(w, r) }
 func (s *server) handleJoinBundle(w http.ResponseWriter, r *http.Request)       { s.joinStub(w, r) }
 func (s *server) handleInstructionsList(w http.ResponseWriter, r *http.Request) { s.joinStub(w, r) }
 func (s *server) handleInstruction(w http.ResponseWriter, r *http.Request)      { s.joinStub(w, r) }
