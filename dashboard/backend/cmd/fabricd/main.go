@@ -199,6 +199,7 @@ func main() {
 		// don't exist in mock mode.
 		jc.Enabled = false
 		jc.PlayTargets = nil
+		jc.BoothCode = "" // mock is dev-facing: never gate it behind auth even if the config sets booth_code
 	} else {
 		targets := scrape.Targets(g)
 		interval := time.Duration(cfg.ScrapeIntervalMs) * time.Millisecond
