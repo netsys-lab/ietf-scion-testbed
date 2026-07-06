@@ -273,14 +273,13 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // task by task, each must behave as if the route doesn't exist at all when
 // join is disabled (the default), and as a stub once enabled. Real bodies
 // land in later tasks (B5-B7); joinStub is what they replace. handleJoinMeta
-// and handleJoinClaim have real implementations in join.go (B4).
+// and handleJoinClaim have real implementations in join.go (B4). Instructions
+// handlers (B6) have real implementations in instructions.go and are NOT
+// gated on join.Enabled.
 
-func (s *server) handleInstructionsList(w http.ResponseWriter, r *http.Request) { s.joinStub(w, r) }
-func (s *server) handleInstruction(w http.ResponseWriter, r *http.Request)      { s.joinStub(w, r) }
-
-// joinStub is the shared body of every join/instructions handler until its
-// real implementation lands: 404 while the join surface is disabled (so it
-// is invisible), 501 once enabled but not yet implemented.
+// joinStub is the shared body of every join handler until its real
+// implementation lands: 404 while the join surface is disabled (so it is
+// invisible), 501 once enabled but not yet implemented.
 func (s *server) joinStub(w http.ResponseWriter, r *http.Request) {
 	if !s.join.Enabled {
 		http.NotFound(w, r)
