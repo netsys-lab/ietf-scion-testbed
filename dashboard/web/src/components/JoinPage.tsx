@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { marked } from "marked";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
@@ -123,7 +124,10 @@ function Instructions() {
   }, []);
   useEffect(() => {
     if (!open) return;
-    fetchInstruction(open).then((md) => setHtml(marked.parse(md) as string)).catch(() => setHtml("<p>unavailable</p>"));
+    // Sanitize: the venue network serves this page over plain HTTP, so the
+    // instruction markdown could be MITM-tampered in transit even though it
+    // is operator-authored at rest.
+    fetchInstruction(open).then((md) => setHtml(DOMPurify.sanitize(marked.parse(md) as string))).catch(() => setHtml("<p>unavailable</p>"));
   }, [open]);
   return (
     <section className="join-tier">
