@@ -194,8 +194,11 @@ func main() {
 		// The join flow's WG hub, pool file, and playground targets are all
 		// real testbed infrastructure that mock mode has none of; force it
 		// off regardless of what config.toml says, so a mock/demo run never
-		// advertises a join surface it can't actually serve.
+		// advertises a join surface it can't actually serve, and never
+		// leaves the /play/{as} proxy live toward playground hosts that
+		// don't exist in mock mode.
 		jc.Enabled = false
+		jc.PlayTargets = nil
 	} else {
 		targets := scrape.Targets(g)
 		interval := time.Duration(cfg.ScrapeIntervalMs) * time.Millisecond
