@@ -6,6 +6,7 @@ Try these, and watch the dashboard map react:
   scion ping 1-160,10.20.3.212         # ping an endhost in AS 1-160
   scion traceroute 1-161,10.20.3.213
   ping -6 {{ 'fc00:1000:a100::ffff:10.20.3.213' if playground_as != '161' else 'fc00:1000:9e00::ffff:10.20.3.210' }}   # IPv6 app -> SCION via scitra
+  iperf3 -6 -c {{ 'fc00:1000:a100::ffff:10.20.3.213' if playground_as != '161' else 'fc00:1000:9e00::ffff:10.20.3.210' }}   # bandwidth over SCION (shows the shaped link speed)
 
 Hospitality ASes you can reach: 1-158, 1-159, 1-160, 1-161.
 Session is sandboxed and resets on disconnect. Have fun!

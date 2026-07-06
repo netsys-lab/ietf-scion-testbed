@@ -5,7 +5,13 @@ Requires=scion-sciond.service
 Conflicts=scion-shim.service
 
 [Service]
-ExecStart=/usr/local/bin/scitra-tun eth0 {{ ansible_eth0.ipv4.address }} -d 127.0.0.1:30255 --scmp
+# --scmp: answer SCMP echo on 30041 (replaces the shim, so `scion ping` to this
+#   host works). -p 5201: statically forward the iperf3 server port so inbound
+#   connections over SCION reach the local iperf3 -s (scitra is a general
+#   translator; only inbound server ports need forwarding). Together these let a
+#   remote host both `scion ping` and `iperf3 -6 -c <this host's fc00 addr>`,
+#   with iperf3 measuring the linkd-shaped SCION path bandwidth.
+ExecStart=/usr/local/bin/scitra-tun eth0 {{ ansible_eth0.ipv4.address }} -d 127.0.0.1:30255 --scmp -p 5201
 Restart=on-failure
 User=root
 
