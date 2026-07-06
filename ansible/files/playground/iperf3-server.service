@@ -1,0 +1,18 @@
+[Unit]
+Description=iperf3 server (playground bandwidth test target)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Default dual-stack listen on :5201 — reachable on the container's mgmt IP for
+# operator/host-to-host tests, and (since it also binds ::) on the host's
+# scitra fc00 address for bandwidth tests that ride SCION through scitra-tun.
+# iperf3 -s needs no privilege or filesystem, so run it as a transient
+# unprivileged DynamicUser rather than root.
+ExecStart=/usr/bin/iperf3 --server
+Restart=always
+RestartSec=2
+DynamicUser=yes
+
+[Install]
+WantedBy=multi-user.target

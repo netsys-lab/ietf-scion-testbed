@@ -15,9 +15,9 @@
           - booth_code | length > 0
         fail_msg: "booth_code is not set — copy ansible/group_vars/playground.yml.example to ansible/group_vars/playground.yml and set booth_code before deploying."
   tasks:
-    - name: Install nftables + scitra runtime deps
+    - name: Install nftables + scitra runtime deps + iperf3
       ansible.builtin.apt:
-        name: [nftables, libncurses6]
+        name: [nftables, libncurses6, iperf3]
         state: present
         update_cache: true
 
@@ -79,12 +79,12 @@
       ansible.builtin.command: /usr/local/bin/guest-setup.sh
       changed_when: false
 
-    - name: Install SCION + ttyd systemd units
+    - name: Install SCION + ttyd + iperf3 systemd units
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/playground/{{ item }}"
         dest: "/etc/systemd/system/{{ item }}"
         mode: "0644"
-      loop: [scion-shim.service, scion-sciond.service]
+      loop: [scion-shim.service, scion-sciond.service, iperf3-server.service]
 
     - name: Render ttyd unit (booth code + mgmt bind)
       ansible.builtin.template:
@@ -120,7 +120,7 @@
         enabled: true
         state: restarted
         daemon_reload: true
-      loop: [nftables, scion-sciond, scitra, ttyd]
+      loop: [nftables, scion-sciond, scitra, ttyd, iperf3-server]
 
     - name: Verify sciond answers locally
       ansible.builtin.command: /usr/local/bin/scion showpaths 1-159 --sciond 127.0.0.1:30255 --maxpaths 1
