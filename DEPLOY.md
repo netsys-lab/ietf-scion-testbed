@@ -152,6 +152,13 @@ The dashboard is reachable at `http://10.20.3.200:8080` (mgmt) and on its
 public IETF net address (fabricd deliberately binds all interfaces). Append
 `?mode=screen` to the URL for the big-screen display.
 
+Everything fabricd serves — UI, shaping API, join, /play — requires HTTP
+basic auth `scion:<booth_code>` once `booth_code` is set (one browser
+prompt covers the dashboard and the playground terminals; `GET /api/health`
+stays open). The venue leg additionally accepts :8080 only from
+`venue_allowed_v4`/`venue_allowed_v6` (group_vars/playground.yml — IETF
+meeting prefixes + `10.0.0.0/24`; confirm per meeting).
+
 ## Verify
 
 ```sh
@@ -180,7 +187,7 @@ immediately.
 Prefer the aggregate endpoint over polling each AS individually:
 
 ```sh
-curl -s http://10.20.3.200:8080/api/health
+curl -s http://10.20.3.200:8080/api/health   # /api/health is the only credential-free endpoint
 ```
 
 Expect the `linkd` map to show all 12 ASes `true` and the `targets` map to
