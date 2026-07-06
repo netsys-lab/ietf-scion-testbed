@@ -269,6 +269,29 @@ Reset a wedged playground: `ansible-playbook -i ansible/inventory.yaml
 ansible/playbooks/deploy_playground.yaml --limit play-159`, or recreate the
 container from `create_contianers.sh`.
 
+## ID-INT traceroute servers
+
+Every AS container runs the ID-INT traceroute/debug tool
+([netsys-lab/idint-traceroute](https://github.com/netsys-lab/idint-traceroute))
+in server mode on **UDP 32001** (`idint-traceroute.service`, bound to the
+mgmt IP). The playground hosts get the same binary for client use (no
+service). The tool's go.mod pins the lschulz/scion fork at `8ce7ed2f857d` —
+the deployed fork's upstream base — so it speaks the testbed's ID-INT wire
+format.
+
+```sh
+./tools/build-idint-traceroute.sh   # -> .build/idint-traceroute/bin/idint-traceroute
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_idint_traceroute.yaml
+```
+
+Example client run (from any AS or playground container; the client's
+`--local` port must differ from the server's 32001):
+
+```sh
+idint-traceroute --sciond 10.20.3.150:30255 --local 10.20.3.150:32000 \
+  --remote 1-161,10.20.3.161:32001 -inst0 RTT_NEXT_BR -inst1 INGRESS_TSTAMP
+```
+
 ## Attendee access (Tier 2 — WireGuard)
 
 Attendees' own laptops join as real SCION endhosts in ASes 1-158..1-161 over
