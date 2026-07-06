@@ -51,7 +51,7 @@ func bundleReadme(asNum int) string {
 		"join page, or raw:\n\n"+
 		"  /api/instructions/laptop-linux.md\n"+
 		"  /api/instructions/laptop-macos.md\n\n"+
-		"Keep tunnelled payloads under ~1300 bytes.\n", asNum)
+		"Keep tunnelled payloads under ~1200 bytes.\n", asNum)
 }
 
 func (s *server) handleJoinBundle(w http.ResponseWriter, r *http.Request) {

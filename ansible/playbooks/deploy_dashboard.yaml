@@ -13,11 +13,11 @@
         dest: /tmp/fabricd.deb
         mode: "0644"
 
-    - name: Install fabricd
-      ansible.builtin.apt:
-        deb: /tmp/fabricd.deb
-        state: present
-        force: true
+    - name: Install fabricd (dpkg -i always reinstalls the shipped deb, even on an identical version — apt/apt-get no-op on same-version)
+      ansible.builtin.command:
+        cmd: dpkg -i /tmp/fabricd.deb
+      register: fabricd_dpkg
+      changed_when: "'already installed' not in fabricd_dpkg.stdout"
 
     - name: Ensure fabricd config dirs exist (deb ships no config tree)
       ansible.builtin.file:
