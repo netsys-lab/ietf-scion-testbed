@@ -407,13 +407,22 @@ Thanks,
 ```
 [ ] Wired drop live: CT200/CT201 have DHCP leases on eth1 (venue net)
 [ ] Hub has a global IPv6 on eth1 (pct exec 201 -- ip -6 -br addr show eth1 scope global)
-[ ] tools/wg-attendee-test.sh <hub-v6-or-v4> passes from a laptop on the ietf SSID
+[ ] Pre-flight ON the proxmox host: sudo tools/wg-attendee-test.sh <hub-v6-or-v4>
+    passes — this is a netns simulation run on the host (it needs root, makes a
+    netns, reads a slot key from .build/wghub/pool.json); it proves the hub
+    answers and the tunnel path works end to end. NOT an attendee-laptop test.
+[ ] Real SSID-client test from an actual laptop on the ietf SSID: open the
+    dashboard join page, claim a conf, wg-quick up it, then scion showpaths /
+    scion ping per the laptop instructions — the genuine "from a laptop" path
+    uses the join page + real SCION tools, not the host script above.
 [ ] One claim per SSID: run the claim flow once per venue SSID, not just one
 [ ] QR code on the join page scans and imports on a phone WireGuard app
 [ ] /play/158/ (Tier 1 terminal) loads and logs in from a phone browser
-[ ] nft drop counters on the hub bump after a :22 probe from inside the tunnel
-    (confirms the forward-chain pin to AS158-161 is actually enforced, not
-    just configured)
+[ ] nft drop counters on the hub bump after a :22 probe to 10.20.3.150 (a
+    non-joinable AS / the mgmt plane) from inside the tunnel — mirrors the
+    Tier-1 confinement check. The hub's forward chain ACCEPTS tcp to
+    10.20.3.158-161, so the probe must target an AS outside that set to drop;
+    the wg0->eth0 pin to 158-161 only is what bumps the drop counter.
 ```
 
 ### Known gotchas
