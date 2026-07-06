@@ -71,11 +71,14 @@ hub:
     ansible_user: ietf
     ansible_python_interpreter: auto_silent
 
-leafases:
+# ASes attendees can be endhosts in via WireGuard — return routes + hub egress.
+# A deliberate mix: leaf ASes (158, 161), a core AS (152), and the tier-2 hub
+# (155), so laptop attendees can join a core/transit AS, not only leaves.
+wg_ases:
   hosts:
+    AS1-152:
+    AS1-155:
     AS1-158:
-    AS1-159:
-    AS1-160:
     AS1-161:
 
 nodes:

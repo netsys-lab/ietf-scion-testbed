@@ -73,8 +73,8 @@
         group: root
         mode: "0600"
 
-- name: Install return routes on the leaf ASes
-  hosts: leafases
+- name: Install return routes on the WG-joinable ASes
+  hosts: wg_ases
   become: true
   tasks:
     - name: Install route unit
