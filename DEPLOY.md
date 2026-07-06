@@ -269,6 +269,172 @@ Reset a wedged playground: `ansible-playbook -i ansible/inventory.yaml
 ansible/playbooks/deploy_playground.yaml --limit play-159`, or recreate the
 container from `create_contianers.sh`.
 
+## Attendee access (Tier 2 — WireGuard)
+
+Attendees' own laptops join as real SCION endhosts in ASes 1-158..1-161 over
+WireGuard, via the `/join` page on the dashboard. This is separate from the
+Tier 1 browser-terminal playground above — the WG hub (CT201) and the
+dashboard's join API (fabricd, CT200) are the two containers involved.
+
+### Build + deploy order
+
+```sh
+./tools/gen-wg-pool.sh                        # -> .build/wghub/{wg0.conf,pool.json}, 50 slots
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_wghub.yaml
+cd dashboard/web && npm run build             # skip if already built this session
+cd ../backend && make deb
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_dashboard.yaml
+```
+
+`gen-wg-pool.sh` refuses to overwrite an existing pool unless you pass `-f` —
+**regenerating with `-f` replaces the server key and all 50 peer keys, which
+invalidates every conf already handed out**, so only do this deliberately
+(see "Pool exhausted" below). `deploy_wghub.yaml` installs the hub (wg0 +
+nftables on CT201), pushes `pool.json` to CT200 as
+`/var/lib/fabricd/wg-pool.json`, and installs the return-route unit on
+AS158-161 (`ip route 10.20.5.0/24 via <hub>` — without this the reply half of
+an attendee's tunnel never gets back to the hub). This must run **before**
+`deploy_dashboard.yaml`: with `join_enabled = true`, fabricd reads the pool
+file at startup and exits (`log.Fatalf`) if it's missing, so deploying the
+dashboard first with no pool in place takes the whole dashboard down, not
+just the join feature.
+
+### On-site bring-up
+
+The hub's venue-facing address isn't known until the container is racked and
+plugged into the venue network, so `wg_endpoint_v6`/`wg_endpoint_v4` in
+`ansible/group_vars/playground.yml` (gitignored, copy from
+`playground.yml.example`) start as placeholders and must be filled in on
+site:
+
+```sh
+pct exec 201 -- ip -6 -br addr show eth1 scope global   # hub venue v6
+pct exec 201 -- ip -4 -br addr show eth1                # hub venue v4
+# set wg_endpoint_v6 / wg_endpoint_v4 in ansible/group_vars/playground.yml
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_dashboard.yaml
+```
+
+(Only `deploy_dashboard.yaml` needs rerunning — the endpoints are baked into
+fabricd's rendered conf, not into the hub's own `wg0.conf`.)
+
+### Wi-Fi-uplink contingency
+
+If the booth table has no wired drop, the host itself joins the venue SSID
+and NATs the two containers out through it instead of a routed uplink. Port-
+forward `51820/udp -> CT201` and `8080/tcp -> CT200` on the host, and set the
+join endpoints to the **host's** address (not CT201's) in
+`group_vars/playground.yml`, since that's what's actually reachable from the
+venue side of the NAT. WireGuard's handshake is a single client-initiated
+UDP flow in each direction, so it survives ordinary NAT without extra
+keepalive tuning beyond the `PersistentKeepalive = 25` already baked into
+every issued conf. Treat this as a fallback, not the primary plan — prefer a
+wired drop with routed addressing when one's available.
+
+### Runbook
+
+**Revoke a conf** (lost laptop, leaked key, attendee leaving):
+
+```sh
+ssh wg-hub sudo wg set wg0 peer <PUBKEY> remove
+```
+
+Then on CT200, edit `/var/lib/fabricd/wg-claims.json`, add the slot number to
+the `"burned"` array, and restart fabricd:
+
+```sh
+systemctl restart fabricd
+```
+
+Burned slots are never reissued — this permanently gives up one of the 50
+slots, not just the current claim.
+
+**Rotate the booth code**: edit `booth_code` in `group_vars/playground.yml`,
+then rerun both `deploy_dashboard.yaml` and `deploy_playground.yaml` — the
+same code gates the WG join claim and the Tier 1 ttyd terminal login, so
+both need redeploying to stay in sync.
+
+**Pool exhausted**: all 50 slots claimed shows as an expected 409 ("no confs
+left — ask at the booth") in the join UI, not a bug. The only way to free
+capacity is to regenerate the pool — `./tools/gen-wg-pool.sh -f`, then
+redeploy the hub and dashboard — which **invalidates every conf already
+issued**. Only do this between sessions, and announce it at the booth first
+so attendees mid-tunnel know to re-claim.
+
+**Restart matrix** — what survives what:
+
+| Event | Effect |
+|---|---|
+| Hub (CT201) reboot | Tunnels resume on their own — `wg0` is a static `wg-quick` conf brought up by systemd, no daemon holding state. |
+| fabricd restart | Claims persist — `wg-claims.json` is written atomically on every claim/burn. |
+| `deploy_playground.yaml` rerun | Tier 1 ttyd terminals blip; Tier 2 tunnels are unaffected (different containers, no shared state). |
+
+Two standing facts worth keeping in mind while debugging either tier: the
+management plane (`10.20.3.0/24`) is unreachable from the venue network
+except through the WG tunnel, and WG egress is pinned by the hub's nftables
+`forward` chain to AS158-161 only — an attendee's tunnel can reach their own
+AS's border router/control service and hairpin to other attendees, nothing
+else on the mgmt net.
+
+### NOC email
+
+Send before the event, once the hub's venue uplink is provisioned:
+
+```
+Subject: IETF 126 SCION hackathon testbed — port check
+
+Two services on our hackathon table are reachable from the general
+attendee network:
+
+  - Live topology dashboard: TCP/8080 to <dashboard-venue-addr>
+  - WireGuard attendee access: UDP/51820 to <hub-venue-addr>
+
+Both need to stay open inbound from the venue Wi-Fi/wired segments to our
+table. Nothing else on our subnet should be attendee-reachable.
+
+One thing we can't verify ourselves and would appreciate confirmation on:
+is client-to-client UDP filtered between wireless clients and a wired
+table drop on your network? Our WireGuard attendees join over Wi-Fi and
+tunnel to a hub on a wired drop at our table — if that path is filtered,
+the whole attendee-access feature is dead on arrival regardless of what we
+configure on our end.
+
+Thanks,
+<contact>
+```
+
+### On-site checklist
+
+```
+[ ] Wired drop live: CT200/CT201 have DHCP leases on eth1 (venue net)
+[ ] Hub has a global IPv6 on eth1 (pct exec 201 -- ip -6 -br addr show eth1 scope global)
+[ ] tools/wg-attendee-test.sh <hub-v6-or-v4> passes from a laptop on the ietf SSID
+[ ] One claim per SSID: run the claim flow once per venue SSID, not just one
+[ ] QR code on the join page scans and imports on a phone WireGuard app
+[ ] /play/158/ (Tier 1 terminal) loads and logs in from a phone browser
+[ ] nft drop counters on the hub bump after a :22 probe from inside the tunnel
+    (confirms the forward-chain pin to AS158-161 is actually enforced, not
+    just configured)
+```
+
+### Known gotchas
+
+- **`deploy_linkd.yaml` still uses `ansible.builtin.apt`, not `dpkg -i`.**
+  `deploy_dashboard.yaml` was fixed to install fabricd via `dpkg -i` because
+  `apt`/`apt-get` no-op when the target deb is byte-identical in version to
+  what's already installed — a real risk when iterating and rebuilding
+  without bumping the version string. `deploy_linkd.yaml` has not been fixed
+  the same way: a rebuilt scion-linkd deb with an unchanged version number
+  will report success and **not actually install**. Either bump
+  `scion-linkd`'s version before rebuilding, or `dpkg -i` the deb on the AS
+  containers by hand.
+- **MTU.** Attendee tunnels report a 1380 MTU, but the real ceiling is lower
+  once SCION + WireGuard headers are accounted for — tell attendees to keep
+  tunnelled payloads under ~1200 bytes (see `dashboard/instructions/faq.md`
+  for the full explanation, which is also what the join page links to).
+- **`gen-wg-pool.sh -f` is destructive with no confirmation prompt beyond the
+  flag itself** — see "Pool exhausted" above. There's no partial-regenerate;
+  it's all 50 slots or none.
+
 ## Dev loop
 
 Run the backend against mock data and the frontend dev server side by side,
