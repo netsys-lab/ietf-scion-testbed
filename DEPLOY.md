@@ -172,14 +172,19 @@ curl -s http://10.20.3.200:8080/api/health   # linkd map all 12 true, targets al
 python3 topology/gen_staticinfo.py --check   # expect: OK: 12 ASes generated, files match
 curl -s http://10.20.3.150:30480/api/v1/links | grep -o '"shaped":[a-z]*'   # all false at rest
 curl -s http://10.20.3.150:30480/healthz     # metadata_ok:true reload_ok:true
-# end-to-end: shape 155-158 in the dashboard, then within ~30 s:
+# end-to-end: shape 155-158 in the dashboard, then within ~60 s (query_interval=30s):
 #   scion showpaths --extended --refresh <dst>   # latency reflects the change
 ```
 
 Beacon metadata propagates at beaconing speed (origination/propagation/
 registration + the sciond path cache), not instantly — expect the shaped
 change to show up in `showpaths` roughly 10-30 s after shaping, not
-immediately.
+immediately. The testbed sets `query_interval = "30s"` fleet-wide (sciond
+`[sd]` + control service `[path]`) to keep this demo-friendly; the scion
+default is 5m, which made shaping appear "stuck" for minutes and mixed old
+and new per-path metadata during the window. Demo tip: hold a shape for at
+least a minute before judging `showpaths`, and expect a brief mixed-vintage
+window where different paths disagree.
 
 ## Runbook
 

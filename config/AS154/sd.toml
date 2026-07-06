@@ -10,6 +10,7 @@ connection = "/var/lib/scion/sd1-154.path.db"
 
 [sd]
 address = "10.20.3.154:30255"
+query_interval = "30s"
 
 [tracing]
 enabled = true

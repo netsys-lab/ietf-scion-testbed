@@ -10,6 +10,7 @@ connection = "/var/lib/scion/sd1-160.path.db"
 
 [sd]
 address = "10.20.3.160:30255"
+query_interval = "30s"
 
 [metrics]
 prometheus = "10.20.3.160:30455"

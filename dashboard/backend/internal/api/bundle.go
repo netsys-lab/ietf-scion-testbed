@@ -31,6 +31,7 @@ connection = "sd1-%d.path.db"
 
 [sd]
 address = "127.0.0.1:30255"
+query_interval = "30s"
 
 [drkey_level2_db]
 connection = "sd1-%d.drkey_level2.db"

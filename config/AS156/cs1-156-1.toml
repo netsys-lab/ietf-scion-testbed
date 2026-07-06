@@ -36,3 +36,6 @@ connection = "/var/lib/scion/cs1-156-1.drkey_secret_value.db"
 [drkey.delegation]
 scmp = [ "127.0.0.1", "::1", "10.20.3.156",]
 idint = [ "127.0.0.1", "::1", "10.20.3.156",]
+
+[path]
+query_interval = "30s"
