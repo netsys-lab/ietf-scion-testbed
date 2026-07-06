@@ -292,10 +292,10 @@ export default function FabricMap() {
             return (
               <g key={l.id} className="pc-label">
                 <text x={pp.x + ux * off} y={pp.y + uy * off}>
-                  parent
+                  <title>parent</title>P
                 </text>
                 <text x={cc.x - ux * off} y={cc.y - uy * off}>
-                  child
+                  <title>child</title>C
                 </text>
               </g>
             );
