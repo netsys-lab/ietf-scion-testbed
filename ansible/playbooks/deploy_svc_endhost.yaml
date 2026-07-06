@@ -2,8 +2,6 @@
 - name: Deploy svc endhosts (SCION endhost + scitra, services live behind scitra)
   hosts: svc
   become: true
-  vars:
-    scitra_extra_args: ""
   tasks:
     - name: Install scitra runtime deps
       ansible.builtin.apt:

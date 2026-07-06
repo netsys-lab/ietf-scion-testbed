@@ -10,7 +10,7 @@ Requires=scion-sciond.service
 # the host in ansible/inventory.yaml when DNS lands, then rerun
 # deploy_svc_endhost.yaml. (This comment is rendered; the live unit shows the
 # resolved args.)
-ExecStart=/usr/local/bin/scitra-tun eth0 {{ ansible_eth0.ipv4.address }} -d 127.0.0.1:30255 --scmp{{ scitra_extra_args }}
+ExecStart=/usr/local/bin/scitra-tun eth0 {{ ansible_eth0.ipv4.address }} -d 127.0.0.1:30255 --scmp{{ scitra_extra_args | default('') }}
 Restart=on-failure
 User=root
 
