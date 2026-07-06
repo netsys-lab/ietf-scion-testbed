@@ -17,8 +17,12 @@ table inet dashboard {
         # DHCPv4 client on the venue leg: initial OFFER/ACK arrive as broadcast,
         # which conntrack does not track
         iifname "eth1" udp sport 67 udp dport 68 accept
-        # dashboard / join / play surface — on ALL interfaces (mgmt + venue)
-        tcp dport 8080 accept
+        # dashboard / join / play surface: mgmt unrestricted; venue leg only
+        # from the IETF meeting prefixes + home lab (venue_allowed_* vars in
+        # group_vars/playground.yml — confirm prefixes on-site each meeting).
+        iifname "eth0" tcp dport 8080 accept
+        iifname "eth1" ip saddr { {{ venue_allowed_v4 | join(', ') }} } tcp dport 8080 accept
+        iifname "eth1" ip6 saddr { {{ venue_allowed_v6 | join(', ') }} } tcp dport 8080 accept
         # admin over mgmt only
         iifname "eth0" tcp dport 22 accept
         iifname "eth0" icmp type echo-request accept

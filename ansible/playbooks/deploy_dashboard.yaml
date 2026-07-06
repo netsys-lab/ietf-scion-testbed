@@ -19,7 +19,11 @@
           - wg_endpoint_v6 | length > 0
           - wg_endpoint_v4 is defined
           - wg_endpoint_v4 | length > 0
-        fail_msg: "booth_code / wg_endpoint_v6 / wg_endpoint_v4 must be set in ansible/group_vars/playground.yml before deploying the dashboard."
+          - venue_allowed_v4 is defined
+          - venue_allowed_v4 | length > 0
+          - venue_allowed_v6 is defined
+          - venue_allowed_v6 | length > 0
+        fail_msg: "booth_code / wg_endpoint_v6 / wg_endpoint_v4 / venue_allowed_v4 / venue_allowed_v6 must be set in ansible/group_vars/playground.yml before deploying the dashboard."
   tasks:
     - name: Copy fabricd package
       ansible.builtin.copy:
@@ -140,8 +144,8 @@
         update_cache: true
 
     - name: Install dashboard nftables ruleset (venue-facing default-drop input)
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/dashboard/nftables.conf"
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/dashboard/nftables.conf.j2"
         dest: /etc/nftables.conf
         mode: "0644"
 
