@@ -134,9 +134,10 @@
       until: health.status == 200
 
     # Venue firewall — placed last so it applies only after fabricd is up and
-    # healthy. The input chain allows established + :8080 (all ifaces) +
-    # eth0:22, and ansible connects over mgmt eth0, so this cannot lock the
-    # play out of its own SSH session.
+    # healthy. The input chain allows established + :8080 (mgmt unrestricted;
+    # venue leg allowlisted to venue_allowed_*) + eth0:22, and ansible
+    # connects over mgmt eth0, so this cannot lock the play out of its own
+    # SSH session.
     - name: Ensure nftables present (dashboard venue firewall)
       ansible.builtin.apt:
         name: nftables
@@ -148,6 +149,7 @@
         src: "{{ playbook_dir }}/../templates/dashboard/nftables.conf.j2"
         dest: /etc/nftables.conf
         mode: "0644"
+        validate: "/usr/sbin/nft -c -f %s"
 
     - name: Enable + (re)start nftables
       ansible.builtin.systemd:
