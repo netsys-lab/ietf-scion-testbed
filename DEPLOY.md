@@ -248,6 +248,7 @@ Build + deploy:
 
 ```sh
 ./tools/build-endhost.sh
+./tools/build-scitra.sh    # -> .build/scitra/bin/scitra-tun (Docker build, Debian-12 glibc target)
 cp ansible/group_vars/playground.yml.example ansible/group_vars/playground.yml  # set booth_code
 ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_playground.yaml
 ```
