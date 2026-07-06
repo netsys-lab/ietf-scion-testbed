@@ -408,6 +408,15 @@ keepalive tuning beyond the `PersistentKeepalive = 25` already baked into
 every issued conf. Treat this as a fallback, not the primary plan — prefer a
 wired drop with routed addressing when one's available.
 
+If the host's `8080/tcp -> CT200` port-forward masquerades/SNATs the
+forwarded traffic (rather than a plain DNAT that preserves client source
+addresses), CT200 sees the connection arriving from the host's own internal
+address, not the attendee's. In that case make sure `venue_allowed_v4` in
+`ansible/group_vars/playground.yml` also includes that NAT source subnet —
+otherwise CT200's venue allowlist drops the forwarded traffic and the
+dashboard is unreachable through the fallback even though the port-forward
+itself is working.
+
 ### Runbook
 
 **Revoke a conf** (lost laptop, leaked key, attendee leaving):
@@ -430,6 +439,11 @@ slots, not just the current claim.
 then rerun both `deploy_dashboard.yaml` and `deploy_playground.yaml` — the
 same code gates the WG join claim and the Tier 1 ttyd terminal login, so
 both need redeploying to stay in sync.
+
+**Update the venue prefixes** (per meeting): edit `venue_allowed_v4` /
+`venue_allowed_v6` in `ansible/group_vars/playground.yml`, then rerun
+`ansible-playbook -i ansible/inventory.yaml
+ansible/playbooks/deploy_dashboard.yaml`.
 
 **Pool exhausted**: all 50 slots claimed shows as an expected 409 ("no confs
 left — ask at the booth") in the join UI, not a bug. The only way to free

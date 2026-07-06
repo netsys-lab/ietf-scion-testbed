@@ -80,3 +80,12 @@ func TestHealthGatedForOtherMethods(t *testing.T) {
 		t.Fatalf("want 401 on POST /api/health, got %d", rr.Code)
 	}
 }
+
+func TestHealthExemptionIsExactMatch(t *testing.T) {
+	for _, path := range []string{"/api/health/", "//api/health", "/api/health/../topology"} {
+		rr := do(authWrap("ietf126"), http.MethodGet, path, nil)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("path %q: want 401 (exemption must be exact-match), got %d", path, rr.Code)
+		}
+	}
+}
