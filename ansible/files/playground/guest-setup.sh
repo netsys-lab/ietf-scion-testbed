@@ -18,3 +18,12 @@ MemoryMax=256M
 TasksMax=64
 EOF
 systemctl daemon-reload
+
+# Let gid 2000 (guest) open unprivileged ICMP "ping" sockets (SOCK_DGRAM),
+# without granting CAP_NET_RAW. Same sysctl gates both ICMP and ICMPv6 despite
+# the net.ipv4 name — needed for `ping`/`ping -6` (incl. the fc00/scitra demo)
+# to work from the guest shell.
+install -D -m0644 /dev/stdin /etc/sysctl.d/60-guest-ping.conf <<'EOF'
+net.ipv4.ping_group_range = 2000 2000
+EOF
+sysctl -p /etc/sysctl.d/60-guest-ping.conf >/dev/null

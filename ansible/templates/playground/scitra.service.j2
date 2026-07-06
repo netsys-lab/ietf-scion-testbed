@@ -1,0 +1,13 @@
+[Unit]
+Description=scitra-tun SCION-IPv6 translator (playground)
+After=network-online.target scion-sciond.service
+Requires=scion-sciond.service
+Conflicts=scion-shim.service
+
+[Service]
+ExecStart=/usr/local/bin/scitra-tun eth0 {{ ansible_eth0.ipv4.address }} -d 127.0.0.1:30255 --scmp
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target

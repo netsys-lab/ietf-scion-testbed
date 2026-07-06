@@ -15,9 +15,9 @@
           - booth_code | length > 0
         fail_msg: "booth_code is not set — copy ansible/group_vars/playground.yml.example to ansible/group_vars/playground.yml and set booth_code before deploying."
   tasks:
-    - name: Install nftables
+    - name: Install nftables + scitra runtime deps
       ansible.builtin.apt:
-        name: [nftables]
+        name: [nftables, libncurses6]
         state: present
         update_cache: true
 
@@ -36,6 +36,12 @@
         dest: "/usr/local/bin/{{ item }}"
         mode: "0755"
       loop: [scion, sciond, shim-dispatcher]
+
+    - name: Copy scitra-tun binary
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/scitra/bin/scitra-tun"
+        dest: /usr/local/bin/scitra-tun
+        mode: "0755"
 
     - name: Copy guest login wrapper + setup script
       ansible.builtin.copy:
@@ -86,11 +92,27 @@
         dest: /etc/systemd/system/ttyd.service
         mode: "0644"
 
+    - name: Render scitra unit (replaces scion-shim as the SCMP echo responder)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/playground/scitra.service.j2"
+        dest: /etc/systemd/system/scitra.service
+        mode: "0644"
+
     - name: Install nftables containment
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/playground/nftables.conf"
         dest: /etc/nftables.conf
         mode: "0644"
+
+    # scitra --scmp owns UDP/30041 and cannot coexist with the shim
+    # (A7 finding); scitra transparently answers SCMP echo in its place, so
+    # `scion ping` targets keep working. Shim unit file stays installed as a
+    # rollback path (see Conflicts= in scitra.service.j2).
+    - name: Stop + disable scion-shim (superseded by scitra --scmp)
+      ansible.builtin.systemd:
+        name: scion-shim
+        enabled: false
+        state: stopped
 
     - name: Enable + start everything
       ansible.builtin.systemd:
@@ -98,7 +120,7 @@
         enabled: true
         state: restarted
         daemon_reload: true
-      loop: [nftables, scion-shim, scion-sciond, ttyd]
+      loop: [nftables, scion-sciond, scitra, ttyd]
 
     - name: Verify sciond answers locally
       ansible.builtin.command: /usr/local/bin/scion showpaths 1-159 --sciond 127.0.0.1:30255 --maxpaths 1

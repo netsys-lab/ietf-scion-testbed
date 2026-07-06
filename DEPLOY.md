@@ -15,6 +15,13 @@ Containers attach `eth0` to `mgmt` with static `10.20.3.<id>` addresses (see
 `proxmox/create_contianers.sh`); only the dashboard (CT200) and wg-hub
 (CT201) also carry a venue leg (`eth1` on `vmbr0`).
 
+Playground containers (CT210–213) additionally need `/dev/net/tun`
+passthrough for `scitra-tun`: two raw lines in each container's
+`/etc/pve/lxc/<id>.conf` — `lxc.cgroup2.devices.allow: c 10:200 rwm` and
+`lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file` — plus
+`tun` in the host's `/etc/modules-load.d/` so the module is loaded at boot.
+Requires a container restart to take effect; already applied to CT210–213.
+
 ## Prereqs
 
 - Go 1.22+, Node 22+, `dpkg-deb` (build host).
@@ -249,7 +256,9 @@ Verify (from a laptop on pubnet):
 
 1. Browse `http://<play-158 pubnet addr>:7681`, log in `scion` / booth code.
 2. At the prompt: `scion showpaths 1-160 --extended` → paths listed.
-3. `scion ping 1-161,127.0.0.1` → replies (proves the shim answers).
+3. `scion ping 1-161,10.20.3.213` → replies (proves play-161's shim answers).
+   Don't use `…,127.0.0.1` as the target: the AS containers' dispatchers bind
+   the mgmt IP, not loopback, so a loopback-addressed ping gets no reply.
 4. Watch the dashboard map — traffic appears on 158↔ links.
 5. Confinement check: `ssh 10.20.3.150` from the shell → hangs/blocked;
    `curl https://example.com` → blocked (nft drop). `nft list ruleset` on the
