@@ -157,7 +157,8 @@ basic auth `scion:<booth_code>` once `booth_code` is set (one browser
 prompt covers the dashboard and the playground terminals; `GET /api/health`
 stays open). The venue leg additionally accepts :8080 only from
 `venue_allowed_v4`/`venue_allowed_v6` (group_vars/playground.yml — IETF
-meeting prefixes + `10.0.0.0/24`; confirm per meeting).
+meeting prefixes + the `10.0.0.0/24`/`10.1.0.0/24` lab subnets; confirm per
+meeting).
 
 ## Verify
 
