@@ -111,6 +111,9 @@
           endpoint_v4 = "{{ wg_endpoint_v4 }}"
           wg_listen_port = 51820
           hub_probe_addr = "10.20.3.201:22"
+          # Venue NAT64 puts many attendees behind one source IP; 30/min
+          # absorbs a booth-opening rush while still bounding brute force.
+          claim_rate_max = 30
 
           [play_proxy]
           158 = "10.20.3.210:7681"

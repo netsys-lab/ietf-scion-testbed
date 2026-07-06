@@ -5,8 +5,12 @@ set -e
 TEMPLATE:=TODO
 OPTIONS=--cores 2 --memory 2048 --ssh-public-keys ./public_keys
 
-pct create 100 $TEMPLATE $OPTIONS --description "DHCP Server" \
-    --net0,name=eth0,bridge=vmbr0,ip=10.20.3.1/24,ip6=auto
+# CT100 (Kea DHCP server) is NOT used on the reconstructed ietf-proxmox node:
+# containers have static IPs and the HOST holds 10.20.3.1 on the mgmt bridge.
+# Creating this container there would IP-conflict with the mgmt gateway and
+# take down the whole management plane. Kept for reference only.
+# pct create 100 $TEMPLATE $OPTIONS --description "DHCP Server" \
+#     --net0,name=eth0,bridge=vmbr0,ip=10.20.3.1/24,ip6=auto
 
 pct create 150 $TEMPLATE $OPTIONS --description "AS150" \
     --net0,name=eth0,bridge=mgmt,hwaddr=00:00:00:00:00:01,ip=10.20.3.150/24,gw=10.20.3.1 \

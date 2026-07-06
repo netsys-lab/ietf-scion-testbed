@@ -107,6 +107,10 @@ type config struct {
 	WGListenPort    int               `toml:"wg_listen_port"`
 	HubProbeAddr    string            `toml:"hub_probe_addr"`
 	PlayProxy       map[string]string `toml:"play_proxy"`
+	// ClaimRateMax caps claim attempts per client key per minute (<=0 = the
+	// api package default of 5). Venue NAT64 can put many attendees behind
+	// one source IP, so the on-site value must absorb a booth-opening rush.
+	ClaimRateMax int `toml:"claim_rate_max"`
 }
 
 // loadConfig decodes path over these defaults: an empty file is fine
@@ -171,7 +175,7 @@ func main() {
 		ListenPort:      cfg.WGListenPort,
 		HubProbeAddr:    cfg.HubProbeAddr,
 		PlayTargets:     playTargets,
-		RateMax:         5,
+		RateMax:         cfg.ClaimRateMax, // <=0 falls back to api.New's default (5/min)
 		RateWindow:      time.Minute,
 	}
 	var pool api.PoolStore // nil until B3 wires a real wgpool-backed store.
