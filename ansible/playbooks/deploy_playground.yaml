@@ -4,12 +4,9 @@
   become: true
   vars:
     scion_bin_src: "{{ playbook_dir }}/../../.build/endhost/bin"
-    # ttyd must bind the PUBNET (attendee-facing) interface. On these
-    # dual-DHCP containers eth0=mgmt, eth1=pubnet (per create_contianers.sh),
-    # so the default route is ambiguous — bind eth1 explicitly by name.
-    # Venue caveat: if pubnet is IPv6-only, set this to the eth1 v6 address
-    # (ansible_eth1.ipv6[0].address) or drop --interface to bind all.
-    pubnet_addr: "{{ ansible_eth1.ipv4.address }}"
+    # ttyd binds the MGMT interface; attendees reach it only through the
+    # dashboard's /play/<as> reverse proxy (spec 2026-07-05, venue-footprint).
+    pubnet_addr: "{{ ansible_eth0.ipv4.address }}"
   pre_tasks:
     - name: Fail fast if booth_code is not set
       ansible.builtin.assert:
@@ -83,7 +80,7 @@
         mode: "0644"
       loop: [scion-shim.service, scion-sciond.service]
 
-    - name: Render ttyd unit (booth code + pubnet bind)
+    - name: Render ttyd unit (booth code + mgmt bind)
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../templates/playground/ttyd.service.j2"
         dest: /etc/systemd/system/ttyd.service
