@@ -19,7 +19,7 @@ func oneCoreLink() topo.Graph {
 		Links: []topo.Link{{
 			ID:     "150-151",
 			Type:   "core",
-			Subnet: "fade:1",
+			Subnet: "link 1",
 			A:      topo.Endpoint{IA: "1-150", AS: 150, IfID: "1", IP: "fd00:fade:1::150", LinkTo: "core"},
 			B:      topo.Endpoint{IA: "1-151", AS: 151, IfID: "1", IP: "fd00:fade:1::151", LinkTo: "core"},
 		}},

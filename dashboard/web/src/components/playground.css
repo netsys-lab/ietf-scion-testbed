@@ -1,0 +1,48 @@
+/* PlaygroundPage — full-viewport 2x2 tile of the four /play/<as>/ ttyd
+ * terminals. Same dark instrument language as chrome.css/panel.css (hairline
+ * borders, --surface header bars, --din for chrome text) but its own
+ * top-level layout since this route renders outside #app/index.css's grid. */
+
+.playground {
+  display: flex; flex-direction: column;
+  height: 100dvh; background: var(--page); color: var(--ink);
+}
+
+.playground-strip {
+  display: flex; align-items: baseline; gap: 16px;
+  padding: 10px 18px; border-bottom: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.playground-strip h1 {
+  font-family: var(--din); font-size: 14px; font-weight: 700;
+  letter-spacing: 0.06em; margin: 0;
+}
+.playground-strip a {
+  font-family: var(--din); font-size: 11px; letter-spacing: 0.08em;
+  color: var(--brass); text-decoration: none; margin-left: auto;
+}
+.playground-strip a:hover { text-decoration: underline; }
+
+.playground-grid {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: 1px; background: var(--hairline);
+}
+
+.playground-cell {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--page);
+}
+.playground-cellhead {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
+  color: var(--ink-2); background: var(--surface);
+  padding: 5px 10px; border-bottom: 1px solid var(--hairline);
+  flex: none;
+}
+.playground-frame {
+  flex: 1; width: 100%; height: 100%; border: none; display: block;
+}
+
+@media (max-width: 900px) {
+  .playground-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); }
+}

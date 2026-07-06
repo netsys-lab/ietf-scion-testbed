@@ -24,7 +24,7 @@ func real155160Graph() topo.Graph {
 		Links: []topo.Link{{
 			ID:     "155-160",
 			Type:   "child",
-			Subnet: "fade:15",
+			Subnet: "link 15",
 			A:      topo.Endpoint{IA: "1-155", AS: 155, IfID: "36530", IP: "fd00:fade:15::155", LinkTo: "child"},
 			B:      topo.Endpoint{IA: "1-160", AS: 160, IfID: "39652", IP: "fd00:fade:15::160", LinkTo: "parent"},
 		}},

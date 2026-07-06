@@ -63,6 +63,20 @@ header {
 .modes button[aria-pressed="true"] { background: var(--raised); color: var(--brass); }
 .modes button:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
 
+/* Attendee "JOIN TESTBED" / "PLAYGROUND" links — same instrument-button look
+ * as .modes, but plain <a> elements (they open in a new tab) instead of a
+ * pressed-state toggle group. Hidden on the booth wall display (body.screen)
+ * since that mode is meant to be watched, not clicked. */
+.actions { display: flex; gap: 0; border: 1px solid var(--hairline); border-radius: 6px; overflow: hidden; }
+.actions a {
+  font-family: var(--din); font-size: 11px; letter-spacing: 0.1em;
+  color: var(--ink-2); text-decoration: none;
+  padding: 7px 14px; cursor: pointer;
+}
+.actions a:hover, .actions a:focus-visible { background: var(--raised); color: var(--brass); }
+.actions a:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
+body.screen .actions { display: none; }
+
 /* ── Ticker ───────────────────────────────────────────── */
 footer {
   border-top: 1px solid var(--hairline); background: var(--surface);

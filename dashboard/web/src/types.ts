@@ -16,7 +16,7 @@ export interface Endpoint {
 export interface Link {
   id: string; // "151-155" (lower AS first)
   type: string; // core|child|peer
-  subnet: string; // "fade:9"
+  subnet: string; // "link 9"
   a: Endpoint;
   b: Endpoint;
 }

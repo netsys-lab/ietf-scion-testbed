@@ -351,13 +351,13 @@ export default function FabricMap() {
               const down = bandOf(labelId) === "down";
               const rtt = vm ? Math.max(vm.rtt_ms_a, vm.rtt_ms_b) : 0;
               const val = down ? "DOWN" : `${rtt.toFixed(1)} ms`;
-              const txt = `fade:${meta.sub}  ${val}`;
+              const txt = `${meta.a}–${meta.b}  ${val}`;
               const w = txt.length * 7.2 + 20;
               return (
                 <g className="linklabel">
                   <rect x={m.x - w / 2} y={m.y - 34} width={w} height={20} rx={4} />
                   <text x={m.x - w / 2 + 10} y={m.y - 20}>
-                    {`fade:${meta.sub}  `}
+                    {`${meta.a}–${meta.b}  `}
                     <tspan className="val">{val}</tspan>
                   </text>
                 </g>

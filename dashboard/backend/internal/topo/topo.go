@@ -30,7 +30,7 @@ type Endpoint struct {
 type Link struct {
 	ID     string   `json:"id"`     // "151-155" (lower AS first)
 	Type   string   `json:"type"`   // core|child|peer (A's perspective normalized)
-	Subnet string   `json:"subnet"` // "fade:9"
+	Subnet string   `json:"subnet"` // "link 9"
 	A      Endpoint `json:"a"`
 	B      Endpoint `json:"b"`
 }
@@ -250,8 +250,9 @@ func iaToNum(ia string) (int, error) {
 	return strconv.Atoi(parts[1])
 }
 
-// subnetOf extracts the "fade:<hex>" subnet label from an underlay host like
-// "fd00:fade:9::155".
+// subnetOf extracts a human-readable "link <hex>" subnet label from an
+// underlay host like "fd00:fade:9::155" (the hex segment is the testbed's
+// per-link id, not meaningful to a booth visitor as a raw ULA prefix).
 func subnetOf(host string) (string, error) {
 	const prefix = "fd00:fade:"
 	if !strings.HasPrefix(host, prefix) {
@@ -262,5 +263,5 @@ func subnetOf(host string) (string, error) {
 	if i < 0 {
 		return "", fmt.Errorf("unexpected underlay host %q", host)
 	}
-	return "fade:" + rest[:i], nil
+	return "link " + rest[:i], nil
 }

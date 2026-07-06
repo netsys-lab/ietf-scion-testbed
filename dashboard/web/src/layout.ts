@@ -36,7 +36,7 @@ export const NODES: Record<number, Node> = {
 export interface LinkLayout {
   a: number;
   b: number;
-  sub: string; // native testbed link id suffix, shown as "fade:<sub>"
+  sub: string; // native testbed link id suffix (also used to key the backend's per-link subnet)
   kind?: "core" | "peer"; // absent => parent/child
   arc?: number; // core-diagonal quadratic arc height (px, above the band)
   via?: Point[]; // explicit hand-routed polyline (overrides routePoints)

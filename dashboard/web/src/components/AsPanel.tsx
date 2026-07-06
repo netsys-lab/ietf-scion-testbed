@@ -2,7 +2,7 @@
 // selectAS() markup. It shows the three service LEDs (BR / CS / SD, lit green
 // when up and red when down, from the live frame's ASVM health flags) and an
 // interface table: one row per inter-AS link touching this AS, with the peer
-// AS, the fade: subnet, the link RTT (or DOWN), and this AS's own In/Out rates
+// AS, the "link <hex>" subnet label, the link RTT (or DOWN), and this AS's own In/Out rates
 // (direction-corrected so "In" is always traffic arriving at this AS).
 //
 // No-data shell: if the selected AS drops out of the topology (mid-selection

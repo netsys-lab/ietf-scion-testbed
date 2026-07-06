@@ -39,17 +39,17 @@ func testGraph() topo.Graph {
 		},
 		Links: []topo.Link{
 			{
-				ID: "150-151", Type: "core", Subnet: "fade:1",
+				ID: "150-151", Type: "core", Subnet: "link 1",
 				A: topo.Endpoint{IA: "1-150", AS: 150, IfID: "1"},
 				B: topo.Endpoint{IA: "1-151", AS: 151, IfID: "1"},
 			},
 			{
-				ID: "150-154", Type: "child", Subnet: "fade:7",
+				ID: "150-154", Type: "child", Subnet: "link 7",
 				A: topo.Endpoint{IA: "1-150", AS: 150, IfID: "2"},
 				B: topo.Endpoint{IA: "1-154", AS: 154, IfID: "1"},
 			},
 			{
-				ID: "151-155", Type: "child", Subnet: "fade:9",
+				ID: "151-155", Type: "child", Subnet: "link 9",
 				A: topo.Endpoint{IA: "1-151", AS: 151, IfID: "2"},
 				B: topo.Endpoint{IA: "1-155", AS: 155, IfID: "1"},
 			},
