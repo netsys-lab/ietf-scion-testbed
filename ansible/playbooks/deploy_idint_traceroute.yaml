@@ -1,0 +1,43 @@
+---
+- name: Deploy idint-traceroute servers (all 12 ASes, UDP 32001)
+  hosts: ases
+  become: true
+  vars:
+    idint_port: 32001
+  tasks:
+    - name: Copy idint-traceroute binary
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/idint-traceroute/bin/idint-traceroute"
+        dest: /usr/local/bin/idint-traceroute
+        mode: "0755"
+
+    - name: Render idint-traceroute server unit
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/idint/idint-traceroute.service.j2"
+        dest: /etc/systemd/system/idint-traceroute.service
+        mode: "0644"
+
+    - name: Enable + restart idint-traceroute server
+      ansible.builtin.systemd:
+        name: idint-traceroute
+        enabled: true
+        state: restarted
+        daemon_reload: true
+
+    - name: Verify server bound on UDP {{ idint_port }}
+      ansible.builtin.shell: ss -uln | grep -q '{{ ansible_host }}:{{ idint_port }}'
+      register: idint_ss
+      changed_when: false
+      retries: 5
+      delay: 2
+      until: idint_ss.rc == 0
+
+- name: Install idint-traceroute client on playground hosts (no service)
+  hosts: playground
+  become: true
+  tasks:
+    - name: Copy idint-traceroute binary (client use only, undocumented)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/idint-traceroute/bin/idint-traceroute"
+        dest: /usr/local/bin/idint-traceroute
+        mode: "0755"
