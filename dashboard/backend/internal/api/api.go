@@ -49,7 +49,9 @@ var _ Controller = (*linkdclient.Client)(nil)
 // exposed at all, the booth code gating claims, which ASes attendees may
 // join under, and the WireGuard/instructions/playground wiring the join
 // handlers need. Enabled false (the zero value) must make every /api/join
-// and /api/instructions route 404, as if the feature did not exist.
+// route 404, as if the feature did not exist. /api/instructions is
+// independent of Enabled: it serves [] / content whenever InstructionsDir
+// is set.
 type JoinConfig struct {
 	Enabled         bool
 	BoothCode       string
@@ -117,7 +119,8 @@ type server struct {
 // with an index.html SPA fallback for unknown non-/api paths; pass nil to
 // disable static serving (e.g. API-only deployments and tests). jc and pool
 // wire the attendee join flow (Plan B); pass JoinConfig{} and nil to disable
-// it, which 404s every /api/join and /api/instructions route.
+// it, which 404s every /api/join route. /api/instructions is independent of
+// Enabled: it serves [] / content whenever InstructionsDir is set.
 func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static fs.FS, jc JoinConfig, pool PoolStore) http.Handler {
 	if jc.RateMax <= 0 {
 		jc.RateMax = 5
