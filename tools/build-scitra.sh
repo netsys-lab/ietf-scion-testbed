@@ -123,12 +123,28 @@ cmake -G 'Ninja Multi-Config' -S /src -B /work/build \
 cmake --build /work/build --config Release --target scitra-tun scion2ip -j "$(nproc)"
 
 echo "[5/5] collect"
-cp "$(find /work/build -type f -name scitra-tun -perm -u+x | head -1)" /out/scitra-tun
+SCITRA_BIN="$(find /work/build -type f -name scitra-tun -perm -u+x)"
+if [ -z "$SCITRA_BIN" ]; then
+  echo "ERROR: build did not produce scitra-tun under /work/build" >&2
+  exit 1
+fi
+if [ "$(printf '%s\n' "$SCITRA_BIN" | wc -l)" -gt 1 ]; then
+  echo "ERROR: multiple scitra-tun binaries found under /work/build (stale cache?):" >&2
+  printf '%s\n' "$SCITRA_BIN" >&2
+  exit 1
+fi
+cp "$SCITRA_BIN" /out/scitra-tun
 cp "$(find /work/build -type f -name scion2ip  -perm -u+x | head -1)" /out/scion2ip
 chmod 0755 /out/scitra-tun /out/scion2ip
 echo "=== ldd scitra-tun ==="; ldd /out/scitra-tun || true
 echo "=== max GLIBC symbol version (must be <= 2.36) ==="
-objdump -T /out/scitra-tun 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sort -V | uniq | tail -3
+GLIBC_VERS="$(objdump -T /out/scitra-tun 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sort -V | uniq)"
+echo "$GLIBC_VERS" | tail -3
+MAXVER="$(echo "$GLIBC_VERS" | tail -1 | sed 's/^GLIBC_//')"
+if [ "$(printf '%s\n2.36\n' "$MAXVER" | sort -V | tail -1)" != "2.36" ]; then
+  echo "ERROR: scitra-tun requires GLIBC_${MAXVER}, which exceeds the Debian 12 target (glibc 2.36) -- it will fail to run on the CT210-213 containers" >&2
+  exit 1
+fi
 INNER
 
 echo "Building scitra-tun + scion2ip in $BUILDER_IMAGE from $SCION_CPP -> $OUT"
