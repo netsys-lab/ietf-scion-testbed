@@ -114,3 +114,26 @@
       retries: 5
       delay: 2
       until: health.status == 200
+
+    # Venue firewall — placed last so it applies only after fabricd is up and
+    # healthy. The input chain allows established + :8080 (all ifaces) +
+    # eth0:22, and ansible connects over mgmt eth0, so this cannot lock the
+    # play out of its own SSH session.
+    - name: Ensure nftables present (dashboard venue firewall)
+      ansible.builtin.apt:
+        name: nftables
+        state: present
+        update_cache: true
+
+    - name: Install dashboard nftables ruleset (venue-facing default-drop input)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/dashboard/nftables.conf"
+        dest: /etc/nftables.conf
+        mode: "0644"
+
+    - name: Enable + (re)start nftables
+      ansible.builtin.systemd:
+        name: nftables
+        enabled: true
+        state: restarted
+        daemon_reload: true
