@@ -35,7 +35,10 @@
           listen = "{{ ansible_host }}:30480"
           topology_glob = "/etc/scion/AS*/topology.json"
           staticinfo_base = "/etc/scion/AS*/staticInfoConfig.base.json"
-          staticinfo_out = "/etc/scion/AS*/staticInfoConfig.json"
+          # Concrete per-AS path: the writer's atomic temp-file create uses this
+          # verbatim (unlike the glob-resolved *_base/baseline reads), so a
+          # literal "AS*" here makes every write fail on a nonexistent dir.
+          staticinfo_out = "/etc/scion/AS{{ asnum }}/staticInfoConfig.json"
           baseline_profile = "/etc/scion/AS*/linkd-baseline.json"
           cs_reload_unit = "{{ linkd_cs_unit | default('scion-control@cs1-' + asnum + '-1') }}"
 
