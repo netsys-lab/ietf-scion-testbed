@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -86,6 +87,25 @@ type config struct {
 	// shaped/elevated forever -- fabricd has no way to tell "real
 	// topology change" apart from "still shaped" on its own.
 	BaselinesPath string `toml:"baselines_path"`
+
+	// The fields below configure the attendee join flow (Plan B): JoinEnabled
+	// gates the whole /api/join + /api/instructions surface (see
+	// api.JoinConfig's doc comment -- disabled must make those routes 404 as
+	// if they didn't exist); the rest describe the booth code, joinable ASes,
+	// the WireGuard hub this fabricd offers attendees into, and where the
+	// pool file / instructions content / playground proxy targets live.
+	JoinEnabled     bool              `toml:"join_enabled"`
+	BoothCode       string            `toml:"booth_code"`
+	ISD             int               `toml:"isd"`
+	JoinableASes    []int             `toml:"joinable_ases"`
+	WGPoolPath      string            `toml:"wg_pool_path"`
+	WGStatePath     string            `toml:"wg_state_path"`
+	InstructionsDir string            `toml:"instructions_dir"`
+	EndpointV6      string            `toml:"endpoint_v6"`
+	EndpointV4      string            `toml:"endpoint_v4"`
+	WGListenPort    int               `toml:"wg_listen_port"`
+	HubProbeAddr    string            `toml:"hub_probe_addr"`
+	PlayProxy       map[string]string `toml:"play_proxy"`
 }
 
 // loadConfig decodes path over these defaults: an empty file is fine
@@ -98,6 +118,9 @@ func loadConfig(path string) (config, error) {
 		StaticDir:        "/usr/share/fabricd/web",
 		ScrapeIntervalMs: 1000,
 		Mock:             false,
+		ISD:              1,
+		WGListenPort:     51820,
+		HubProbeAddr:     "10.20.3.201:22",
 	}
 	if _, err := toml.DecodeFile(path, &c); err != nil {
 		return config{}, err
@@ -125,6 +148,31 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	playTargets := make(map[int]string, len(cfg.PlayProxy))
+	for k, v := range cfg.PlayProxy {
+		n, err := strconv.Atoi(k)
+		if err != nil {
+			log.Fatalf("play_proxy: bad AS key %q: %v", k, err)
+		}
+		playTargets[n] = v
+	}
+	jc := api.JoinConfig{
+		Enabled:         cfg.JoinEnabled,
+		BoothCode:       cfg.BoothCode,
+		ISD:             cfg.ISD,
+		JoinableASes:    cfg.JoinableASes,
+		ConfigDir:       cfg.ConfigDir,
+		InstructionsDir: cfg.InstructionsDir,
+		EndpointV6:      cfg.EndpointV6,
+		EndpointV4:      cfg.EndpointV4,
+		ListenPort:      cfg.WGListenPort,
+		HubProbeAddr:    cfg.HubProbeAddr,
+		PlayTargets:     playTargets,
+		RateMax:         5,
+		RateWindow:      time.Minute,
+	}
+	var pool api.PoolStore // nil until B3 wires a real wgpool-backed store.
+
 	var lc api.Controller
 	if cfg.Mock {
 		log.Printf("mock mode: synthesizing telemetry instead of scraping")
@@ -140,6 +188,11 @@ func main() {
 			log.Printf("mock: preshaped link %s (+12ms) for the demo", demoShapedLink)
 		})
 		lc = mock.NewController(g, gen)
+		// The join flow's WG hub, pool file, and playground targets are all
+		// real testbed infrastructure that mock mode has none of; force it
+		// off regardless of what config.toml says, so a mock/demo run never
+		// advertises a join surface it can't actually serve.
+		jc.Enabled = false
 	} else {
 		targets := scrape.Targets(g)
 		interval := time.Duration(cfg.ScrapeIntervalMs) * time.Millisecond
@@ -160,7 +213,7 @@ func main() {
 		log.Printf("warning: static dir %q not found; static file serving disabled", cfg.StaticDir)
 	}
 
-	h := api.New(g, st, d, lc, static)
+	h := api.New(g, st, d, lc, static, jc, pool)
 	go api.RunBroadcast(ctx, h, frameInterval, pollInterval)
 
 	log.Printf("fabricd listening on %s", cfg.Listen)

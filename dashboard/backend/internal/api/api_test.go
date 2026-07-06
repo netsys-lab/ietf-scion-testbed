@@ -64,7 +64,7 @@ func newTestServer(t *testing.T, lc Controller) (http.Handler, *store.Store, *de
 	if lc == nil {
 		lc = &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}
 	}
-	return New(g, st, d, lc, nil), st, d, g
+	return New(g, st, d, lc, nil, JoinConfig{}, nil), st, d, g
 }
 
 func TestTopology(t *testing.T) {
@@ -301,7 +301,7 @@ func TestStaticFallback(t *testing.T) {
 		"index.html": {Data: []byte("<!doctype html>INDEX")},
 		"app.js":     {Data: []byte("// APP")},
 	}
-	h := New(g, st, d, lc, static)
+	h := New(g, st, d, lc, static, JoinConfig{}, nil)
 
 	// Known asset served verbatim.
 	rr := httptest.NewRecorder()

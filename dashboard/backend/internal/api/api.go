@@ -25,6 +25,7 @@ import (
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/linkdclient"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/topo"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/wgpool"
 )
 
 // writeWait is the per-message WebSocket write deadline. A client that cannot
@@ -43,6 +44,46 @@ type Controller interface {
 // The production Controller is the linkd client.
 var _ Controller = (*linkdclient.Client)(nil)
 
+// JoinConfig configures the attendee join flow (Plan B): whether it's
+// exposed at all, the booth code gating claims, which ASes attendees may
+// join under, and the WireGuard/instructions/playground wiring the join
+// handlers need. Enabled false (the zero value) must make every /api/join
+// and /api/instructions route 404, as if the feature did not exist.
+type JoinConfig struct {
+	Enabled         bool
+	BoothCode       string
+	ISD             int
+	JoinableASes    []int
+	ConfigDir       string
+	InstructionsDir string
+	EndpointV6      string // bare host, e.g. "2001:db8::1"
+	EndpointV4      string // bare host, e.g. "203.0.113.7"; "" = no v4 offer
+	ListenPort      int    // 51820
+	HubProbeAddr    string // "10.20.3.201:22"
+	PlayTargets     map[int]string
+	RateMax         int // claim attempts per key
+	RateWindow      time.Duration
+}
+
+// asAllowed reports whether AS number n is one of the joinable ASes.
+func (jc JoinConfig) asAllowed(n int) bool {
+	for _, a := range jc.JoinableASes {
+		if a == n {
+			return true
+		}
+	}
+	return false
+}
+
+// PoolStore is the subset of the wg-pool store (internal/wgpool, B3) the
+// join handlers depend on. Keeping it an interface lets tests inject a fake
+// pool without a real pool file on disk.
+type PoolStore interface {
+	Claim(as int) (wgpool.Slot, error)
+	Stats() (total, claimed, burned int)
+	ServerPublicKey() string
+}
+
 // server is the concrete http.Handler returned by New. It also carries the
 // dependencies RunBroadcast needs, reached via a type assertion on the handler.
 type server struct {
@@ -51,6 +92,9 @@ type server struct {
 	d         *derive.Deriver
 	lc        Controller
 	linksByID map[string]topo.Link
+
+	join JoinConfig
+	pool PoolStore
 
 	hub      *hub
 	upgrader websocket.Upgrader
@@ -69,14 +113,18 @@ type server struct {
 
 // New builds the dashboard HTTP handler. static, when non-nil, is served at /
 // with an index.html SPA fallback for unknown non-/api paths; pass nil to
-// disable static serving (e.g. API-only deployments and tests).
-func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static fs.FS) http.Handler {
+// disable static serving (e.g. API-only deployments and tests). jc and pool
+// wire the attendee join flow (Plan B); pass JoinConfig{} and nil to disable
+// it, which 404s every /api/join and /api/instructions route.
+func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static fs.FS, jc JoinConfig, pool PoolStore) http.Handler {
 	s := &server{
 		g:         g,
 		st:        st,
 		d:         d,
 		lc:        lc,
 		linksByID: make(map[string]topo.Link, len(g.Links)),
+		join:      jc,
+		pool:      pool,
 		hub:       newHub(),
 		upgrader: websocket.Upgrader{
 			// The dashboard is served same-origin in production, but the dev
@@ -95,6 +143,11 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 	s.mux.HandleFunc("POST /api/links/{id}/reset", s.handleReset)
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("GET /api/live", s.handleLive)
+	s.mux.HandleFunc("GET /api/join/meta", s.handleJoinMeta)
+	s.mux.HandleFunc("POST /api/join/claim", s.handleJoinClaim)
+	s.mux.HandleFunc("GET /api/join/bundle/{as}", s.handleJoinBundle)
+	s.mux.HandleFunc("GET /api/instructions", s.handleInstructionsList)
+	s.mux.HandleFunc("GET /api/instructions/{name}", s.handleInstruction)
 	if static != nil {
 		s.mux.Handle("/", s.staticHandler(static))
 	}
@@ -203,6 +256,30 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		linkd[strconv.Itoa(as)] = up
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"targets": targets, "linkd": linkd})
+}
+
+// --- attendee join flow (Plan B) -------------------------------------------
+//
+// The handlers below are skeletons: while the join flow is being built out
+// task by task, each must behave as if the route doesn't exist at all when
+// join is disabled (the default), and as a stub once enabled. Real bodies
+// land in later tasks (B4-B7); joinStub is what they replace.
+
+func (s *server) handleJoinMeta(w http.ResponseWriter, r *http.Request)         { s.joinStub(w, r) }
+func (s *server) handleJoinClaim(w http.ResponseWriter, r *http.Request)        { s.joinStub(w, r) }
+func (s *server) handleJoinBundle(w http.ResponseWriter, r *http.Request)       { s.joinStub(w, r) }
+func (s *server) handleInstructionsList(w http.ResponseWriter, r *http.Request) { s.joinStub(w, r) }
+func (s *server) handleInstruction(w http.ResponseWriter, r *http.Request)      { s.joinStub(w, r) }
+
+// joinStub is the shared body of every join/instructions handler until its
+// real implementation lands: 404 while the join surface is disabled (so it
+// is invisible), 501 once enabled but not yet implemented.
+func (s *server) joinStub(w http.ResponseWriter, r *http.Request) {
+	if !s.join.Enabled {
+		http.NotFound(w, r)
+		return
+	}
+	http.Error(w, "not implemented", http.StatusNotImplemented)
 }
 
 // --- WebSocket ------------------------------------------------------------
