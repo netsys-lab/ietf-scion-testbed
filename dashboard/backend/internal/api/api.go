@@ -275,7 +275,6 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // land in later tasks (B5-B7); joinStub is what they replace. handleJoinMeta
 // and handleJoinClaim have real implementations in join.go (B4).
 
-func (s *server) handleJoinBundle(w http.ResponseWriter, r *http.Request)       { s.joinStub(w, r) }
 func (s *server) handleInstructionsList(w http.ResponseWriter, r *http.Request) { s.joinStub(w, r) }
 func (s *server) handleInstruction(w http.ResponseWriter, r *http.Request)      { s.joinStub(w, r) }
 
