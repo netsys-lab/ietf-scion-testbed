@@ -160,6 +160,8 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 	s.mux.HandleFunc("GET /api/join/bundle/{as}", s.handleJoinBundle)
 	s.mux.HandleFunc("GET /api/instructions", s.handleInstructionsList)
 	s.mux.HandleFunc("GET /api/instructions/{name}", s.handleInstruction)
+	s.mux.HandleFunc("/play/{as}", s.handlePlayRoot)
+	s.mux.HandleFunc("/play/{as}/{path...}", s.handlePlayProxy)
 	if static != nil {
 		s.mux.Handle("/", s.staticHandler(static))
 	}
