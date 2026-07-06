@@ -120,7 +120,7 @@ export function fetchHistory(key: string, mins: number): Promise<Sample[]> {
 }
 
 export type JoinMeta = {
-  enabled: boolean; joinable_ases: number[];
+  enabled: boolean; joinable_ases: number[]; playground_ases: number[];
   slots_total: number; slots_claimed: number; slots_burned: number;
   hub_ok: boolean; endpoint_v6: string; endpoint_v4?: string;
 };

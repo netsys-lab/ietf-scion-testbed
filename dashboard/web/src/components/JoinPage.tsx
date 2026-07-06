@@ -51,7 +51,7 @@ export default function JoinPage() {
         <h2>Try it now — browser playground</h2>
         <p>A live SCION endhost shell, zero install. Booth code required.</p>
         <div className="join-cards">
-          {(meta?.joinable_ases ?? [158, 159, 160, 161]).map((n) => (
+          {(meta?.playground_ases ?? [158, 159, 160, 161]).map((n) => (
             <a key={n} className="join-card" href={`/play/${n}/`}>AS 1-{n} terminal</a>
           ))}
         </div>

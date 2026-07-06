@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"sort"
 	"time"
 
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/ratelimit"
@@ -122,10 +123,19 @@ func (s *server) handleJoinMeta(w http.ResponseWriter, r *http.Request) {
 			hubOK = true
 		}
 	}
+	// Playground (browser-shell) ASes are the containers behind the /play
+	// proxy — fixed at 158-161, independent of the WireGuard joinable set.
+	playAses := make([]int, 0, len(s.join.PlayTargets))
+	for as := range s.join.PlayTargets {
+		playAses = append(playAses, as)
+	}
+	sort.Ints(playAses)
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"enabled":       true,
-		"joinable_ases": s.join.JoinableASes,
-		"slots_total":   total, "slots_claimed": claimed, "slots_burned": burned,
+		"enabled":         true,
+		"joinable_ases":   s.join.JoinableASes,
+		"playground_ases": playAses,
+		"slots_total":     total, "slots_claimed": claimed, "slots_burned": burned,
 		"hub_ok":      hubOK,
 		"endpoint_v6": s.join.endpointV6Str(),
 		"endpoint_v4": s.join.endpointV4Str(),
