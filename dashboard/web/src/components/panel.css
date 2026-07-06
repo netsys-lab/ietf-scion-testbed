@@ -83,3 +83,14 @@ input[type=range]:focus-visible { outline: 2px solid var(--brass); outline-offse
 .iftable th:first-child, .iftable td:first-child { text-align: left; }
 .iftable td { padding: 5px 6px; text-align: right; color: var(--ink-2); border-bottom: 1px solid var(--hairline); }
 .iftable td.peer { color: var(--ink); }
+/* Relationship badge appended after the neighbor AS number (Neighbor column):
+ * peer/core get a compact glyph, parent/child a short directional word. Kept
+ * small and dim so it reads as a footnote, not a second data column. */
+.rel { font-size: 0.85em; margin-left: 6px; color: var(--ink-mute); }
+.rel-peer { color: var(--ink-2); }
+.rel-core { color: var(--brass); }
+.rel-parent { color: var(--ink-2); }
+.rel-child { color: var(--ink-mute); }
+
+/* Link panel: parent/child role caption under the header (LinkPanel.tsx). */
+.linkrel { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); margin-top: 2px; }

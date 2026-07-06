@@ -15,7 +15,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Band, LinkVM } from "../types";
 import { useFabricStore } from "../store";
-import { VIEWBOX, linkMeta, linkPath, stationList } from "../layout";
+import { VIEWBOX, NODES, linkMeta, linkPath, stationList } from "../layout";
 import "./fabric.css";
 
 interface Mid {
@@ -251,6 +251,44 @@ export default function FabricMap() {
               <text key={l.id} className="peer-glyph" x={m.x + 14} y={m.y - 16}>
                 PEER
               </text>
+            );
+          })}
+        </g>
+
+        {/* Core-link marker (◆), the core-link counterpart to the PEER marker. */}
+        <g>
+          {links.map((l) => {
+            const meta = linkMeta(l.id)!;
+            const m = mids[l.id];
+            if (meta.kind !== "core" || !m) return null;
+            return (
+              <text key={l.id} className="core-glyph" x={m.x} y={m.y - 11}>
+                ◆
+              </text>
+            );
+          })}
+        </g>
+
+        {/* Parent→child direction: a small arrowhead at the link midpoint
+            pointing from the parent AS toward the child AS. Parent = the
+            endpoint whose link_to is "child"; core/peer links are skipped. */}
+        <g>
+          {links.map((l) => {
+            const meta = linkMeta(l.id)!;
+            const m = mids[l.id];
+            if (meta.kind !== undefined || !m) return null;
+            const parentAS = l.a.link_to === "child" ? l.a.as : l.b.as;
+            const childAS = parentAS === l.a.as ? l.b.as : l.a.as;
+            const child = NODES[childAS];
+            if (!child) return null;
+            const deg = (Math.atan2(child.y - m.y, child.x - m.x) * 180) / Math.PI;
+            return (
+              <path
+                key={l.id}
+                className="pc-arrow"
+                d="M -5 -4 L 5 0 L -5 4 Z"
+                transform={`translate(${m.x}, ${m.y}) rotate(${deg})`}
+              />
             );
           })}
         </g>

@@ -67,7 +67,7 @@ export default function AsPanel({ num }: { num: number }) {
       <table className="iftable">
         <thead>
           <tr>
-            <th>Peer</th>
+            <th>Neighbor</th>
             <th>Link</th>
             <th>RTT</th>
             <th>In</th>
@@ -85,11 +85,31 @@ export default function AsPanel({ num }: { num: number }) {
             // In = traffic arriving at this AS; Out = leaving it.
             const rin = vm ? (isA ? vm.rate_ba_mbit : vm.rate_ab_mbit).toFixed(1) : "–";
             const rout = vm ? (isA ? vm.rate_ab_mbit : vm.rate_ba_mbit).toFixed(1) : "–";
+            // This AS's own view of the relationship to the neighbor.
+            const myLinkTo = l.a.as === num ? l.a.link_to : l.b.link_to;
+            const rel =
+              myLinkTo === "peer" ? (
+                <span className="rel rel-peer" title="peering link">
+                  ⇄
+                </span>
+              ) : myLinkTo === "core" ? (
+                <span className="rel rel-core" title="core link">
+                  ◆
+                </span>
+              ) : myLinkTo === "parent" ? (
+                <span className="rel rel-parent" title="neighbor is this AS's parent">
+                  ↑ parent
+                </span>
+              ) : myLinkTo === "child" ? (
+                <span className="rel rel-child" title="neighbor is this AS's child">
+                  ↓ child
+                </span>
+              ) : null;
             return (
               <tr key={l.id}>
                 <td className="peer">
                   1-{peer}
-                  {l.type === "peer" ? " ⇄" : ""}
+                  {rel}
                 </td>
                 <td>{l.subnet}</td>
                 <td>{rttCell}</td>

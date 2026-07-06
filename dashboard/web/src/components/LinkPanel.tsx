@@ -162,7 +162,15 @@ export default function LinkPanel({ id }: { id: string }) {
   const band = link.band;
   const down = band === "down";
   const typeLabel =
-    topoLink.type === "core" ? "core" : topoLink.type === "peer" ? "peer" : "parent / child";
+    topoLink.type === "core" ? "core" : topoLink.type === "peer" ? "peer" : "parent → child";
+
+  // Parent/child direction, derived from each endpoint's own view of the
+  // neighbor: an endpoint whose link_to is "child" sees the other side as its
+  // parent, so that other side is the parent. Only meaningful (and only
+  // rendered) when the link isn't core/peer.
+  const parentAS = topoLink.a.link_to === "child" ? topoLink.a.as : topoLink.b.as;
+  const childAS = parentAS === topoLink.a.as ? topoLink.b.as : topoLink.a.as;
+  const isParentChild = topoLink.type !== "core" && topoLink.type !== "peer";
 
   const rttReading = down ? "—" : `${link.rtt_ms_a.toFixed(1)} ms`;
   const rateReading = `${(link.rate_ab_mbit + link.rate_ba_mbit).toFixed(1)} Mbit/s`;
@@ -228,6 +236,11 @@ export default function LinkPanel({ id }: { id: string }) {
           <span className="dot" style={{ background: BAND_COL[band] }} />
           <span>{BAND_WORD[band]}</span>
         </div>
+        {isParentChild && (
+          <div className="linkrel">
+            1-{parentAS} is parent · 1-{childAS} is child
+          </div>
+        )}
       </div>
 
       <div className="sparkblock">
