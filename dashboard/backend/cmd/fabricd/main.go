@@ -27,6 +27,7 @@ import (
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/scrape"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/topo"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/wgpool"
 )
 
 // storeCapacity is the number of samples retained per store key. At the
@@ -121,6 +122,8 @@ func loadConfig(path string) (config, error) {
 		ISD:              1,
 		WGListenPort:     51820,
 		HubProbeAddr:     "10.20.3.201:22",
+		WGPoolPath:       "/var/lib/fabricd/wg-pool.json",
+		WGStatePath:      "/var/lib/fabricd/wg-claims.json",
 	}
 	if _, err := toml.DecodeFile(path, &c); err != nil {
 		return config{}, err
@@ -199,6 +202,14 @@ func main() {
 		sc := scrape.New(st, targets, interval, &http.Client{Timeout: scrapeClientTimeout})
 		go sc.Run(ctx)
 		lc = linkdclient.New(g, &http.Client{Timeout: linkdClientTimeout})
+
+		if cfg.JoinEnabled {
+			var err error
+			pool, err = wgpool.Open(cfg.WGPoolPath, cfg.WGStatePath)
+			if err != nil {
+				log.Fatalf("join enabled but pool unavailable: %v", err)
+			}
+		}
 	}
 
 	d := derive.New(g, st)
