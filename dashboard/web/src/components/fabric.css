@@ -94,11 +94,17 @@ body.screen .station text { font-size: 19.5px; }
 body.screen .station .as-eyebrow { font-size: 12px; }
 body.screen .peer-glyph { font-size: 14px; }
 .core-glyph {
-  font-size: 11px; fill: var(--brass); text-anchor: middle;
+  font-family: var(--mono); font-size: 11px; fill: var(--brass); text-anchor: middle;
+  letter-spacing: 0.1em;
   paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round;
 }
 body.screen .core-glyph { font-size: 14px; }
-.pc-arrow { fill: var(--ink-mute); opacity: 0.85; }
+.pc-label text {
+  font-family: var(--mono); font-size: 9px; fill: var(--ink-mute); text-anchor: middle;
+  letter-spacing: 0.05em;
+  paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round;
+}
+body.screen .pc-label text { font-size: 11px; }
 body.screen .linklabel text { font-size: 13.5px; }
 body.screen .chip text { font-size: 12px; }
 body.screen .connecting-label { font-size: 19px; }

@@ -255,40 +255,49 @@ export default function FabricMap() {
           })}
         </g>
 
-        {/* Core-link marker (◆), the core-link counterpart to the PEER marker. */}
+        {/* Core-link marker: "CORE" text at the midpoint, the core-link
+            counterpart to the PEER marker. */}
         <g>
           {links.map((l) => {
             const meta = linkMeta(l.id)!;
             const m = mids[l.id];
             if (meta.kind !== "core" || !m) return null;
             return (
-              <text key={l.id} className="core-glyph" x={m.x} y={m.y - 11}>
-                ◆
+              <text key={l.id} className="core-glyph" x={m.x} y={m.y - 12}>
+                CORE
               </text>
             );
           })}
         </g>
 
-        {/* Parent→child direction: a small arrowhead at the link midpoint
-            pointing from the parent AS toward the child AS. Parent = the
-            endpoint whose link_to is "child"; core/peer links are skipped. */}
+        {/* Parent/child annotation on the graph: "parent" near the parent AS
+            and "child" near the child AS along each hierarchical link, so the
+            direction is readable directly on the map. Parent = the endpoint
+            whose link_to is "child" (it sees its neighbor as its child). */}
         <g>
           {links.map((l) => {
             const meta = linkMeta(l.id)!;
-            const m = mids[l.id];
-            if (meta.kind !== undefined || !m) return null;
+            if (meta.kind !== undefined) return null;
             const parentAS = l.a.link_to === "child" ? l.a.as : l.b.as;
             const childAS = parentAS === l.a.as ? l.b.as : l.a.as;
-            const child = NODES[childAS];
-            if (!child) return null;
-            const deg = (Math.atan2(child.y - m.y, child.x - m.x) * 180) / Math.PI;
+            const pp = NODES[parentAS];
+            const cc = NODES[childAS];
+            if (!pp || !cc) return null;
+            const dx = cc.x - pp.x;
+            const dy = cc.y - pp.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const ux = dx / len;
+            const uy = dy / len;
+            const off = 40;
             return (
-              <path
-                key={l.id}
-                className="pc-arrow"
-                d="M -5 -4 L 5 0 L -5 4 Z"
-                transform={`translate(${m.x}, ${m.y}) rotate(${deg})`}
-              />
+              <g key={l.id} className="pc-label">
+                <text x={pp.x + ux * off} y={pp.y + uy * off}>
+                  parent
+                </text>
+                <text x={cc.x - ux * off} y={cc.y - uy * off}>
+                  child
+                </text>
+              </g>
             );
           })}
         </g>
