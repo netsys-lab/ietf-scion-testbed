@@ -277,7 +277,9 @@ in server mode on **UDP 32001** (`idint-traceroute.service`, bound to the
 mgmt IP). The playground hosts get the same binary for client use (no
 service). The tool's go.mod pins the lschulz/scion fork at `8ce7ed2f857d` —
 the deployed fork's upstream base — so it speaks the testbed's ID-INT wire
-format.
+format. The servers are unauthenticated reflection targets reachable from
+any AS over SCION — including attendee endhosts — which is the point; they
+echo telemetry only.
 
 ```sh
 ./tools/build-idint-traceroute.sh   # -> .build/idint-traceroute/bin/idint-traceroute
@@ -291,6 +293,9 @@ Example client run (from any AS or playground container; the client's
 idint-traceroute --sciond 10.20.3.150:30255 --local 10.20.3.150:32000 \
   --remote 1-161,10.20.3.161:32001 -inst0 RTT_NEXT_BR -inst1 INGRESS_TSTAMP
 ```
+
+`--sciond`/`--local` are per-host: on a playground container use
+`--sciond 127.0.0.1:30255` and its own mgmt IP for `--local`.
 
 ## Attendee access (Tier 2 — WireGuard)
 
