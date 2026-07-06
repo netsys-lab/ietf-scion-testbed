@@ -6,6 +6,20 @@
     - "{{ playbook_dir }}/../group_vars/playground.yml"
   vars:
     fabricd_deb: "{{ playbook_dir }}/../../dashboard/backend/dist/fabricd_0.1.0_amd64.deb"
+  pre_tasks:
+    - name: Fail fast if on-site join vars are unset
+      # The on-site flow sets these in group_vars/playground.yml and reruns
+      # this play; a missing key would otherwise render a half-config AFTER
+      # dpkg + restart, leaving a partial/bounced deploy.
+      ansible.builtin.assert:
+        that:
+          - booth_code is defined
+          - booth_code | length > 0
+          - wg_endpoint_v6 is defined
+          - wg_endpoint_v6 | length > 0
+          - wg_endpoint_v4 is defined
+          - wg_endpoint_v4 | length > 0
+        fail_msg: "booth_code / wg_endpoint_v6 / wg_endpoint_v4 must be set in ansible/group_vars/playground.yml before deploying the dashboard."
   tasks:
     - name: Copy fabricd package
       ansible.builtin.copy:
