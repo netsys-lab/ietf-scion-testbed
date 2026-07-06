@@ -391,16 +391,15 @@ attendee network:
 Both need to stay open inbound from the venue Wi-Fi/wired segments to our
 table. Nothing else on our subnet should be attendee-reachable.
 
-One thing we can't verify ourselves and would appreciate confirmation on:
-is client-to-client UDP filtered between wireless clients and a wired
-table drop on your network? Our WireGuard attendees join over Wi-Fi and
-tunnel to a hub on a wired drop at our table — if that path is filtered,
-the whole attendee-access feature is dead on arrival regardless of what we
-configure on our end.
-
 Thanks,
 <contact>
 ```
+
+Client-to-client traffic on the venue network is **not** filtered (confirmed
+2026-07-06), so WireGuard attendees on Wi-Fi can reach the hub on our wired
+drop — the email above is a courtesy heads-up, not a go/no-go dependency. (The
+direct-underlay approach would also work given this, but we keep the tunnel
+for the scitra IPv6 story and mgmt-plane isolation.)
 
 ### On-site checklist
 
