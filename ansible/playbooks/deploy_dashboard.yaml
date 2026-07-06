@@ -2,6 +2,8 @@
 - name: Deploy fabricd dashboard backend to the dashboard container
   hosts: dashboard
   become: true
+  vars_files:
+    - "{{ playbook_dir }}/../group_vars/playground.yml"
   vars:
     fabricd_deb: "{{ playbook_dir }}/../../dashboard/backend/dist/fabricd_0.1.0_amd64.deb"
   tasks:
@@ -37,6 +39,26 @@
         dest: /etc/fabric/config/as_list.yml
         mode: "0644"
 
+    - name: Ensure joinable-AS certs dirs exist (for bundle TRCs)
+      ansible.builtin.file:
+        path: "/etc/fabric/config/AS{{ item }}/certs"
+        state: directory
+        mode: "0755"
+      loop: "{{ range(158, 162) | list }}"
+
+    - name: Copy TRC for joinable ASes (fabricd's /api/join/bundle reads these)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../config/AS{{ item }}/certs/ISD1-B1-S1.trc"
+        dest: "/etc/fabric/config/AS{{ item }}/certs/ISD1-B1-S1.trc"
+        mode: "0644"
+      loop: "{{ range(158, 162) | list }}"
+
+    - name: Copy attendee instructions content
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../dashboard/instructions/"
+        dest: /etc/fabric/instructions/
+        mode: "0644"
+
     - name: Ensure fabricd RTT-baseline persistence directory exists
       ansible.builtin.file:
         path: /var/lib/fabricd
@@ -59,6 +81,24 @@
           scrape_interval_ms = 1000
           mock = false
           baselines_path = "/var/lib/fabricd/baselines.json"
+
+          join_enabled = true
+          booth_code = "{{ booth_code }}"
+          isd = 1
+          joinable_ases = [158, 159, 160, 161]
+          wg_pool_path = "/var/lib/fabricd/wg-pool.json"
+          wg_state_path = "/var/lib/fabricd/wg-claims.json"
+          instructions_dir = "/etc/fabric/instructions"
+          endpoint_v6 = "{{ wg_endpoint_v6 }}"
+          endpoint_v4 = "{{ wg_endpoint_v4 }}"
+          wg_listen_port = 51820
+          hub_probe_addr = "10.20.3.201:22"
+
+          [play_proxy]
+          158 = "10.20.3.210:7681"
+          159 = "10.20.3.211:7681"
+          160 = "10.20.3.212:7681"
+          161 = "10.20.3.213:7681"
 
     - name: Ensure service is running
       ansible.builtin.systemd:

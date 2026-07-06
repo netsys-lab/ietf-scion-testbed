@@ -4,3 +4,7 @@ booth_code: "changeme-at-booth"
 # Directory on the BUILD host holding the fork-built endhost binaries
 # (scion, sciond, shim-dispatcher) produced by Task 2.
 scion_bin_src: "{{ playbook_dir }}/../../.build/endhost/bin"
+
+# WG hub endpoints as seen from the venue (set on-site; bare hosts, no port).
+wg_endpoint_v6: "2001:db8::changeme"
+wg_endpoint_v4: "203.0.113.99"
