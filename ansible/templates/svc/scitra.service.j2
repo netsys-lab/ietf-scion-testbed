@@ -1,0 +1,18 @@
+[Unit]
+Description=scitra-tun SCION-IPv6 translator (svc endhost)
+After=network-online.target scion-sciond.service
+Requires=scion-sciond.service
+
+[Service]
+# --scmp: answer SCMP echo on 30041 so `scion ping` to this host works.
+# scitra_extra_args appends static inbound service-port forwards
+# for services hosted behind scitra: set e.g. scitra_extra_args: " -p 53" on
+# the host in ansible/inventory.yaml when DNS lands, then rerun
+# deploy_svc_endhost.yaml. (This comment is rendered; the live unit shows the
+# resolved args.)
+ExecStart=/usr/local/bin/scitra-tun eth0 {{ ansible_eth0.ipv4.address }} -d 127.0.0.1:30255 --scmp{{ scitra_extra_args }}
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target

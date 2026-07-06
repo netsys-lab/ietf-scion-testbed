@@ -1,0 +1,73 @@
+---
+- name: Deploy svc endhosts (SCION endhost + scitra, services live behind scitra)
+  hosts: svc
+  become: true
+  vars:
+    scitra_extra_args: ""
+  tasks:
+    - name: Install scitra runtime deps
+      ansible.builtin.apt:
+        name: [libncurses6]
+        state: present
+        update_cache: true
+
+    - name: Copy endhost + tool binaries
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/{{ item.src }}"
+        dest: "/usr/local/bin/{{ item.dest }}"
+        mode: "0755"
+      loop:
+        - { src: "endhost/bin/scion", dest: "scion" }
+        - { src: "endhost/bin/sciond", dest: "sciond" }
+        - { src: "scitra/bin/scitra-tun", dest: "scitra-tun" }
+        - { src: "idint-traceroute/bin/idint-traceroute", dest: "idint-traceroute" }
+
+    - name: Create SCION config dir
+      ansible.builtin.file:
+        path: /etc/scion/certs
+        state: directory
+        mode: "0755"
+
+    - name: Copy AS topology + TRC (public material only)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../config/AS{{ endhost_as }}/{{ item.s }}"
+        dest: "/etc/scion/{{ item.d }}"
+        mode: "0644"
+      loop:
+        - { s: "topology.json", d: "topology.json" }
+        - { s: "certs/ISD1-B1-S1.trc", d: "certs/ISD1-B1-S1.trc" }
+
+    - name: Render sciond config
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/svc/sd.toml.j2"
+        dest: /etc/scion/sd.toml
+        mode: "0644"
+
+    - name: Install sciond unit (endhost-generic, reused from playground)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/playground/scion-sciond.service"
+        dest: /etc/systemd/system/scion-sciond.service
+        mode: "0644"
+
+    - name: Render scitra unit
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/svc/scitra.service.j2"
+        dest: /etc/systemd/system/scitra.service
+        mode: "0644"
+
+    - name: Enable + start services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: restarted
+        daemon_reload: true
+      loop: [scion-sciond, scitra]
+
+    - name: Verify sciond answers locally
+      ansible.builtin.command: /usr/local/bin/scion showpaths 1-150 --sciond 127.0.0.1:30255 --maxpaths 1
+      register: sp
+      changed_when: false
+      failed_when: sp.rc != 0
+      retries: 5
+      delay: 2
+      until: sp.rc == 0

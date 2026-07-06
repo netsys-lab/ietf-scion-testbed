@@ -71,6 +71,16 @@ hub:
     ansible_user: ietf
     ansible_python_interpreter: auto_silent
 
+# Headless service endhosts (services hosted behind scitra; no booth machinery).
+svc:
+  hosts:
+    svc-151:
+      ansible_host: 10.20.3.214
+      endhost_as: "151"
+  vars:
+    ansible_user: ietf
+    ansible_python_interpreter: auto_silent
+
 # ASes attendees can be endhosts in via WireGuard — return routes + hub egress.
 # A deliberate mix: leaf ASes (158, 161), a core AS (152), and the tier-2 hub
 # (155), so laptop attendees can join a core/transit AS, not only leaves.
@@ -88,3 +98,4 @@ nodes:
     dashboard:
     playground:
     hub:
+    svc:

@@ -1,0 +1,21 @@
+[general]
+id = "sd1-{{ endhost_as }}"
+config_dir = "/etc/scion"
+
+[trust_db]
+connection = "/var/lib/scion/sd1-{{ endhost_as }}.trust.db"
+
+[path_db]
+connection = "/var/lib/scion/sd1-{{ endhost_as }}.path.db"
+
+[sd]
+address = "127.0.0.1:30255"
+
+[features]
+experimental_idint = true
+
+[drkey_level2_db]
+connection = "/var/lib/scion/sd1-{{ endhost_as }}.drkey_level2.db"
+
+[log.console]
+level = "info"
