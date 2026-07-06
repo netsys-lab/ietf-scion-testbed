@@ -15,6 +15,16 @@ the packets you actually send. Link "shaping" controls on the dashboard
 interfaces, so a shaped link changes real RTT you can measure from your
 own `ping`.
 
+**Can I just download prebuilt SCION binaries?** No — the official
+scionproto release binaries (including `v0.15.0`) are built
+`CGO_ENABLED=0`, and `v0.15.0` reverted to the mattn/go-sqlite3 driver,
+which requires cgo for the trust/path DBs. The result: the official
+`scion-daemon` panics on startup (`go-sqlite3 ... is a stub`) and never
+gets to open a socket. Build from source instead with `CGO_ENABLED=1` (see
+`laptop-linux.md`/`laptop-macos.md`) — we've proven upstream `v0.15.0`
+built this way interoperates with this testbed. If the booth is offering a
+prebuilt CGO-enabled binary for your platform, that works too.
+
 **How big a payload can I send through my WireGuard tunnel?** Keep
 tunnelled SCION payloads under **~1200 bytes**. Your WG interface reports an
 MTU of 1380, and SCION's path metadata for these testbed links advertises

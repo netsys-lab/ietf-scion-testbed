@@ -14,7 +14,10 @@ import (
 
 // endhostSDToml renders a portable endhost sciond config for AS asNum: bound
 // to loopback, config_dir "." (certs from ./certs of the unpacked bundle),
-// no [metrics] section, ID-INT on, relative DB paths — self-contained kit.
+// no [metrics] section, relative DB paths — self-contained kit. Attendee
+// endhosts run upstream scionproto, which rejects the fork-only
+// experimental_idint field in strict mode, so it is intentionally omitted
+// (endhosts don't need ID-INT).
 func endhostSDToml(asNum int) string {
 	return fmt.Sprintf(`[general]
 id = "sd1-%d"
@@ -28,9 +31,6 @@ connection = "sd1-%d.path.db"
 
 [sd]
 address = "127.0.0.1:30255"
-
-[features]
-experimental_idint = true
 
 [drkey_level2_db]
 connection = "sd1-%d.drkey_level2.db"
