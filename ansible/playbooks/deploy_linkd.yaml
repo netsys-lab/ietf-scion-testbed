@@ -12,11 +12,11 @@
         dest: /tmp/scion-linkd.deb
         mode: "0644"
 
-    - name: Install scion-linkd
-      ansible.builtin.apt:
-        deb: /tmp/scion-linkd.deb
-        state: present
-        force: true
+    - name: Install scion-linkd (dpkg -i always reinstalls the shipped deb, even on an identical version — apt/apt-get no-op on same-version)
+      ansible.builtin.command:
+        cmd: dpkg -i /tmp/scion-linkd.deb
+      register: linkd_dpkg
+      changed_when: "'already installed' not in linkd_dpkg.stdout"
 
     - name: Copy beacon metadata base and baseline profile
       ansible.builtin.copy:

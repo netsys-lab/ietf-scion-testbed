@@ -5,7 +5,10 @@ Wants=network-online.target
 
 [Service]
 ExecStart=/usr/local/bin/sciond --config /etc/scion/sd.toml
-Restart=on-failure
+# always (not on-failure): matches scion-daemon.service — a stray clean
+# SIGTERM must not leave the endhost daemon down (2026-07-06 fleet incident).
+Restart=always
+RestartSec=3
 User=root
 StateDirectory=scion
 

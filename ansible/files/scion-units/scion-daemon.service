@@ -11,7 +11,11 @@ Type=simple
 User=scion
 Group=scion
 ExecStart=/usr/bin/scion-daemon --config /etc/scion/daemon.toml
-Restart=on-failure
+# always (not on-failure): an unattributed fleet-wide SIGTERM cleanly stopped
+# every AS daemon on 2026-07-06 and on-failure left them down. systemctl stop
+# still works (stop suppresses the restart); stray signals no longer do.
+Restart=always
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
