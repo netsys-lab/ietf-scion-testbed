@@ -36,7 +36,9 @@ export const NODES: Record<number, Node> = {
 export interface LinkLayout {
   a: number;
   b: number;
-  sub: string; // native testbed link id suffix (also used to key the backend's per-link subnet)
+  sub: string; // native testbed link id (hex bridge suffix); vestigial — the
+  // map now labels links by AS-pair, so nothing reads this today. Kept because
+  // the LINKS table below is byte-identical to the mockup.
   kind?: "core" | "peer"; // absent => parent/child
   arc?: number; // core-diagonal quadratic arc height (px, above the band)
   via?: Point[]; // explicit hand-routed polyline (overrides routePoints)
