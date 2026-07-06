@@ -1,6 +1,8 @@
 // Live-data client: the /api/live WebSocket protocol plus the REST calls for
-// history and link shaping. Kept framework-agnostic (no React/zustand here)
-// so it can be unit-tested and reused independent of the store.
+// history, link shaping, and the /join attendee flow. Kept framework-agnostic
+// (no React/zustand here) so it can be unit-tested and reused independent of
+// the store.
+import type { ClaimResult } from "./join";
 import type { Direction, Frame, Graph, Sample, Shaping, ShapingResponse } from "./types";
 
 const MIN_BACKOFF_MS = 500;
@@ -115,4 +117,38 @@ export function resetShaping(linkId: string, direction: Direction): Promise<Shap
 export function fetchHistory(key: string, mins: number): Promise<Sample[]> {
   const params = new URLSearchParams({ key, mins: String(mins) });
   return request<Sample[]>(`/api/history?${params.toString()}`);
+}
+
+export type JoinMeta = {
+  enabled: boolean; joinable_ases: number[];
+  slots_total: number; slots_claimed: number; slots_burned: number;
+  hub_ok: boolean; endpoint_v6: string; endpoint_v4?: string;
+};
+
+export async function fetchJoinMeta(): Promise<JoinMeta> {
+  const r = await fetch("/api/join/meta");
+  if (!r.ok) throw new Error(`meta: ${r.status}`);
+  return r.json();
+}
+
+export async function claimConf(as: number, code: string): Promise<ClaimResult> {
+  const r = await fetch("/api/join/claim", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ as, code }),
+  });
+  if (!r.ok) throw new Error(String(r.status));
+  return r.json();
+}
+
+export async function fetchInstructions(): Promise<{ name: string; title: string }[]> {
+  const r = await fetch("/api/instructions");
+  if (!r.ok) throw new Error(`instructions: ${r.status}`);
+  return r.json();
+}
+
+export async function fetchInstruction(name: string): Promise<string> {
+  const r = await fetch(`/api/instructions/${name}`);
+  if (!r.ok) throw new Error(`instruction: ${r.status}`);
+  return r.text();
 }

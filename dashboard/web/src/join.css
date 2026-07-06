@@ -1,0 +1,22 @@
+.join { max-width: 900px; margin: 0 auto; padding: 24px; color: var(--ink, #ddd); }
+.join-head { display: flex; align-items: baseline; justify-content: space-between; }
+.join-head a { color: var(--brass, #b90); text-decoration: none; }
+.join-tier { background: var(--surface, #16181d); border: 1px solid var(--hairline, #2a2d34);
+  border-radius: 8px; padding: 18px 20px; margin: 18px 0; }
+.join-cards { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.join-card { display: block; padding: 10px 16px; border: 1px solid var(--hairline, #2a2d34);
+  border-radius: 6px; background: none; color: inherit; cursor: pointer;
+  text-decoration: none; font: inherit; }
+.join-card.sel { border-color: var(--brass, #b90); color: var(--brass, #b90); }
+.join-form { display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
+.join-form input { padding: 8px 10px; background: none; color: inherit;
+  border: 1px solid var(--hairline, #2a2d34); border-radius: 6px; }
+.join-form button { padding: 8px 10px; cursor: pointer; }
+.join-err { color: var(--crit, #e05656); }
+.join-slots { opacity: 0.7; font-size: 0.9em; }
+.join-claim canvas { background: #fff; padding: 8px; border-radius: 6px; margin: 10px 0; }
+.join-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.join-note { opacity: 0.7; font-size: 0.9em; }
+.join-md { margin-top: 14px; line-height: 1.55; overflow-x: auto; }
+.join-md code { background: var(--page, #0d0f12); padding: 1px 5px; border-radius: 4px; }
+.join-md pre { background: var(--page, #0d0f12); padding: 10px; border-radius: 6px; overflow-x: auto; }
