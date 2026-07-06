@@ -62,7 +62,11 @@ export default function JoinPage() {
         {metaErr && <p className="join-err">Join service unreachable.</p>}
         {meta && !meta.hub_ok && <p className="join-err">Hub offline — ask at the booth.</p>}
         {meta && (
-          <p className="join-slots">{meta.slots_total - meta.slots_claimed - meta.slots_burned} of {meta.slots_total} confs free</p>
+          // burned slots overlap claimed ones (the revoke flow claims THEN
+          // burns a slot), so total - claimed - burned double-subtracts the
+          // overlap and can go negative; clamp at 0 until the backend exposes
+          // a real slots_free.
+          <p className="join-slots">{Math.max(0, meta.slots_total - meta.slots_claimed - meta.slots_burned)} of {meta.slots_total} confs free</p>
         )}
         {!claim && meta && (
           <div className="join-form">
