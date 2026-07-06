@@ -297,6 +297,49 @@ idint-traceroute --sciond 10.20.3.150:30255 --local 10.20.3.150:32000 \
 `--sciond`/`--local` are per-host: on a playground container use
 `--sciond 127.0.0.1:30255` and its own mgmt IP for `--local`.
 
+## Service endhost (svc-151)
+
+CT214 (`svc-151`, mgmt `10.20.3.214`) is a headless SCION endhost in AS151
+for hosting services behind scitra (planned: DNS over SCION). It runs the
+fork endhost stack (sciond with `experimental_idint = true`) and
+`scitra-tun --scmp`; `idint-traceroute` is installed for client/debug use
+(no server unit). No venue leg, no booth machinery.
+
+Create the container (one-time, on the Proxmox host):
+
+```sh
+pct create 214 local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst \
+  --hostname svc-151 --cores 1 --memory 512 --swap 512 --rootfs local-lvm:4 \
+  --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1 \
+  --unprivileged 1 --features nesting=1 --onboot 1
+```
+
+Then add the two TUN-passthrough lines to `/etc/pve/lxc/214.conf` (same as
+the playground, see Host network above), `pct start 214`, and bootstrap the
+`ietf` user (NOPASSWD sudo) with the host's `/root/.ssh/id_ed25519.pub` —
+plus your own key — in its `authorized_keys`.
+
+Deploy (reuses the endhost/scitra/idint-traceroute build outputs — nothing
+new to build):
+
+```sh
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_svc_endhost.yaml
+```
+
+SSH access (mgmt is NATed, not routed from the LAN):
+`ssh -J root@ietf-proxmox ietf@10.20.3.214`, or `pct enter 214` on the host
+as the rescue hatch.
+
+Hosting a service behind scitra: set `scitra_extra_args: " -p <port>"` on
+`svc-151` in `ansible/inventory.yaml` (static inbound forward, e.g.
+`" -p 53"` for DNS) and rerun the playbook; the service is then reachable
+over SCION at svc-151's fc00 address (printed in `journalctl -u scitra` on
+the container).
+
+Verify: `scion ping 1-151,10.20.3.214` from a playground shell replies
+(scitra answers SCMP echo); pinging svc-151's fc00 address from play-158
+replies too.
+
 ## Attendee access (Tier 2 — WireGuard)
 
 Attendees' own laptops join as real SCION endhosts in ASes 1-158..1-161 over
