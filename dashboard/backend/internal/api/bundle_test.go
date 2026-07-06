@@ -85,7 +85,9 @@ func readTarGz(t *testing.T, body []byte) map[string]string {
 func TestBundleContents(t *testing.T) {
 	h := newBundleServer(t, bundleConfigDir(t))
 	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/join/bundle/158", nil))
+	req := httptest.NewRequest(http.MethodGet, "/api/join/bundle/158", nil)
+	req.SetBasicAuth("scion", "x")
+	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -107,7 +109,9 @@ func TestBundleContents(t *testing.T) {
 func TestBundleNonJoinable404(t *testing.T) {
 	h := newBundleServer(t, bundleConfigDir(t))
 	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/join/bundle/150", nil))
+	req := httptest.NewRequest(http.MethodGet, "/api/join/bundle/150", nil)
+	req.SetBasicAuth("scion", "x")
+	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", rr.Code)
 	}
@@ -116,7 +120,9 @@ func TestBundleNonJoinable404(t *testing.T) {
 func TestBundleBadAS400(t *testing.T) {
 	h := newBundleServer(t, bundleConfigDir(t))
 	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/join/bundle/abc", nil))
+	req := httptest.NewRequest(http.MethodGet, "/api/join/bundle/abc", nil)
+	req.SetBasicAuth("scion", "x")
+	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", rr.Code)
 	}

@@ -103,6 +103,7 @@ type server struct {
 	hub      *hub
 	upgrader websocket.Upgrader
 	mux      *http.ServeMux
+	handler  http.Handler
 
 	// lastFrame caches the most recent broadcast frame so handleLive can
 	// build a WS-connect snapshot from it instead of calling d.Frame
@@ -165,10 +166,11 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 	if static != nil {
 		s.mux.Handle("/", s.staticHandler(static))
 	}
+	s.handler = s.requireBoothCode(s.mux)
 	return s
 }
 
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
+func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
 
 // --- REST endpoints -------------------------------------------------------
 

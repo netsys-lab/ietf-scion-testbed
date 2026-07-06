@@ -74,6 +74,7 @@ func postClaim(t *testing.T, h http.Handler, body string) *httptest.ResponseReco
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/join/claim", strings.NewReader(body))
 	req.RemoteAddr = "203.0.113.9:1234"
+	req.SetBasicAuth("scion", "secret")
 	h.ServeHTTP(rr, req)
 	return rr
 }
@@ -131,7 +132,9 @@ func TestMetaNoCodeNeeded(t *testing.T) {
 	h := newJoinServer(t, 2)
 	postClaim(t, h, `{"as":158,"code":"secret"}`)
 	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/join/meta", nil))
+	metaReq := httptest.NewRequest(http.MethodGet, "/api/join/meta", nil)
+	metaReq.SetBasicAuth("scion", "secret")
+	h.ServeHTTP(rr, metaReq)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rr.Code)
 	}
