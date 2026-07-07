@@ -1,0 +1,47 @@
+---
+# First-boot bootstrap: fresh containers have only root SSH (installed by
+# create_contianers.sh via --ssh-public-keys). Create the `ietf` deploy user
+# with passwordless sudo + the deploy key so every subsequent playbook (which
+# connects as ansible_user: ietf) works. Connects as root; run ONCE right
+# after create, before any other playbook. Uses builtin modules only (no
+# collection deps) so it works on a bare host.
+- name: Bootstrap ietf deploy user on all containers
+  hosts: nodes
+  remote_user: root
+  gather_facts: false
+  vars:
+    pubkey: "{{ lookup('file', playbook_dir + '/../../proxmox/public_keys') }}"
+  tasks:
+    - name: Ensure python3 present (Ansible needs it)
+      ansible.builtin.raw: which python3 || (apt-get update && apt-get install -y python3)
+      changed_when: false
+
+    - name: Create ietf user with sudo group + bash shell
+      ansible.builtin.user:
+        name: ietf
+        groups: sudo
+        shell: /bin/bash
+        create_home: true
+
+    - name: Ensure ietf ~/.ssh exists
+      ansible.builtin.file:
+        path: /home/ietf/.ssh
+        state: directory
+        owner: ietf
+        group: ietf
+        mode: "0700"
+
+    - name: Install deploy key for ietf (full authorized_keys — fresh user)
+      ansible.builtin.copy:
+        content: "{{ pubkey }}\n"
+        dest: /home/ietf/.ssh/authorized_keys
+        owner: ietf
+        group: ietf
+        mode: "0600"
+
+    - name: Passwordless sudo for ietf
+      ansible.builtin.copy:
+        content: "ietf ALL=(ALL) NOPASSWD:ALL\n"
+        dest: /etc/sudoers.d/ietf
+        mode: "0440"
+        validate: visudo -cf %s

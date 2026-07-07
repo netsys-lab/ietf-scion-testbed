@@ -2,6 +2,10 @@
 
 set -e
 
+# Resolve paths relative to this script, not the caller's CWD, so the SSH
+# public-key file is found no matter where the script is invoked from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Template: override with TEMPLATE=... ; default is the Ubuntu 24.04 LTS
 # standard LXC template (glibc 2.39 — the SCION reference platform).
 TEMPLATE="${TEMPLATE:-local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst}"
@@ -13,7 +17,7 @@ TEMPLATE="${TEMPLATE:-local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst}"
 # cpulimit). Keep DEPLOY.md's CT214 (svc endhost) stanza in sync with
 # PLAY_OPTS. Memory values match the live fleet (the old blanket
 # "--memory 2048" was drift).
-COMMON="--swap 512 --ssh-public-keys ./public_keys"
+COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys"
 AS_OPTS="--cores 2 --memory 1024 --cpuunits 1000 $COMMON"
 DASH_OPTS="--cores 2 --memory 1024 --cpuunits 300 $COMMON"
 HUB_OPTS="--cores 2 --memory 1024 --cpuunits 200 $COMMON"
