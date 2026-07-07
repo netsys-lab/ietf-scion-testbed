@@ -70,6 +70,37 @@ type KPI struct {
 	BeaconsPerSec float64 `json:"beacons_per_sec"`
 }
 
+// TraceHop is one link's worth of collapsed ID-INT telemetry for the active
+// trace session: the k-th egress record on the probed path, annotated with
+// the dashboard link ID it crossed. Pointer fields mirror idint.HopRecord's
+// optionality (a router may omit a requested slot).
+type TraceHop struct {
+	IA          string   `json:"ia"`
+	Link        string   `json:"link"` // dashboard link ID "150-154"
+	RttNextBrUs *int64   `json:"rtt_next_br_us,omitempty"`
+	EgrTxPct    *float64 `json:"egr_tx_pct,omitempty"`
+	QueueLen    *int64   `json:"queue_len,omitempty"`
+	NodeId      *uint32  `json:"node_id,omitempty"`
+	Verified    bool     `json:"verified"`
+}
+
+// TraceVM is the shared ID-INT trace session's view model: the src/dst pair
+// under inspection, the path last (successfully or not) probed, and its
+// per-link telemetry. See internal/idint.Manager, which owns the one shared
+// session and produces this via VM().
+type TraceVM struct {
+	Src         string     `json:"src"` // "1-150"
+	Dst         string     `json:"dst"`
+	Fingerprint string     `json:"fingerprint"` // of the path actually probed
+	Auto        bool       `json:"auto"`
+	PathLinks   []string   `json:"path_links"`
+	Ok          bool       `json:"ok"`
+	Error       string     `json:"error,omitempty"`
+	UpdatedAt   int64      `json:"updated_at"` // unix ms of last probe attempt
+	ProbeRttMs  float64    `json:"probe_rtt_ms"`
+	Hops        []TraceHop `json:"hops"`
+}
+
 // Frame is a full snapshot: every link, every AS, and the KPIs, stamped with
 // the time it was produced.
 type Frame struct {
@@ -77,6 +108,10 @@ type Frame struct {
 	Links []LinkVM `json:"links"`
 	ASes  []ASVM   `json:"ases"`
 	KPI   KPI      `json:"kpi"`
+	// Trace is the shared ID-INT trace session's latest per-hop readings,
+	// attached by the api layer when a trace is active; nil (omitted)
+	// otherwise. See internal/idint.
+	Trace *TraceVM `json:"trace,omitempty"`
 }
 
 // Band names, ordered by increasing severity for the RTT/loss classification.
