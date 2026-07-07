@@ -469,20 +469,30 @@ just the join feature.
 ### On-site bring-up
 
 The hub's venue-facing address isn't known until the container is racked and
-plugged into the venue network, so `wg_endpoint_v6`/`wg_endpoint_v4` in
-`ansible/group_vars/playground.yml` (gitignored, copy from
-`playground.yml.example`) start as placeholders and must be filled in on
-site:
+plugged into the venue network — and because the hub leg is DHCP/SLAAC, its
+address also changes on every rebuild or lease renewal. So the advertised
+`wg_endpoint_v6`/`wg_endpoint_v4` (in `ansible/group_vars/playground.yml`,
+gitignored) go stale and attendees' `wg-quick up` hits the old address. Rather
+than editing them by hand, derive them from the hub's **current** address and
+redeploy in one step (run on the Proxmox host, after the hub is on the venue
+net):
 
 ```sh
-pct exec 201 -- ip -6 -br addr show eth1 scope global   # hub venue v6
-pct exec 201 -- ip -4 -br addr show eth1                # hub venue v4
-# set wg_endpoint_v6 / wg_endpoint_v4 in ansible/group_vars/playground.yml
-ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_dashboard.yaml
+bash tools/update-wg-endpoint.sh
 ```
 
-(Only `deploy_dashboard.yaml` needs rerunning — the endpoints are baked into
-fabricd's rendered conf, not into the hub's own `wg0.conf`.)
+It reads CT201's `eth1`, picks the v4 plus the best global v6 (a real
+global-unicast `2000::/3` venue address over a `fc00::/7` ULA, never a
+temporary/privacy address — the IETF net is v6-mostly, so the v6 endpoint is
+the one attendees use), writes both into `group_vars`, and reruns
+`deploy_dashboard.yaml`. Verify with
+`curl -su scion:<code> http://<dash>:8080/api/join/meta` (`endpoint_v6` should
+match the hub). Re-run it any time the hub's address changes.
+
+(Only `deploy_dashboard.yaml` needs rerunning — the endpoints are injected into
+each conf at claim time, not baked into the hub's own `wg0.conf`. The join page
+hands out the **v6** conf by default; v4 stays as a fallback for v4-only
+clients.)
 
 ### Wi-Fi-uplink contingency
 
