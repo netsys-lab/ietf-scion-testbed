@@ -5,6 +5,10 @@ link-shaping daemon (scion-linkd) to the IETF 126 testbed.
 
 ## Host network
 
+Containers run **Ubuntu 24.04 LTS** (glibc 2.39 — the SCION reference build
+platform). The template is `ubuntu-24.04-standard_24.04-2` (`pveam download
+local ...`); `proxmox/create_contianers.sh` defaults to it.
+
 The Proxmox host's testbed bridges are defined canonically in
 `proxmox/interfaces.d-scion-testbed`, installed to
 `/etc/network/interfaces.d/scion-testbed` and applied with `ifreload -a`. It
@@ -15,12 +19,19 @@ Containers attach `eth0` to `mgmt` with static `10.20.3.<id>` addresses (see
 `proxmox/create_contianers.sh`); only the dashboard (CT200) and wg-hub
 (CT201) also carry a venue leg (`eth1` on `vmbr0`).
 
-Playground containers (CT210–213) additionally need `/dev/net/tun`
-passthrough for `scitra-tun`: two raw lines in each container's
-`/etc/pve/lxc/<id>.conf` — `lxc.cgroup2.devices.allow: c 10:200 rwm` and
-`lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file` — plus
-`tun` in the host's `/etc/modules-load.d/` so the module is loaded at boot.
-Requires a container restart to take effect; already applied to CT210–213.
+`create_contianers.sh` now handles the host-level container prerequisites that
+were previously manual, so a clean rebuild is one command:
+- **`--rootfs local-lvm:N`** — the only storage here that supports container
+  rootdir (pct defaults to the `local` dir storage and fails without it).
+- **`--features nesting=1`** on every container — Ubuntu 24.04's systemd 255
+  warns/misbehaves in an LXC without it ("Systemd 255 detected…").
+- **`/dev/net/tun` passthrough** for `scitra-tun` (CT210–213 + svc-151/CT214):
+  loads the `tun` module (persisted to `/etc/modules-load.d/`) and appends
+  `lxc.cgroup2.devices.allow: c 10:200 rwm` +
+  `lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file` to each
+  `/etc/pve/lxc/<id>.conf`, then reboots the container.
+- **SSH keys** — installs `proxmox/public_keys` (host ansible key + dev infra
+  key) for root, the entry point for the `ietf` bootstrap below.
 
 **CPU weights.** Containers carry tiered `cpuunits` (cgroup-v2 cpu.weight;
 set by `create_contianers.sh`, live-applied with `pct set`): AS containers
@@ -111,6 +122,20 @@ non-interactive context):
 
 ```sh
 ansible-playbook -i ansible/inventory.yaml ansible/playbooks/localhost_accept_host_keys.yaml
+```
+
+(After a fresh rebuild the containers have new SSH host keys; clear the stale
+ones first — `for ip in 150..161 200 201 210..214; do ssh-keygen -R 10.20.3.$ip; done`
+— then re-scan, or ansible fails with "REMOTE HOST IDENTIFICATION HAS CHANGED".)
+
+**Bootstrap the `ietf` deploy user (first thing after `create_contianers.sh`).**
+Fresh containers only have root SSH; every other playbook connects as `ietf`,
+which does not exist yet. The inventory's `ansible_user: ietf` overrides `-u`,
+so pass root as an **extra-var**:
+
+```sh
+ansible-playbook -i ansible/inventory.yaml -e ansible_user=root \
+  ansible/playbooks/bootstrap_ietf_user.yaml
 ```
 
 One-time, before the first deploy (or whenever the CS unit/binary naming on
@@ -285,10 +310,20 @@ Build + deploy:
 
 ```sh
 ./tools/build-endhost.sh
-./tools/build-scitra.sh    # -> .build/scitra/bin/scitra-tun (Docker build, Debian-12 glibc target)
+./tools/build-scitra.sh      # -> .build/scitra/bin/{scitra-tun,scion2ip} (Docker, ubuntu:24.04 / glibc-2.39 target)
+./tools/build-scion-apps.sh  # -> .build/scion-apps/bin/{scion-bwtestclient,scion-bwtestserver,scion-netcat,scion-bat}
 cp ansible/group_vars/playground.yml.example ansible/group_vars/playground.yml  # set booth_code
 ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_playground.yaml
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_playground_apps.yaml
 ```
+
+`deploy_playground_apps.yaml` layers the SCION app fleet onto the shells:
+`scion-bwtestclient`/`scion-bwtestserver` (server on `:40002`), `scion-netcat`,
+`scion-bat` (curl-like), the `scion2ip`/`ip2scion` address converters, a
+`scapy-scion-int` venv (`/opt/scapy-scion-int/.venv`, wrapper `scapy-scion`),
+and plain `curl`. Smoke tests (from a shell): `scion-bwtestclient -s
+1-161,10.20.3.213:40002` (0% loss), `scion2ip 1-150 0 0 1` → `fc00:1000:9600::1`,
+`scapy-scion -c "from scapy_scion.layers.scion import SCION"`.
 
 Verify (from a laptop on pubnet):
 
@@ -370,19 +405,15 @@ fork endhost stack (sciond with `experimental_idint = true`) and
 `scitra-tun --scmp`; `idint-traceroute` is installed for client/debug use
 (no server unit). No venue leg, no booth machinery.
 
-Create the container (one-time, on the Proxmox host):
+CT214 is now created by `proxmox/create_contianers.sh` along with the rest of
+the fleet (Ubuntu 24.04 template, `--rootfs local-lvm:4`, `--features
+nesting=1`, and the `/dev/net/tun` passthrough the script applies to 210–214) —
+no separate `pct create` step. After creation it is bootstrapped by
+`bootstrap_ietf_user.yaml` like every other node, then provisioned with:
 
 ```sh
-pct create 214 local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst \
-  --hostname svc-151 --cores 1 --memory 512 --swap 512 --cpuunits 50 --rootfs local-lvm:4 \
-  --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1 \
-  --unprivileged 1 --features nesting=1 --onboot 1
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_svc_endhost.yaml
 ```
-
-Then add the two TUN-passthrough lines to `/etc/pve/lxc/214.conf` (same as
-the playground, see Host network above), `pct start 214`, and bootstrap the
-`ietf` user (NOPASSWD sudo) with the host's `/root/.ssh/id_ed25519.pub` —
-plus your own key — in its `authorized_keys`.
 
 Deploy (reuses the endhost/scitra/idint-traceroute build outputs — nothing
 new to build):
