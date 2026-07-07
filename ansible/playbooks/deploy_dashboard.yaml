@@ -121,6 +121,12 @@
           160 = "10.20.3.212:7681"
           161 = "10.20.3.213:7681"
 
+          [idint]
+          enabled = true
+          prober_port = 30490
+          reflector_port = 32001
+          probe_interval_ms = 1000
+
     - name: Ensure service is running
       ansible.builtin.systemd:
         name: fabricd

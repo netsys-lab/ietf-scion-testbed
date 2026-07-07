@@ -310,6 +310,26 @@ idint-traceroute --sciond 10.20.3.150:30255 --local 10.20.3.150:32000 \
 `--sciond`/`--local` are per-host: on a playground container use
 `--sciond 127.0.0.1:30255` and its own mgmt IP for `--local`.
 
+## ID-INT path inspector
+
+The dashboard's TRACE button drives live ID-INT probes across the fabric.
+Each AS container runs `idint-probed.service` (HTTP **30490** on the mgmt IP,
+stateless; probes go to the idint-traceroute reflectors on 32001 using the
+AS's own sciond). fabricd holds ONE shared trace session — every dashboard
+client sees the same trace, and it is lost on fabricd restart (just re-pin it
+from the panel).
+
+```sh
+./tools/build-idint-probed.sh   # -> .build/idint-probed/bin/idint-probed
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_idint_probed.yaml
+```
+
+Deploy probers BEFORE enabling `[idint]` in the dashboard config (fabricd
+degrades gracefully — the panel shows the prober error — but don't demo that).
+Runbook: prober health is `curl http://10.20.3.15x:30490/api/v1/paths?dst=1-161`
+from the host; a wedged prober is safe to `systemctl restart idint-probed`
+(stateless).
+
 ## Service endhost (svc-151)
 
 CT214 (`svc-151`, mgmt `10.20.3.214`) is a headless SCION endhost in AS151
