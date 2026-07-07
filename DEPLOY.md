@@ -330,6 +330,10 @@ Runbook: prober health is `curl http://10.20.3.15x:30490/api/v1/paths?dst=1-161`
 from the host; a wedged prober is safe to `systemctl restart idint-probed`
 (stateless).
 
+`mock=true` fabricd demos the shaped-hop RTT spike fine, but NOT AUTO
+re-route: mock paths are static and never re-rank by advertised latency, so
+picking AUTO never jumps off a shaped path — that needs the live probers.
+
 ## Service endhost (svc-151)
 
 CT214 (`svc-151`, mgmt `10.20.3.214`) is a headless SCION endhost in AS151
