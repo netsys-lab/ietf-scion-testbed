@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useFabricStore } from "./store";
-import type { Frame, Graph, LinkVM } from "./types";
+import type { Frame, Graph, LinkVM, TraceVM } from "./types";
 
 function makeLink(overrides: Partial<LinkVM> = {}): LinkVM {
   return {
@@ -30,6 +30,21 @@ function makeFrame(links: LinkVM[], t = 1): Frame {
       avg_core_rtt_ms: 0,
       beacons_per_sec: 0,
     },
+  };
+}
+
+function makeTrace(overrides: Partial<TraceVM> = {}): TraceVM {
+  return {
+    src: "1-150",
+    dst: "1-161",
+    fingerprint: "abcd1234",
+    auto: true,
+    path_links: ["150-155", "155-161"],
+    ok: true,
+    updated_at: 1,
+    probe_rtt_ms: 12.5,
+    hops: [],
+    ...overrides,
   };
 }
 
@@ -140,6 +155,18 @@ describe("applyFrame", () => {
     useFabricStore.getState().applyFrame(after);
     expect(useFabricStore.getState().linksById["150-151"].band).toBe("elevated");
   });
+
+  it("carries frame.trace through into store state, readable via frame", () => {
+    const before = makeFrame([makeLink({ band: "nominal" })]);
+    useFabricStore.getState().applySnapshot(emptyTopology, before);
+    expect(useFabricStore.getState().frame?.trace).toBeUndefined();
+
+    const trace = makeTrace();
+    const after = { ...makeFrame([makeLink({ band: "nominal" })], 2), trace };
+    useFabricStore.getState().applyFrame(after);
+
+    expect(useFabricStore.getState().frame?.trace).toEqual(trace);
+  });
 });
 
 describe("setConnected", () => {
@@ -183,6 +210,11 @@ describe("select", () => {
   it("sets the selection for an AS", () => {
     useFabricStore.getState().select({ kind: "as", id: "155" });
     expect(useFabricStore.getState().selected).toEqual({ kind: "as", id: "155" });
+  });
+
+  it("sets and round-trips the trace selection", () => {
+    useFabricStore.getState().select({ kind: "trace", id: "trace" });
+    expect(useFabricStore.getState().selected).toEqual({ kind: "trace", id: "trace" });
   });
 
   it("clears the selection with undefined", () => {

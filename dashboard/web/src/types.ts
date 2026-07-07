@@ -87,6 +87,52 @@ export interface Frame {
   links: LinkVM[];
   ases: ASVM[];
   kpi: KPI;
+  trace?: TraceVM;
+}
+
+// --- idint trace (path inspector) ------------------------------------------
+
+export interface TraceHop {
+  ia: string;
+  link: string;
+  rtt_next_br_us?: number;
+  egr_tx_pct?: number;
+  queue_len?: number;
+  node_id?: number;
+  verified: boolean;
+}
+
+export interface TraceVM {
+  src: string;
+  dst: string;
+  fingerprint: string;
+  auto: boolean;
+  path_links: string[];
+  ok: boolean;
+  error?: string;
+  updated_at: number;
+  probe_rtt_ms: number;
+  hops: TraceHop[];
+}
+
+export interface PathOption {
+  fingerprint: string;
+  hops: number[];
+  // links can be JSON null in a rare degraded case: fabricd's PathOptions
+  // swallows unresolvable-path errors (e.g. a hop AS missing from the graph)
+  // rather than failing the whole response, so consumers must guard before
+  // calling .map on this.
+  links: string[] | null;
+  latency_us_total: number;
+  mtu: number;
+  expiry: string;
+  current_best: boolean;
+}
+
+export interface IdintPathsResponse {
+  src: string;
+  dst: string;
+  paths: PathOption[];
 }
 
 // --- /api/live envelope --------------------------------------------------

@@ -3,7 +3,7 @@
 // (no React/zustand here) so it can be unit-tested and reused independent of
 // the store.
 import type { ClaimResult } from "./join";
-import type { Direction, Frame, Graph, Sample, Shaping, ShapingResponse } from "./types";
+import type { Direction, Frame, Graph, IdintPathsResponse, Sample, Shaping, ShapingResponse } from "./types";
 
 const MIN_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 8000;
@@ -151,4 +151,20 @@ export async function fetchInstruction(name: string): Promise<string> {
   const r = await fetch(`/api/instructions/${name}`);
   if (!r.ok) throw new Error(`instruction: ${r.status}`);
   return r.text();
+}
+
+export function fetchIdintPaths(src: number, dst: number): Promise<IdintPathsResponse> {
+  return request<IdintPathsResponse>(`/api/idint/paths?src=${src}&dst=${dst}`);
+}
+
+export async function putTrace(src: number, dst: number, fingerprint?: string): Promise<void> {
+  await request<{ ok: boolean }>(`/api/idint/trace`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fingerprint ? { src, dst, fingerprint } : { src, dst }),
+  });
+}
+
+export async function stopTrace(): Promise<void> {
+  await request<{ ok: boolean }>(`/api/idint/trace`, { method: "DELETE" });
 }

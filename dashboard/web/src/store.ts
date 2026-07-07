@@ -7,7 +7,7 @@ import { create } from "zustand";
 import type { Band, Frame, Graph, LinkVM, TickerCls, TickerEvent } from "./types";
 
 export interface Selection {
-  kind: "link" | "as";
+  kind: "link" | "as" | "trace";
   id: string;
 }
 
