@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/scionproto/scion/pkg/addr"
@@ -101,12 +102,70 @@ func (h scmpHandler) Handle(pkt *snet.Packet) error {
 	return nil
 }
 
-// Paths lists sciond's paths to dst in sciond order ([0] = current best).
+// pathSortKey precomputes the ordering key for one path.
+type pathSortKey struct {
+	unset       bool          // any latency entry unset (negative)
+	total       time.Duration // sum of advertised latency entries
+	ifaces      int
+	fingerprint string
+}
+
+func sortKey(p snet.Path) pathSortKey {
+	md := p.Metadata()
+	k := pathSortKey{
+		ifaces:      len(md.Interfaces),
+		fingerprint: snet.Fingerprint(md.Interfaces).String(),
+	}
+	for _, d := range md.Latency {
+		if d < 0 {
+			k.unset = true
+		} else {
+			k.total += d
+		}
+	}
+	return k
+}
+
+// SortPaths orders paths by total advertised latency, ascending. sciond's own
+// order ignores latency metadata, so paths[0] would stay on a shaped (slow)
+// link; this makes [0] the advertised-latency best. Any path with an unset
+// (negative) latency entry sorts after all fully-annotated paths. Ties break
+// by fewer interfaces, then by fingerprint string (deterministic).
+func SortPaths(paths []snet.Path) {
+	type decorated struct {
+		p snet.Path
+		k pathSortKey
+	}
+	dec := make([]decorated, len(paths))
+	for i, p := range paths {
+		dec[i] = decorated{p: p, k: sortKey(p)}
+	}
+	sort.SliceStable(dec, func(i, j int) bool {
+		a, b := dec[i].k, dec[j].k
+		if a.unset != b.unset {
+			return !a.unset // fully-annotated before unset
+		}
+		if !a.unset && a.total != b.total {
+			return a.total < b.total
+		}
+		if a.ifaces != b.ifaces {
+			return a.ifaces < b.ifaces
+		}
+		return a.fingerprint < b.fingerprint
+	})
+	for i := range dec {
+		paths[i] = dec[i].p
+	}
+}
+
+// Paths lists sciond's paths to dst in advertised-latency order
+// ([0] = current best).
 func (n *Network) Paths(ctx context.Context, dst addr.IA) (*PathsResponse, error) {
 	paths, err := n.Sciond.Paths(ctx, dst, n.LocalIA, daemon_types.PathReqFlags{})
 	if err != nil {
 		return nil, fmt.Errorf("sciond paths: %w", err)
 	}
+	SortPaths(paths)
 	resp := &PathsResponse{
 		LocalIA: n.LocalIA.String(),
 		Paths:   make([]PathJSON, 0, len(paths)),
@@ -118,9 +177,9 @@ func (n *Network) Paths(ctx context.Context, dst addr.IA) (*PathsResponse, error
 }
 
 // Probe sends one ID-INT probe to remote over the path identified by
-// fingerprint ("" = sciond's first path) and decodes the forward and reverse
-// telemetry reports. A missing fingerprint yields ErrFingerprintNotFound; a
-// read-deadline expiry yields ErrTimeout.
+// fingerprint ("" = advertised-latency best path, i.e. Paths()[0]) and
+// decodes the forward and reverse telemetry reports. A missing fingerprint
+// yields ErrFingerprintNotFound; a read-deadline expiry yields ErrTimeout.
 func (n *Network) Probe(
 	ctx context.Context,
 	remote *snet.UDPAddr,
@@ -134,11 +193,13 @@ func (n *Network) Probe(
 		}
 	}()
 
-	// 1. Enumerate paths and select by fingerprint.
+	// 1. Enumerate paths (advertised-latency order, matching Paths()) and
+	// select by fingerprint.
 	paths, err := n.Sciond.Paths(ctx, remote.IA, n.LocalIA, daemon_types.PathReqFlags{})
 	if err != nil {
 		return nil, fmt.Errorf("sciond paths: %w", err)
 	}
+	SortPaths(paths)
 	var via snet.Path
 	if fingerprint == "" {
 		if len(paths) == 0 {
