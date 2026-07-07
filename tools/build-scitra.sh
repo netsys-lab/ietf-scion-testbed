@@ -4,14 +4,16 @@
 #
 # WHY A DOCKER BUILD:
 #   scion-cpp needs a C++23 toolchain (gcc >= 13) plus Boost >= 1.83 / gRPC >=
-#   1.51 / protobuf >= 3.21. We still build in Docker rather than natively: the
+#   1.51 / protobuf >= 3.21. We build in Docker rather than natively: the
 #   Proxmox host is Debian 13 (glibc 2.41 -> a binary built there references
-#   __isoc23_* @GLIBC_2.41 and will NOT run on the glibc-2.39 containers). So we
-#   build inside ubuntu:24.04 (gcc 13 + glibc 2.39 == the CT210/213 runtime),
-#   pull deps via vcpkg (static libs), and link libstdc++/libgcc statically with
-#   MARCH='' (portable amd64 baseline). A bookworm builder (glibc 2.36) also
-#   works — 2.36 binaries are forward-compatible onto 2.39 — so
-#   BUILDER_IMAGE=gcc:13-bookworm is a valid fallback if the noble build fails.
+#   __isoc23_* @GLIBC_2.41 and will NOT run on the glibc-2.39 containers). We
+#   build inside gcc:13-bookworm (gcc 13.4 + glibc 2.36): glibc is
+#   backward-compatible, so a 2.36 binary runs fine on the Ubuntu 24.04 (glibc
+#   2.39) fleet — the guard below just caps the max at 2.39. (A native
+#   ubuntu:24.04 builder would target 2.39 exactly but needs extra toolchain
+#   setup — CMake failed to detect the compiler in a quick attempt; left as a
+#   future cleanup. Set BUILDER_IMAGE=ubuntu:24.04 to retry.) Deps come via
+#   vcpkg (static libs); libstdc++/libgcc are linked statically with MARCH=''.
 #
 # RUNTIME DEPENDENCIES on the target (Ubuntu 24.04): glibc 2.39, libmnl0, libcap2
 #   (libcap.so.2 + libpsx.so.2), libtinfo6, and libncurses6 -- the last one is
@@ -25,7 +27,7 @@
 #   SCION_CPP=/path/to/scion-cpp ./tools/build-scitra.sh
 # Env vars:
 #   SCION_CPP          scion-cpp git checkout (default /home/tony/lshulz/scion-cpp)
-#   BUILDER_IMAGE      build container (default ubuntu:24.04 -- keep glibc <= 2.39)
+#   BUILDER_IMAGE      build container (default gcc:13-bookworm -- keep glibc <= 2.39)
 #   SCITRA_BUILD_WORK  persistent vcpkg/cmake cache (default ~/.cache/scitra-work)
 # Requires: docker, and network access from the build container (vcpkg fetches).
 # First run ~30-45 min (grpc/boost/protobuf from source); reruns are cached.
@@ -45,7 +47,7 @@
 set -euo pipefail
 
 SCION_CPP="${SCION_CPP:-/home/tony/lshulz/scion-cpp}"
-BUILDER_IMAGE="${BUILDER_IMAGE:-ubuntu:24.04}"
+BUILDER_IMAGE="${BUILDER_IMAGE:-gcc:13-bookworm}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$REPO_ROOT/.build/scitra/bin"
 WORK="${SCITRA_BUILD_WORK:-$HOME/.cache/scitra-work}"
@@ -79,8 +81,8 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "[1/5] apt build prerequisites"
 apt-get update -qq
-# build-essential (gcc-13/g++-13 on noble) is explicit here: the ubuntu:24.04
-# base ships no compiler, unlike the old gcc:13-bookworm image.
+# build-essential is redundant on gcc:13-bookworm (compiler preinstalled) but
+# harmless, and it's what a bare ubuntu:24.04 BUILDER_IMAGE would need.
 apt-get install -y --no-install-recommends \
   build-essential ninja-build pkg-config git curl zip unzip tar ca-certificates \
   autoconf automake libtool autoconf-archive python3 bison flex \
