@@ -40,7 +40,7 @@ func newPlayServer(t *testing.T, target string) http.Handler {
 	st := store.New(60)
 	d := derive.New(g, st)
 	jc := JoinConfig{PlayTargets: map[int]string{158: target}}
-	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, nil)
+	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, nil, nil)
 }
 
 func TestPlayProxyStripsPrefixAndForwardsAuth(t *testing.T) {

@@ -22,6 +22,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/idint"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/linkdclient"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/ratelimit"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
@@ -100,6 +101,11 @@ type server struct {
 	pool    PoolStore
 	limiter *ratelimit.Limiter
 
+	// tr is the ID-INT trace session manager (Task 4). nil disables the
+	// feature entirely: all four /api/idint routes 404, as if they did not
+	// exist, matching the join-flow convention.
+	tr *idint.Manager
+
 	hub      *hub
 	upgrader websocket.Upgrader
 	mux      *http.ServeMux
@@ -121,8 +127,10 @@ type server struct {
 // disable static serving (e.g. API-only deployments and tests). jc and pool
 // wire the attendee join flow (Plan B); pass JoinConfig{} and nil to disable
 // it, which 404s every /api/join route. /api/instructions is independent of
-// Enabled: it serves [] / content whenever InstructionsDir is set.
-func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static fs.FS, jc JoinConfig, pool PoolStore) http.Handler {
+// Enabled: it serves [] / content whenever InstructionsDir is set. tr wires
+// the ID-INT trace session (Task 4); pass nil to disable it, which 404s
+// every /api/idint route.
+func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static fs.FS, jc JoinConfig, pool PoolStore, tr *idint.Manager) http.Handler {
 	if jc.RateMax <= 0 {
 		jc.RateMax = 5
 	}
@@ -138,6 +146,7 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 		join:      jc,
 		pool:      pool,
 		limiter:   ratelimit.New(jc.RateMax, jc.RateWindow, nil),
+		tr:        tr,
 		hub:       newHub(),
 		upgrader: websocket.Upgrader{
 			// The dashboard is served same-origin in production, but the dev
@@ -161,6 +170,10 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 	s.mux.HandleFunc("GET /api/join/bundle/{as}", s.handleJoinBundle)
 	s.mux.HandleFunc("GET /api/instructions", s.handleInstructionsList)
 	s.mux.HandleFunc("GET /api/instructions/{name}", s.handleInstruction)
+	s.mux.HandleFunc("GET /api/idint/paths", s.handleIdintPaths)
+	s.mux.HandleFunc("PUT /api/idint/trace", s.handleIdintTraceSet)
+	s.mux.HandleFunc("DELETE /api/idint/trace", s.handleIdintTraceClear)
+	s.mux.HandleFunc("GET /api/idint/trace", s.handleIdintTraceGet)
 	s.mux.HandleFunc("/play/{as}", s.handlePlayRoot)
 	s.mux.HandleFunc("/play/{as}/{path...}", s.handlePlayProxy)
 	if static != nil {
@@ -315,6 +328,9 @@ func (s *server) handleLive(w http.ResponseWriter, r *http.Request) {
 		// No broadcast tick has run yet (RunBroadcast not started, or this
 		// connect raced the very first tick); fall back to a direct call.
 		f := s.d.Frame(time.Now().UnixMilli())
+		if s.tr != nil {
+			f.Trace = s.tr.VM()
+		}
 		frame = &f
 	}
 	snap := snapshotMsg{Type: "snapshot", Topology: s.g, Frame: *frame}
@@ -360,6 +376,9 @@ func RunBroadcast(ctx context.Context, h http.Handler, frameInterval, pollInterv
 			return
 		case <-frameTick.C:
 			f := s.d.Frame(time.Now().UnixMilli())
+			if s.tr != nil {
+				f.Trace = s.tr.VM()
+			}
 			s.lastFrame.Store(&f)
 			msg := frameMsg{Type: "frame", Frame: f}
 			data, err := json.Marshal(msg)

@@ -22,6 +22,7 @@ import (
 
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/api"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/idint"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/linkdclient"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/mock"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/scrape"
@@ -111,6 +112,22 @@ type config struct {
 	// api package default of 5). Venue NAT64 can put many attendees behind
 	// one source IP, so the on-site value must absorb a booth-opening rush.
 	ClaimRateMax int `toml:"claim_rate_max"`
+
+	// Idint configures the ID-INT path-inspector trace feature (spec
+	// 2026-07-07). Disabled by default; in mock mode a synthetic prober is
+	// substituted (see the mock branch) so the panel works offline.
+	Idint idintConfig `toml:"idint"`
+}
+
+// idintConfig is the [idint] TOML table: the ID-INT path-inspector trace
+// feature. Enabled false (the default) means fabricd never builds a
+// *idint.Manager, which 404s every /api/idint route (see api.New's tr
+// param).
+type idintConfig struct {
+	Enabled         bool `toml:"enabled"`
+	ProberPort      int  `toml:"prober_port"`
+	ReflectorPort   int  `toml:"reflector_port"`
+	ProbeIntervalMs int  `toml:"probe_interval_ms"`
 }
 
 // loadConfig decodes path over these defaults: an empty file is fine
@@ -128,6 +145,7 @@ func loadConfig(path string) (config, error) {
 		HubProbeAddr:     "10.20.3.201:22",
 		WGPoolPath:       "/var/lib/fabricd/wg-pool.json",
 		WGStatePath:      "/var/lib/fabricd/wg-claims.json",
+		Idint:            idintConfig{ProberPort: 30490, ReflectorPort: 32001, ProbeIntervalMs: 1000},
 	}
 	if _, err := toml.DecodeFile(path, &c); err != nil {
 		return config{}, err
@@ -220,6 +238,14 @@ func main() {
 		}
 	}
 
+	var tr *idint.Manager
+	if cfg.Idint.Enabled && !cfg.Mock {
+		p := idint.NewHTTPProber(g, cfg.Idint.ProberPort, cfg.Idint.ReflectorPort,
+			&http.Client{Timeout: 2 * time.Second})
+		tr = idint.NewManager(g, p, time.Duration(cfg.Idint.ProbeIntervalMs)*time.Millisecond)
+		go tr.Run(ctx)
+	}
+
 	d := derive.New(g, st)
 	if cfg.BaselinesPath != "" {
 		go runBaselinePersistence(cfg.BaselinesPath, d)
@@ -232,7 +258,7 @@ func main() {
 		log.Printf("warning: static dir %q not found; static file serving disabled", cfg.StaticDir)
 	}
 
-	h := api.New(g, st, d, lc, static, jc, pool)
+	h := api.New(g, st, d, lc, static, jc, pool, tr)
 	go api.RunBroadcast(ctx, h, frameInterval, pollInterval)
 
 	log.Printf("fabricd listening on %s", cfg.Listen)

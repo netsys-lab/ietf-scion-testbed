@@ -58,7 +58,7 @@ func newBundleServer(t *testing.T, configDir string) http.Handler {
 	st := store.New(60)
 	d := derive.New(g, st)
 	jc := JoinConfig{Enabled: true, BoothCode: "x", JoinableASes: []int{158, 159, 160, 161}, ConfigDir: configDir}
-	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, nil)
+	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, nil, nil)
 }
 
 func readTarGz(t *testing.T, body []byte) map[string]string {

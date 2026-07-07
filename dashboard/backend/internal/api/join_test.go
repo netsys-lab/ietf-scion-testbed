@@ -66,7 +66,7 @@ func newJoinServer(t *testing.T, slots int) http.Handler {
 		EndpointV6:   "fd99::201", EndpointV4: "203.0.113.7", ListenPort: 51820,
 		RateMax: 100, RateWindow: time.Minute,
 	}
-	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, pool)
+	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, pool, nil)
 }
 
 func postClaim(t *testing.T, h http.Handler, body string) *httptest.ResponseRecorder {

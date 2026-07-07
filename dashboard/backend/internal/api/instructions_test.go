@@ -26,7 +26,7 @@ func newInstrServer(t *testing.T, dir string) http.Handler {
 	st := store.New(60)
 	d := derive.New(g, st)
 	jc := JoinConfig{InstructionsDir: dir}
-	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, nil)
+	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, nil, nil)
 }
 
 func TestInstructionsList(t *testing.T) {
