@@ -1,0 +1,80 @@
+---
+# Layer the SCION app fleet onto the playground endhosts. Runs AFTER
+# deploy_playground.yaml (which installs sciond + the guest sandbox).
+# Uses builtin modules only (no collection deps); the containers reach the
+# internet through the mgmt-bridge NAT for apt / git / pip.
+- name: Deploy SCION app fleet to playground endhosts
+  hosts: playground
+  become: true
+  vars:
+    scion_apps_bin: "{{ playbook_dir }}/../../.build/scion-apps/bin"
+    apps_files: "{{ playbook_dir }}/../files/playground/apps"
+    scapy_repo: https://github.com/lschulz/scapy-scion-int
+    scapy_commit: be75ae1b2993270c9ad33ce7fc97bfe512bc9da1
+    scapy_dir: /opt/scapy-scion-int
+  tasks:
+    - name: Install curl, git, python venv tooling
+      ansible.builtin.apt:
+        name: [curl, git, python3-venv, python3-pip]
+        state: present
+        update_cache: true
+
+    - name: Install scion-apps binaries
+      ansible.builtin.copy:
+        src: "{{ scion_apps_bin }}/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+      loop: [scion-bwtestclient, scion-bwtestserver, scion-netcat, scion-bat]
+
+    - name: Install scion2ip (pure-python stdlib converter)
+      ansible.builtin.copy:
+        src: "{{ apps_files }}/scion2ip"
+        dest: /usr/local/bin/scion2ip
+        mode: "0755"
+
+    - name: Install ip2scion as a symlink (script dispatches on argv[0])
+      ansible.builtin.file:
+        src: scion2ip
+        dest: /usr/local/bin/ip2scion
+        state: link
+
+    - name: Clone scapy-scion-int at the pinned commit
+      ansible.builtin.git:
+        repo: "{{ scapy_repo }}"
+        dest: "{{ scapy_dir }}"
+        version: "{{ scapy_commit }}"
+        depth: 1
+        force: true
+
+    - name: Create scapy-scion-int venv (Python 3.12)
+      ansible.builtin.command:
+        cmd: python3 -m venv {{ scapy_dir }}/.venv
+        creates: "{{ scapy_dir }}/.venv/bin/python"
+
+    - name: Install scapy-scion-int into the venv (editable + extras)
+      ansible.builtin.command:
+        cmd: "{{ scapy_dir }}/.venv/bin/pip install -e '.[extras]'"
+        chdir: "{{ scapy_dir }}"
+      register: pip_out
+      changed_when: "'Successfully installed' in pip_out.stdout"
+
+    - name: Wrapper so `scapy-scion` runs the venv scapy on PATH
+      ansible.builtin.copy:
+        content: |
+          #!/bin/bash
+          exec {{ scapy_dir }}/.venv/bin/python -m scapy "$@"
+        dest: /usr/local/bin/scapy-scion
+        mode: "0755"
+
+    - name: Install scion-bwtestserver unit
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/playground/scion-bwtestserver.service"
+        dest: /etc/systemd/system/scion-bwtestserver.service
+        mode: "0644"
+
+    - name: Enable + start scion-bwtestserver
+      ansible.builtin.systemd:
+        name: scion-bwtestserver
+        enabled: true
+        state: restarted
+        daemon_reload: true

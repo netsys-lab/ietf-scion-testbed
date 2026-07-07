@@ -1,0 +1,14 @@
+[Unit]
+Description=SCION bandwidth-test server (scion-apps)
+After=scion-sciond.service
+Requires=scion-sciond.service
+
+[Service]
+Environment=SCION_DAEMON_ADDRESS=127.0.0.1:30255
+ExecStart=/usr/local/bin/scion-bwtestserver --listen :40002
+Restart=always
+RestartSec=3
+DynamicUser=yes
+
+[Install]
+WantedBy=multi-user.target
