@@ -434,6 +434,10 @@ export default function FabricMap() {
             <path className="trace-base" d={traceD} />
             {trace.ok && (
               <>
+                {/* Marching dashes flow src -> dst so the traced path reads
+                    clearly across the booth even between comet passes; they
+                    stop with the comet on probe errors (base stays). */}
+                <path className="trace-dash" d={traceD} />
                 <circle className="trace-comet" r={4}>
                   <animateMotion dur="2.2s" repeatCount="indefinite" path={traceD} />
                 </circle>
