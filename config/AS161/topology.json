@@ -27,7 +27,7 @@
           "link_to": "parent",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         },
         "27736": {
@@ -39,7 +39,7 @@
           "link_to": "parent",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         },
         "58233": {
@@ -51,13 +51,13 @@
           "link_to": "parent",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         }
       },
       "idint": {
         "id": 1,
-        "internal_speed": 10000000
+        "internal_speed": 1000000000
       }
     }
   }

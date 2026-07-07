@@ -5,6 +5,12 @@ Emits, per AS, into config/AS<n>/:
   staticInfoConfig.base.json  - static StaticInfoCfg (geo/linktype/intra/note
                                 + story baselines for Inter latency/bandwidth)
   linkd-baseline.json         - {ifid: {delay_ms, rate_mbit}} preshape profile
+  topology.json               - rewritten in place: per-interface idint.speed
+                                and per-BR idint.internal_speed derived from
+                                the same story rates (bits/s — the fork BR's
+                                ID-INT utilization meters divide by this;
+                                router/dp_metrics.go newLinkMeter). All other
+                                topology fields, incl. idint.id, pass through.
 
 Usage: gen_staticinfo.py [--check]
   --check: regenerate in memory and diff against committed files (exit 1 on drift).
@@ -107,31 +113,50 @@ def generate(root, story):
         d = os.path.join(root, f"config/AS{asnum}")
         files[os.path.join(d, "staticInfoConfig.base.json")] = base
         files[os.path.join(d, "linkd-baseline.json")] = baseline
-    return files
+
+        # Refresh the committed topology.json's ID-INT speeds from the same
+        # story rates that feed linkd-baseline.json (baseline shaping): the
+        # BR utilization meters read these as bits/s, so a stale/mis-scaled
+        # value makes ID-INT egress_link_tx read 100% on idle links.
+        tpath = os.path.join(d, "topology.json")
+        with open(tpath) as fh:
+            topo = json.load(fh)
+        for br in topo["border_routers"].values():
+            br.setdefault("idint", {})["internal_speed"] = \
+                intra["bandwidth_mbit"] * 10**6
+            for ifid, ic in br["interfaces"].items():
+                ic.setdefault("idint", {})["speed"] = \
+                    baseline[ifid]["rate_mbit"] * 10**6
+        files[tpath] = topo
+    return {p: render(p, obj) for p, obj in files.items()}
 
 
-def render(obj):
+def render(path, obj):
+    # topology.json keeps its committed style (indent=2, insertion order);
+    # the generated metadata files keep theirs (indent=1, sorted keys).
+    if os.path.basename(path) == "topology.json":
+        return json.dumps(obj, indent=2) + "\n"
     return json.dumps(obj, indent=1, sort_keys=True) + "\n"
 
 
 def write_files(files):
-    for path, obj in files.items():
+    for path, text in files.items():
         with open(path, "w") as f:
-            f.write(render(obj))
+            f.write(text)
 
 
 def main():
     with open(os.path.join(ROOT, "topology/staticinfo.yml")) as fh:
         story = yaml.safe_load(fh)
     files = generate(ROOT, story)
-    nas = len(files) // 2
+    nas = len(files) // 3
     if "--check" in sys.argv[1:]:
-        def stale(p, obj):
+        def stale(p, text):
             if not os.path.exists(p):
                 return True
             with open(p) as fh:
-                return fh.read() != render(obj)
-        drift = [p for p, obj in sorted(files.items()) if stale(p, obj)]
+                return fh.read() != text
+        drift = [p for p, text in sorted(files.items()) if stale(p, text)]
         if drift:
             for p in drift:
                 print(f"DRIFT: {os.path.relpath(p, ROOT)}", file=sys.stderr)

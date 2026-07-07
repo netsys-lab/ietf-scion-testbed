@@ -29,7 +29,7 @@
           "link_to": "core",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         },
         "48344": {
@@ -41,7 +41,7 @@
           "link_to": "core",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         },
         "43214": {
@@ -53,7 +53,7 @@
           "link_to": "core",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         },
         "25173": {
@@ -65,7 +65,7 @@
           "link_to": "child",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         },
         "50187": {
@@ -77,7 +77,7 @@
           "link_to": "child",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         },
         "24381": {
@@ -89,13 +89,13 @@
           "link_to": "child",
           "mtu": 1452,
           "idint": {
-            "speed": 100000
+            "speed": 100000000
           }
         }
       },
       "idint": {
         "id": 1,
-        "internal_speed": 10000000
+        "internal_speed": 1000000000
       }
     }
   }

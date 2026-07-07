@@ -112,6 +112,55 @@ class TestGenerate(unittest.TestCase):
         with self.assertRaises(SystemExit):
             g.generate(self.root, self.story)
 
+    def test_topology_idint_speed_from_baseline(self):
+        # The BR's ID-INT utilization meters read idint.speed in bits/s
+        # (fork router/dp_metrics.go newLinkMeter); the generator must derive
+        # it from the same story rate that feeds linkd-baseline.json.
+        files = g.generate(self.root, self.story)
+        g.write_files(files)
+        t = self.out(150, "topology.json")
+        br = t["border_routers"]["br1-150-1"]
+        # tier core = 10000 mbit -> 10_000_000_000 bits/s
+        self.assertEqual(br["interfaces"]["18982"]["idint"]["speed"], 10000 * 10**6)
+        self.assertEqual(br["interfaces"]["20879"]["idint"]["speed"], 10000 * 10**6)
+        # BR internal speed from the intra story (100000 mbit)
+        self.assertEqual(br["idint"]["internal_speed"], 100000 * 10**6)
+        # untouched fields survive the rewrite
+        self.assertEqual(br["interfaces"]["18982"]["link_to"], "core")
+        self.assertEqual(br["interfaces"]["18982"]["underlay"]["local"],
+                         "[fd00:fade:2::150]:50000")
+        self.assertEqual(t["isd_as"], "1-150")
+
+    def test_topology_idint_bandwidth_override_flows_to_speed(self):
+        # A per-link bandwidth override must land in BOTH linkd-baseline.json
+        # and topology.json idint.speed — one source of truth.
+        self.story["overrides"]["150-152"]["bandwidth_mbit"] = 500
+        files = g.generate(self.root, self.story)
+        tpath = os.path.join(self.root, "config/AS150/topology.json")
+        topo = json.loads(files[tpath])
+        self.assertEqual(
+            topo["border_routers"]["br1-150-1"]["interfaces"]["18982"]["idint"]["speed"],
+            500 * 10**6)
+        bl = json.loads(files[os.path.join(self.root, "config/AS150/linkd-baseline.json")])
+        self.assertEqual(bl["18982"]["rate_mbit"], 500)
+
+    def test_topology_idint_preserves_node_id(self):
+        # Existing idint.id (the BR's ID-INT node id) must survive regeneration;
+        # only the speed fields are generator-owned.
+        p = os.path.join(self.root, "config/AS150/topology.json")
+        with open(p) as f:
+            t = json.load(f)
+        t["border_routers"]["br1-150-1"]["idint"] = {"id": 7, "internal_speed": 1}
+        t["border_routers"]["br1-150-1"]["interfaces"]["18982"]["idint"] = {"speed": 1}
+        with open(p, "w") as f:
+            json.dump(t, f)
+        files = g.generate(self.root, self.story)
+        topo = json.loads(files[p])
+        br = topo["border_routers"]["br1-150-1"]
+        self.assertEqual(br["idint"]["id"], 7)
+        self.assertEqual(br["idint"]["internal_speed"], 100000 * 10**6)
+        self.assertEqual(br["interfaces"]["18982"]["idint"]["speed"], 10000 * 10**6)
+
 
 class TestDurationFormat(unittest.TestCase):
     """Round-trip guard: every emitted duration string must parse under the
