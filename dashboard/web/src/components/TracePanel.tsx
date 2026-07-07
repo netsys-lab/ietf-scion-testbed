@@ -1,6 +1,6 @@
 // TracePanel — the ID-INT path-inspector console. An operator picks a
 // src/dst AS pair, lists sciond's candidate paths for that pair (AUTO =
-// follow sciond's own best-path choice, or pin a specific fingerprint), and
+// follow the advertised-fastest path, or pin a specific fingerprint), and
 // a shared backend trace session probes the pinned path at 1 Hz. Every live
 // frame carries the session's current state as frame.trace (TraceVM); this
 // panel is a thin, mostly-derived view over that plus the local
@@ -161,7 +161,7 @@ export default function TracePanel() {
               aria-pressed={!!vm?.auto && vm.src === ia(src) && vm.dst === ia(dst)}
               onClick={() => pickPath(undefined)}
             >
-              <span>AUTO — follow sciond's best</span>
+              <span>AUTO — follow advertised-fastest path</span>
             </button>
             {paths?.map((p) => (
               <button

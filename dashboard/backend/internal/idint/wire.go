@@ -25,7 +25,7 @@ type PathJSON struct {
 // PathsResponse is the response to GET /api/v1/paths.
 type PathsResponse struct {
 	LocalIA string     `json:"local_ia"`
-	Paths   []PathJSON `json:"paths"` // sciond order; [0] = current best
+	Paths   []PathJSON `json:"paths"` // advertised-latency order; [0] = advertised-fastest
 }
 
 // HopRecord is one hop's worth of decoded ID-INT telemetry.

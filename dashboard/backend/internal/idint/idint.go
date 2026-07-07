@@ -35,8 +35,8 @@ type Prober interface {
 }
 
 // session is the trace session under inspection: an AS pair and an optional
-// pinned path fingerprint ("" means follow whatever sciond currently
-// considers best, i.e. Auto).
+// pinned path fingerprint ("" means follow the advertised-fastest path,
+// i.e. Auto).
 type session struct {
 	src, dst    int
 	fingerprint string
@@ -106,7 +106,7 @@ func (m *Manager) validate(src, dst int) error {
 }
 
 // Set starts (or replaces) the shared trace session. fingerprint == "" means
-// auto-follow sciond's current best path. The view model resets to a
+// auto-follow the advertised-fastest path. The view model resets to a
 // pending state (no hops yet) until the first successful tick.
 func (m *Manager) Set(src, dst int, fingerprint string) error {
 	if err := m.validate(src, dst); err != nil {
