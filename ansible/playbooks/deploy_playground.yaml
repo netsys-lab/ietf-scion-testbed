@@ -21,9 +21,9 @@
         state: present
         update_cache: true
 
-    # ttyd is not packaged in Debian 12 (bookworm); install the upstream
-    # static release binary to /usr/local/bin (matches ttyd.service.j2's
-    # ExecStart path).
+    # ttyd is not in the base distro repos (neither Debian nor Ubuntu 24.04);
+    # install the upstream static release binary to /usr/local/bin (matches
+    # ttyd.service.j2's ExecStart path).
     - name: Install ttyd static binary
       ansible.builtin.get_url:
         url: https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
