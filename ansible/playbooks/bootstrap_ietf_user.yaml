@@ -2,9 +2,14 @@
 # First-boot bootstrap: fresh containers have only root SSH (installed by
 # create_contianers.sh via --ssh-public-keys). Create the `ietf` deploy user
 # with passwordless sudo + the deploy key so every subsequent playbook (which
-# connects as ansible_user: ietf) works. Connects as root; run ONCE right
-# after create, before any other playbook. Uses builtin modules only (no
-# collection deps) so it works on a bare host.
+# connects as ansible_user: ietf) works. Run ONCE right after create, before
+# any other playbook. Uses builtin modules only (no collection deps).
+#
+# INVOKE AS ROOT — the inventory sets ansible_user: ietf on the groups, which
+# overrides the `-u root` CLI flag, so you MUST pass it as an extra-var
+# (highest precedence). ietf does not exist yet on a fresh container:
+#   ansible-playbook -i ansible/inventory.yaml -e ansible_user=root \
+#     ansible/playbooks/bootstrap_ietf_user.yaml
 - name: Bootstrap ietf deploy user on all containers
   hosts: nodes
   remote_user: root
