@@ -199,6 +199,7 @@ func main() {
 	var pool api.PoolStore // nil until B3 wires a real wgpool-backed store.
 
 	var lc api.Controller
+	var tr *idint.Manager
 	if cfg.Mock {
 		log.Printf("mock mode: synthesizing telemetry instead of scraping")
 		gen := mock.New(g, st, time.Now().UnixNano())
@@ -213,6 +214,11 @@ func main() {
 			log.Printf("mock: preshaped link %s (+12ms) for the demo", demoShapedLink)
 		})
 		lc = mock.NewController(g, gen)
+		if cfg.Idint.Enabled {
+			tp := mock.NewTraceProber(g, gen)
+			tr = idint.NewManager(g, tp, time.Duration(cfg.Idint.ProbeIntervalMs)*time.Millisecond)
+			go tr.Run(ctx)
+		}
 		// The join flow's WG hub, pool file, and playground targets are all
 		// real testbed infrastructure that mock mode has none of; force it
 		// off regardless of what config.toml says, so a mock/demo run never
@@ -236,14 +242,13 @@ func main() {
 				log.Fatalf("join enabled but pool unavailable: %v", err)
 			}
 		}
-	}
 
-	var tr *idint.Manager
-	if cfg.Idint.Enabled && !cfg.Mock {
-		p := idint.NewHTTPProber(g, cfg.Idint.ProberPort, cfg.Idint.ReflectorPort,
-			&http.Client{Timeout: 2 * time.Second})
-		tr = idint.NewManager(g, p, time.Duration(cfg.Idint.ProbeIntervalMs)*time.Millisecond)
-		go tr.Run(ctx)
+		if cfg.Idint.Enabled {
+			p := idint.NewHTTPProber(g, cfg.Idint.ProberPort, cfg.Idint.ReflectorPort,
+				&http.Client{Timeout: 2 * time.Second})
+			tr = idint.NewManager(g, p, time.Duration(cfg.Idint.ProbeIntervalMs)*time.Millisecond)
+			go tr.Run(ctx)
+		}
 	}
 
 	d := derive.New(g, st)
