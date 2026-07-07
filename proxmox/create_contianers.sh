@@ -17,7 +17,10 @@ TEMPLATE="${TEMPLATE:-local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst}"
 # cpulimit). Keep DEPLOY.md's CT214 (svc endhost) stanza in sync with
 # PLAY_OPTS. Memory values match the live fleet (the old blanket
 # "--memory 2048" was drift).
-COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys"
+# --rootfs on local-lvm (lvmthin): the only storage here that supports container
+# rootdir. Without it pct defaults to 'local' (dir storage) and fails with
+# "storage 'local' does not support container directories". 8 GiB thin cap.
+COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys --rootfs local-lvm:8"
 AS_OPTS="--cores 2 --memory 1024 --cpuunits 1000 $COMMON"
 DASH_OPTS="--cores 2 --memory 1024 --cpuunits 300 $COMMON"
 HUB_OPTS="--cores 2 --memory 1024 --cpuunits 200 $COMMON"

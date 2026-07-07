@@ -1,0 +1,99 @@
+<h2>Map treatment — how should the probed path show on the FabricMap?</h2>
+<p class="subtitle">Same trace (150 → 154 → 155 → 161). The map already uses color for link health bands (steel/amber/red) and warm-white particles for traffic, so the trace treatment must not impersonate either. All three use brass — the existing "selection/chrome" accent that is never a data encoding.</p>
+
+<style>
+  .mapmk { background:#0D1119; border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:8px; }
+  .mapmk svg { display:block; width:100%; height:auto; }
+  .mapmk .lk { stroke:#5A7A9E; stroke-width:2.5; fill:none; opacity:.55; }
+  .mapmk .lk.dim { opacity:.25; }
+  .mapmk .st { fill:#131A26; stroke:#5A7A9E; stroke-width:1.6; }
+  .mapmk .st.on { stroke:#C9B37E; }
+  .mapmk text { font-family: ui-monospace,Consolas,Menlo,monospace; font-size:10px; fill:#9AA3B2; }
+  .mapmk text.on { fill:#C9B37E; }
+  @keyframes march { to { stroke-dashoffset: -24; } }
+  .mapmk .dash { stroke:#C9B37E; stroke-width:2.5; fill:none; stroke-dasharray:7 5; animation:march 1.1s linear infinite; }
+  .mapmk .glow { stroke:#C9B37E; stroke-width:3; fill:none; filter:drop-shadow(0 0 4px rgba(201,179,126,.9)); }
+  .mapmk .base-on { stroke:#C9B37E; stroke-width:2.5; fill:none; opacity:.5; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="dashed" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#07090F; padding:10px;">
+      <div class="mapmk">
+        <svg viewBox="0 0 320 150">
+          <path class="lk dim" d="M40,110 L100,40"/> <path class="lk dim" d="M100,40 L180,110"/>
+          <path class="lk dim" d="M180,40 L260,110"/> <path class="lk dim" d="M100,40 L180,40"/>
+          <path class="lk" d="M40,110 L100,110"/> <path class="lk" d="M100,110 L180,40"/>
+          <path class="lk" d="M180,40 L260,40"/>
+          <path class="dash" d="M40,110 L100,110 L180,40 L260,40"/>
+          <circle class="st on" cx="40" cy="110" r="7"/><circle class="st on" cx="100" cy="110" r="7"/>
+          <circle class="st on" cx="180" cy="40" r="7"/><circle class="st on" cx="260" cy="40" r="7"/>
+          <circle class="st" cx="100" cy="40" r="7"/><circle class="st" cx="180" cy="110" r="7"/><circle class="st" cx="260" cy="110" r="7"/>
+          <text class="on" x="28" y="132">150</text><text class="on" x="88" y="132">154</text>
+          <text class="on" x="168" y="28">155</text><text class="on" x="248" y="28">161</text>
+          <text x="88" y="28">151</text><text x="168" y="132">158</text><text x="248" y="132">160</text>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Marching dashes</h3>
+      <p>Brass dashed overlay flowing src → dst along the probed links; endpoint stations ringed brass. Constant motion signals "live probing" and shows direction, cheap CSS animation on an overlay path. Adds permanent motion to an already-animated map (particles).</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="glow" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#07090F; padding:10px;">
+      <div class="mapmk">
+        <svg viewBox="0 0 320 150">
+          <path class="lk dim" d="M40,110 L100,40"/> <path class="lk dim" d="M100,40 L180,110"/>
+          <path class="lk dim" d="M180,40 L260,110"/> <path class="lk dim" d="M100,40 L180,40"/>
+          <path class="lk" d="M40,110 L100,110"/> <path class="lk" d="M100,110 L180,40"/>
+          <path class="lk" d="M180,40 L260,40"/>
+          <path class="glow" d="M40,110 L100,110 L180,40 L260,40"/>
+          <circle class="st on" cx="40" cy="110" r="7"/><circle class="st on" cx="100" cy="110" r="7"/>
+          <circle class="st on" cx="180" cy="40" r="7"/><circle class="st on" cx="260" cy="40" r="7"/>
+          <circle class="st" cx="100" cy="40" r="7"/><circle class="st" cx="180" cy="110" r="7"/><circle class="st" cx="260" cy="110" r="7"/>
+          <text class="on" x="28" y="132">150</text><text class="on" x="88" y="132">154</text>
+          <text class="on" x="168" y="28">155</text><text class="on" x="248" y="28">161</text>
+          <text x="88" y="28">151</text><text x="168" y="132">158</text><text x="248" y="132">160</text>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Static brass glow</h3>
+      <p>Probed links get a steady brass glow (drop-shadow) over their health color; no added motion. Calmest option, keeps the particle layer as the only animation — but doesn't convey direction or "probing right now", and glows can smear on low-quality booth screens.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="comet" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#07090F; padding:10px;">
+      <div class="mapmk">
+        <svg viewBox="0 0 320 150">
+          <path class="lk dim" d="M40,110 L100,40"/> <path class="lk dim" d="M100,40 L180,110"/>
+          <path class="lk dim" d="M180,40 L260,110"/> <path class="lk dim" d="M100,40 L180,40"/>
+          <path class="lk" d="M40,110 L100,110"/> <path class="lk" d="M100,110 L180,40"/>
+          <path class="lk" d="M180,40 L260,40"/>
+          <path class="base-on" d="M40,110 L100,110 L180,40 L260,40"/>
+          <circle r="4" fill="#C9B37E">
+            <animateMotion dur="2.2s" repeatCount="indefinite" path="M40,110 L100,110 L180,40 L260,40"/>
+          </circle>
+          <circle r="2.2" fill="#FFF3DC" opacity=".9">
+            <animateMotion dur="2.2s" begin="0.12s" repeatCount="indefinite" path="M40,110 L100,110 L180,40 L260,40"/>
+          </circle>
+          <circle class="st on" cx="40" cy="110" r="7"/><circle class="st on" cx="100" cy="110" r="7"/>
+          <circle class="st on" cx="180" cy="40" r="7"/><circle class="st on" cx="260" cy="40" r="7"/>
+          <circle class="st" cx="100" cy="40" r="7"/><circle class="st" cx="180" cy="110" r="7"/><circle class="st" cx="260" cy="110" r="7"/>
+          <text class="on" x="28" y="132">150</text><text class="on" x="88" y="132">154</text>
+          <text class="on" x="168" y="28">155</text><text class="on" x="248" y="28">161</text>
+          <text x="88" y="28">151</text><text x="168" y="132">158</text><text x="248" y="132">160</text>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Probe comet on a brass base</h3>
+      <p>Faint brass base marks the path; a brass comet travels src → dst on each probe tick — literally "watch the probe packet go collect telemetry". Strongest narrative for attendees, reuses the animateMotion approach the particle layer proved. Slightly more implementation than a dashed overlay.</p>
+    </div>
+  </div>
+
+</div>
