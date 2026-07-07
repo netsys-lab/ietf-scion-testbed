@@ -3,11 +3,26 @@
   hosts: svc
   become: true
   tasks:
-    - name: Install scitra runtime deps + curl (debug convenience)
+    - name: Install scitra runtime deps + curl (debug) + ufw
       ansible.builtin.apt:
-        name: [libncurses6, curl]
+        name: [libncurses6, curl, ufw]
         state: present
         update_cache: true
+
+    # svc-151 has a venue leg (eth1 on vmbr0) so DNS etc. are reachable by
+    # regular-IP clients. The venue net is globally routable, so lock it down:
+    # deny incoming by default, trust only the isolated mgmt bridge (eth0).
+    # Open specific venue-leg ports (e.g. DNS 53, ideally scoped to venue/lab
+    # prefixes) deliberately when the service is deployed. Configured via ufw's
+    # CLI (idempotent) to avoid a galaxy collection dependency.
+    - name: ufw baseline (deny incoming, allow outgoing, trust mgmt eth0)
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - ufw default deny incoming
+        - ufw default allow outgoing
+        - ufw allow in on eth0
+        - ufw --force enable
+      changed_when: false
 
     # svc-151 is a PRIVILEGED container, so file capabilities persist: let a
     # non-root user (ietf) run plain `ping` without sudo. (No-op / harmless if

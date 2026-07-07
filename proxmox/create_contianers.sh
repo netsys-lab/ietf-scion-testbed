@@ -144,10 +144,15 @@ pct create 213 $TEMPLATE $PLAY_OPTS --description "play-161" \
 # --- Headless service endhost: svc-151 (scitra --scmp + fork sciond) ---
 # PRIVILEGED (not a guest-facing shell): it needs full net capabilities
 # (raw sockets for ping/scmp, etc.). nesting=1 for systemd 255.
+# Venue leg (eth1 on vmbr0, DHCP v4 + SLAAC v6): svc-151 hosts services (DNS)
+# reachable from the network by regular-IP clients, not only over SCION. The
+# venue net is globally routable, so this leg is firewalled by ufw (deny
+# incoming; only mgmt/eth0 trusted) — see deploy_svc_endhost.yaml.
 pct create 214 $TEMPLATE --cores 1 --memory 512 --swap 512 --cpuunits 50 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
     --unprivileged 0 --features nesting=1 --onboot 1 --description "svc-151" \
-    --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1
+    --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1 \
+    --net1 name=eth1,bridge=vmbr0,ip=dhcp,ip6=auto
 
 # scitra-tun (playground 210-213 + svc-151 214) needs /dev/net/tun, which is a
 # host-level LXC passthrough, NOT a pct flag. Load the module (persist it) and
