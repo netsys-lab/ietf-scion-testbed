@@ -22,6 +22,18 @@ passthrough for `scitra-tun`: two raw lines in each container's
 `tun` in the host's `/etc/modules-load.d/` so the module is loaded at boot.
 Requires a container restart to take effect; already applied to CT210–213.
 
+**CPU weights.** Containers carry tiered `cpuunits` (cgroup-v2 cpu.weight;
+set by `create_contianers.sh`, live-applied with `pct set`): AS containers
+1000 (the BR dataplane must win contention), dashboard 300, wg-hub 200,
+playground/svc 50 — a 20:1 BR-vs-guest ratio, work-conserving when idle.
+Inside each playground CT, attendee shells additionally live in
+`guest.slice` capped at `CPUQuota=80%`/`CPUWeight=20`
+(`/etc/systemd/system/guest.slice.d/cpu.conf`, shipped by
+`deploy_playground.yaml`) so a busy guest cannot starve that container's
+own scitra/sciond/ttyd. Caveat: WireGuard crypto and bridge/veth forwarding
+run in kernel context outside any container cgroup — the link bandwidth
+tiers are the bound there, not these weights.
+
 ## Prereqs
 
 - Go 1.22+, Node 22+, `dpkg-deb` (build host).
@@ -362,7 +374,7 @@ Create the container (one-time, on the Proxmox host):
 
 ```sh
 pct create 214 local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst \
-  --hostname svc-151 --cores 1 --memory 512 --swap 512 --rootfs local-lvm:4 \
+  --hostname svc-151 --cores 1 --memory 512 --swap 512 --cpuunits 50 --rootfs local-lvm:4 \
   --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1 \
   --unprivileged 1 --features nesting=1 --onboot 1
 ```
