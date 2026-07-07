@@ -3,11 +3,17 @@
   hosts: svc
   become: true
   tasks:
-    - name: Install scitra runtime deps + curl (debug) + ufw
+    - name: Install scitra runtime deps + curl (debug) + ufw + fail2ban
       ansible.builtin.apt:
-        name: [libncurses6, curl, ufw]
+        name: [libncurses6, curl, ufw, fail2ban]
         state: present
         update_cache: true
+
+    - name: Enable + start fail2ban (default sshd jail — brute-force protection)
+      ansible.builtin.systemd:
+        name: fail2ban
+        enabled: true
+        state: started
 
     # svc-151 has a venue leg (eth1 on vmbr0) so DNS etc. are reachable by
     # regular-IP clients. The venue net is globally routable, so lock it down:
