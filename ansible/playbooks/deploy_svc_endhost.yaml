@@ -3,11 +3,18 @@
   hosts: svc
   become: true
   tasks:
-    - name: Install scitra runtime deps
+    - name: Install scitra runtime deps + curl (debug convenience)
       ansible.builtin.apt:
-        name: [libncurses6]
+        name: [libncurses6, curl]
         state: present
         update_cache: true
+
+    # svc-151 is a PRIVILEGED container, so file capabilities persist: let a
+    # non-root user (ietf) run plain `ping` without sudo. (No-op / harmless if
+    # the container were unprivileged — the cap would just be stripped.)
+    - name: Allow non-root ping (cap_net_raw on the ping binary)
+      ansible.builtin.command: setcap cap_net_raw+ep /usr/bin/ping
+      changed_when: false
 
     - name: Copy endhost + tool binaries
       ansible.builtin.copy:
