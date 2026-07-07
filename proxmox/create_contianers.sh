@@ -137,3 +137,24 @@ pct create 212 $TEMPLATE $PLAY_OPTS --description "play-160" \
 
 pct create 213 $TEMPLATE $PLAY_OPTS --description "play-161" \
     --net0 name=eth0,bridge=mgmt,hwaddr=00:00:00:00:00:D5,ip=10.20.3.213/24,gw=10.20.3.1
+
+# --- Headless service endhost: svc-151 (scitra --scmp + fork sciond) ---
+# Not a hospitality shell; unprivileged + nesting like the attendee design.
+pct create 214 $TEMPLATE --cores 1 --memory 512 --swap 512 --cpuunits 50 \
+    --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
+    --unprivileged 1 --features nesting=1 --onboot 1 --description "svc-151" \
+    --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1
+
+# scitra-tun (playground 210-213 + svc-151 214) needs /dev/net/tun, which is a
+# host-level LXC passthrough, NOT a pct flag. Load the module (persist it) and
+# append the two raw lxc.* lines to each container's config, then reboot so the
+# bind mount takes effect. Idempotent.
+modprobe tun 2>/dev/null || true
+grep -qx tun /etc/modules-load.d/tun.conf 2>/dev/null || echo tun > /etc/modules-load.d/tun.conf
+for id in 210 211 212 213 214; do
+    conf="/etc/pve/lxc/$id.conf"
+    if [ -f "$conf" ] && ! grep -q "dev/net/tun" "$conf"; then
+        printf 'lxc.cgroup2.devices.allow: c 10:200 rwm\nlxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file\n' >> "$conf"
+        pct reboot "$id" 2>/dev/null || true
+    fi
+done
