@@ -80,6 +80,11 @@ describe("hopRows", () => {
     expect(rows[0]).toMatchObject({ egrPct: 12.5, queue: 3 });
     expect(rows[1]).toMatchObject({ egrPct: null, queue: null });
   });
+
+  it("returns [] instead of throwing when hops is null (backend regression belt-and-suspenders)", () => {
+    const rows = hopRows({ ...vm([]), hops: null as unknown as TraceHop[] }, {});
+    expect(rows).toEqual([]);
+  });
 });
 
 describe("pathLabel", () => {

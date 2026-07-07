@@ -126,6 +126,50 @@ func TestSetValidation(t *testing.T) {
 	}
 }
 
+// --- Case 1b: pending/error VM never marshals path_links/hops as null ---
+//
+// The wire contract pins path_links/hops as JSON arrays; a nil Go slice
+// marshals as `null`, which crashes frontend consumers that assume an
+// array. Set()'s pending VM and an error tick from that pending state must
+// both keep them as `[]`.
+
+func TestVMSlicesNeverNull(t *testing.T) {
+	m := NewManager(testGraph(), &fakeProber{probeFn: func(ctx context.Context, src, dst int, fingerprint string) (*ProbeResult, error) {
+		return nil, errors.New("probe timeout")
+	}}, time.Second)
+
+	if err := m.Set(150, 161, ""); err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(m.VM())
+	if err != nil {
+		t.Fatalf("marshal pending VM: %v", err)
+	}
+	if !strings.Contains(string(b), `"path_links":[]`) {
+		t.Errorf("pending VM JSON = %s, want \"path_links\":[]", b)
+	}
+	if !strings.Contains(string(b), `"hops":[]`) {
+		t.Errorf("pending VM JSON = %s, want \"hops\":[]", b)
+	}
+
+	// Error tick from pending state (no successful tick has landed yet).
+	m.TickOnce(context.Background())
+	vm := m.VM()
+	if vm.Ok {
+		t.Fatal("Ok = true after probe error, want false")
+	}
+	b, err = json.Marshal(vm)
+	if err != nil {
+		t.Fatalf("marshal post-error VM: %v", err)
+	}
+	if !strings.Contains(string(b), `"path_links":[]`) {
+		t.Errorf("post-error VM JSON = %s, want \"path_links\":[]", b)
+	}
+	if !strings.Contains(string(b), `"hops":[]`) {
+		t.Errorf("post-error VM JSON = %s, want \"hops\":[]", b)
+	}
+}
+
 // --- Case 2: TickOnce success collapses hops correctly ---
 
 func TestTickOnceSuccess(t *testing.T) {

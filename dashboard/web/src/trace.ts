@@ -20,9 +20,10 @@ export interface HopRow {
 // RTT in this VM (0 when no reading); shaped = that link currently carries a
 // shaping overlay in the live frame (bar renders warn-colored).
 export function hopRows(vm: TraceVM, linksById: Record<string, LinkVM>): HopRow[] {
-  const rtts = vm.hops.map((h) => h.rtt_next_br_us ?? 0);
+  const hops = vm.hops ?? [];
+  const rtts = hops.map((h) => h.rtt_next_br_us ?? 0);
   const max = Math.max(...rtts, 1);
-  return vm.hops.map((h) => ({
+  return hops.map((h) => ({
     link: h.link,
     ia: h.ia,
     rttMs: h.rtt_next_br_us != null ? h.rtt_next_br_us / 1000 : null,

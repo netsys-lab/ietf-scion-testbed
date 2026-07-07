@@ -59,10 +59,10 @@ export default function FabricMap() {
 
   // Recompute only when the path itself or the src endpoint changes, not on
   // every per-frame TraceVM object identity change (rtt/hops tick each poll).
-  const traceD = useMemo(
-    () => (trace ? tracePathD(trace.path_links, Number(trace.src.split("-")[1])) : null),
-    [trace?.path_links.join(","), trace?.src],
-  );
+  const traceD = useMemo(() => {
+    if (!trace?.path_links?.length) return null;
+    return tracePathD(trace.path_links, Number(trace.src.split("-")[1]));
+  }, [trace?.path_links?.join(","), trace?.src]);
 
   // Measure the length-midpoint of every trunk path after commit (mirrors the
   // mockup's getPointAtLength(len/2)); overlays hang off these. Re-runs when

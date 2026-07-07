@@ -109,7 +109,8 @@ export default function TracePanel() {
   };
 
   const rows = vm ? hopRows(vm, linksById) : [];
-  const allVerified = vm !== undefined && vm.hops.length > 0 && vm.hops.every((h) => h.verified);
+  const hops = vm?.hops ?? [];
+  const allVerified = vm !== undefined && hops.length > 0 && hops.every((h) => h.verified);
   const footer =
     rows.length > 0
       ? [...rows.map((r) => (r.rttMs != null ? `${r.rttMs.toFixed(1)} ms` : "– ms")), allVerified ? "MAC verified ✓" : "unverified"].join(
@@ -194,7 +195,7 @@ export default function TracePanel() {
         <h3>Hops</h3>
         {!vm && <span className="daemon-note">NO ACTIVE TRACE — pick a path above</span>}
         {vm?.error && <span className="daemon-note err">{vm.error}</span>}
-        {vm && !vm.error && vm.ok && vm.hops.length === 0 && <span className="daemon-note">PROBING…</span>}
+        {vm && !vm.error && vm.ok && hops.length === 0 && <span className="daemon-note">PROBING…</span>}
         {vm && (vm.error || rows.length > 0) && (
           <>
             <div className={vm.error ? "trace-stale" : undefined}>

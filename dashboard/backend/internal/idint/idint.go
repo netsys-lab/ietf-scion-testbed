@@ -116,10 +116,12 @@ func (m *Manager) Set(src, dst int, fingerprint string) error {
 	defer m.mu.Unlock()
 	m.sess = &session{src: src, dst: dst, fingerprint: fingerprint}
 	m.vm = &derive.TraceVM{
-		Src:  m.iaByNum[src],
-		Dst:  m.iaByNum[dst],
-		Auto: fingerprint == "",
-		Ok:   true,
+		Src:       m.iaByNum[src],
+		Dst:       m.iaByNum[dst],
+		Auto:      fingerprint == "",
+		Ok:        true,
+		PathLinks: []string{},
+		Hops:      []derive.TraceHop{},
 	}
 	m.latest = nil
 	return nil
@@ -144,8 +146,8 @@ func (m *Manager) VM() *derive.TraceVM {
 		return nil
 	}
 	cp := *m.vm
-	cp.PathLinks = append([]string(nil), m.vm.PathLinks...)
-	cp.Hops = append([]derive.TraceHop(nil), m.vm.Hops...)
+	cp.PathLinks = append([]string{}, m.vm.PathLinks...)
+	cp.Hops = append([]derive.TraceHop{}, m.vm.Hops...)
 	return &cp
 }
 
@@ -225,7 +227,13 @@ func (m *Manager) TickOnce(ctx context.Context) {
 		// the health fields. On the very first tick m.vm always exists
 		// (Set seeds a pending one), so this is never nil.
 		if m.vm == nil {
-			m.vm = &derive.TraceVM{Src: m.iaByNum[sess.src], Dst: m.iaByNum[sess.dst], Auto: sess.fingerprint == ""}
+			m.vm = &derive.TraceVM{
+				Src:       m.iaByNum[sess.src],
+				Dst:       m.iaByNum[sess.dst],
+				Auto:      sess.fingerprint == "",
+				PathLinks: []string{},
+				Hops:      []derive.TraceHop{},
+			}
 		}
 		m.vm.Ok = false
 		m.vm.Error = err.Error()
