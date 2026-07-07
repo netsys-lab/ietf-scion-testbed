@@ -45,8 +45,8 @@ func TestMetadataDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.StaticinfoBase != "/etc/scion/AS*/staticInfoConfig.base.json" {
-		t.Fatalf("StaticinfoBase = %q", c.StaticinfoBase)
+	if c.StaticinfoBase != "" {
+		t.Fatalf("StaticinfoBase = %q, want empty (static info stays static by default; set staticinfo_base to re-enable the writer)", c.StaticinfoBase)
 	}
 	if c.StaticinfoOut != "" {
 		t.Fatalf("StaticinfoOut = %q, want empty (derived)", c.StaticinfoOut)
