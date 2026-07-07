@@ -110,3 +110,11 @@ body.screen .chip text { font-size: 12px; }
 body.screen .connecting-label { font-size: 19px; }
 body.screen .link .trunk { stroke-width: 8.5px; }
 body.screen .link.selected .trunk { stroke-width: 9.5px; }
+
+/* ID-INT trace overlay: brass is the chrome/selection accent (never a data
+   encoding), so the traced path can't impersonate a health band. */
+.trace-overlay { pointer-events: none; }
+.trace-base { fill: none; stroke: var(--brass); stroke-width: 2.5; opacity: .45; }
+.trace-comet { fill: var(--brass); }
+.trace-comet.tail { fill: var(--particle); opacity: .9; }
+g.station.trace-end .station-disc { stroke: var(--brass); }

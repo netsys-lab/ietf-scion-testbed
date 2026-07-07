@@ -16,6 +16,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Band, LinkVM } from "../types";
 import { useFabricStore } from "../store";
 import { VIEWBOX, NODES, linkMeta, linkPath, stationList } from "../layout";
+import { traceEndpoints, tracePathD } from "../tracepath";
 import "./fabric.css";
 
 interface Mid {
@@ -42,6 +43,7 @@ export default function FabricMap() {
   const select = useFabricStore((s) => s.select);
   const setBooted = useFabricStore((s) => s.setBooted);
   const screen = useFabricStore((s) => s.screen);
+  const trace = useFabricStore((s) => s.frame?.trace);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [mids, setMids] = useState<Record<string, Mid>>({});
@@ -54,6 +56,13 @@ export default function FabricMap() {
   );
 
   const bandOf = (id: string): Band => linksById[id]?.band ?? "nominal";
+
+  // Recompute only when the path itself or the src endpoint changes, not on
+  // every per-frame TraceVM object identity change (rtt/hops tick each poll).
+  const traceD = useMemo(
+    () => (trace ? tracePathD(trace.path_links, Number(trace.src.split("-")[1])) : null),
+    [trace?.path_links.join(","), trace?.src],
+  );
 
   // Measure the length-midpoint of every trunk path after commit (mirrors the
   // mockup's getPointAtLength(len/2)); overlays hang off these. Re-runs when
@@ -316,7 +325,12 @@ export default function FabricMap() {
           ) : (
             stationList.map((st) => {
               const selectedAS = selected?.kind === "as" && selected.id === String(st.num);
-              const cls = "station" + (st.core ? " core" : "") + (selectedAS ? " selected" : "");
+              const isTraceEnd = trace !== undefined && traceEndpoints(trace).includes(st.num);
+              const cls =
+                "station" +
+                (st.core ? " core" : "") +
+                (selectedAS ? " selected" : "") +
+                (isTraceEnd ? " trace-end" : "");
               // Screen mode bumps the disc radius +2 for booth-distance
               // legibility; `r` is a plain SVG attribute (not a CSS
               // custom-prop hook like the map's font-sizes/stroke-widths in
@@ -411,6 +425,25 @@ export default function FabricMap() {
               );
             })()}
         </g>
+
+        {/* ID-INT trace overlay: brass path along the probed links, with a
+            travelling comet while the probe is healthy. Rendered last so it
+            sits above every other overlay. */}
+        {trace && traceD && (
+          <g className="trace-overlay" aria-hidden="true">
+            <path className="trace-base" d={traceD} />
+            {trace.ok && (
+              <>
+                <circle className="trace-comet" r={4}>
+                  <animateMotion dur="2.2s" repeatCount="indefinite" path={traceD} />
+                </circle>
+                <circle className="trace-comet tail" r={2.2}>
+                  <animateMotion dur="2.2s" begin="0.12s" repeatCount="indefinite" path={traceD} />
+                </circle>
+              </>
+            )}
+          </g>
+        )}
       </svg>
 
       <div id="legend" aria-hidden="true">
