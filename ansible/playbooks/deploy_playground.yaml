@@ -50,6 +50,24 @@
         mode: "0755"
       loop: [guest-login.sh, guest-setup.sh]
 
+    - name: Create guest.slice drop-in dir
+      ansible.builtin.file:
+        path: /etc/systemd/system/guest.slice.d
+        state: directory
+        mode: "0755"
+
+    - name: Cap guest shell CPU (guest.slice drop-in)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/playground/guest-slice-cpu.conf"
+        dest: /etc/systemd/system/guest.slice.d/cpu.conf
+        mode: "0644"
+      register: guest_slice_cpu
+
+    - name: Reload systemd to realize slice limits
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: guest_slice_cpu.changed
+
     - name: Create SCION config dir
       ansible.builtin.file:
         path: /etc/scion/certs
