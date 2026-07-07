@@ -28,8 +28,11 @@ if [ ! -d "$SRC/.git" ]; then
     git clone "$REPO" "$SRC"
 fi
 git -C "$SRC" pull --ff-only
-echo "Building scion-apps in $SRC (make -j)"
-( cd "$SRC" && make -j )
+# Build ONLY the targets we ship (the Makefile has per-binary phony rules).
+# Avoids scion-ssh/scion-sshd, whose cgo PAM dep needs libpam0g-dev headers we
+# don't want to require on the build host.
+echo "Building scion-apps targets: ${WANT[*]}"
+( cd "$SRC" && make -j "${WANT[@]}" )
 
 # scion-apps emits binaries under bin/; copy the ones we ship.
 for b in "${WANT[@]}"; do
