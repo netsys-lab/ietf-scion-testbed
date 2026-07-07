@@ -5,8 +5,8 @@
 # CGO_ENABLED=1 native linux-amd64 build, NOT for cross-compilation: the
 # fork's pkg/fcrypto (ID-INT crypto) is cgo-only ("build constraints exclude
 # all Go files" under CGO_ENABLED=0) — same limitation as build-endhost.sh.
-# Portability: the build host's glibc must be <= the oldest container's
-# (Debian 12, glibc 2.36); a symbol-version guard below enforces this.
+# Portability: the build host's glibc must be <= the fleet's
+# (Ubuntu 24.04, glibc 2.39); a symbol-version guard below enforces this.
 #
 # The tool's go.mod pins the lschulz/scion fork at 8ce7ed2f857d — the exact
 # upstream base of the deployed fork (158d2060b, ietf-126) — so ID-INT wire
@@ -37,11 +37,11 @@ mkdir -p "$OUT"
 echo "Building idint-traceroute @ $IDINT_TR_COMMIT -> $OUT"
 (cd "$WORK" && CGO_ENABLED=1 go build -o "$OUT/idint-traceroute" .)
 
-# Guard: binary must not require glibc newer than the oldest container
-# (Debian 12 => GLIBC_2.36 ceiling).
+# Guard: binary must not require glibc newer than the fleet
+# (Ubuntu 24.04 => GLIBC_2.39 ceiling).
 max_glibc="$(objdump -T "$OUT/idint-traceroute" | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -uV | tail -1)"
-if [ "$(printf '%s\nGLIBC_2.36\n' "$max_glibc" | sort -V | tail -1)" != "GLIBC_2.36" ]; then
-    echo "error: binary needs $max_glibc > GLIBC_2.36 ceiling (build on an older-glibc host)" >&2
+if [ "$(printf '%s\nGLIBC_2.39\n' "$max_glibc" | sort -V | tail -1)" != "GLIBC_2.39" ]; then
+    echo "error: binary needs $max_glibc > GLIBC_2.39 ceiling (build on an older-glibc host)" >&2
     exit 1
 fi
 

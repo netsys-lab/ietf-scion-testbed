@@ -1,18 +1,19 @@
 #!/bin/bash
 # Build scitra-tun (SCION<->IPv6 translator) and scion2ip from lschulz/scion-cpp
-# for the Debian 12 playground containers (CT210-213, glibc 2.36).
+# for the Ubuntu 24.04 playground containers (CT210-213, glibc 2.39).
 #
 # WHY A DOCKER BUILD:
 #   scion-cpp needs a C++23 toolchain (gcc >= 13) plus Boost >= 1.83 / gRPC >=
-#   1.51 / protobuf >= 3.21. No single apt host in this testbed provides those
-#   at a glibc old enough to also run on Debian 12: the dev box is Ubuntu 22.04
-#   (gcc 11, no C++23) and the Proxmox host is Debian 13 (glibc 2.41 -> a binary
-#   built there references __isoc23_* @GLIBC_2.38 and will NOT run on the
-#   Debian 12 containers). So we build inside gcc:13-bookworm (gcc 13.4 + glibc
-#   2.36 == the CT210/213 runtime), pull deps via vcpkg (static libs), and link
-#   libstdc++/libgcc statically with MARCH='' (portable amd64 baseline).
+#   1.51 / protobuf >= 3.21. We still build in Docker rather than natively: the
+#   Proxmox host is Debian 13 (glibc 2.41 -> a binary built there references
+#   __isoc23_* @GLIBC_2.41 and will NOT run on the glibc-2.39 containers). So we
+#   build inside ubuntu:24.04 (gcc 13 + glibc 2.39 == the CT210/213 runtime),
+#   pull deps via vcpkg (static libs), and link libstdc++/libgcc statically with
+#   MARCH='' (portable amd64 baseline). A bookworm builder (glibc 2.36) also
+#   works — 2.36 binaries are forward-compatible onto 2.39 — so
+#   BUILDER_IMAGE=gcc:13-bookworm is a valid fallback if the noble build fails.
 #
-# RUNTIME DEPENDENCIES on the target (Debian 12): glibc 2.36, libmnl0, libcap2
+# RUNTIME DEPENDENCIES on the target (Ubuntu 24.04): glibc 2.39, libmnl0, libcap2
 #   (libcap.so.2 + libpsx.so.2), libtinfo6, and libncurses6 -- the last one is
 #   NOT in a minimal container and provides libncurses.so.6 + libform.so.6 that
 #   the always-linked imtui TUI code needs (scitra-tun won't even start without
@@ -24,7 +25,7 @@
 #   SCION_CPP=/path/to/scion-cpp ./tools/build-scitra.sh
 # Env vars:
 #   SCION_CPP          scion-cpp git checkout (default /home/tony/lshulz/scion-cpp)
-#   BUILDER_IMAGE      build container (default gcc:13-bookworm -- keep glibc <= 2.36)
+#   BUILDER_IMAGE      build container (default ubuntu:24.04 -- keep glibc <= 2.39)
 #   SCITRA_BUILD_WORK  persistent vcpkg/cmake cache (default ~/.cache/scitra-work)
 # Requires: docker, and network access from the build container (vcpkg fetches).
 # First run ~30-45 min (grpc/boost/protobuf from source); reruns are cached.
@@ -38,12 +39,13 @@
 #   git -C "$SCION_CPP" submodule update --init --recursive
 #   cmake -G 'Ninja Multi-Config' -S "$SCION_CPP" -B build -DMARCH='' -DRELEASE=YES
 #   cmake --build build --config Release --target scitra-tun scion2ip
-# (A binary built this way links glibc > 2.36 and will fail on the Debian 12
-#  containers with "GLIBC_2.3x not found".)
+# (On a Debian 13 host this links glibc 2.41 and will fail on the Ubuntu 24.04
+#  containers with "GLIBC_2.4x not found"; a native build only works if the
+#  build host's glibc is <= 2.39.)
 set -euo pipefail
 
 SCION_CPP="${SCION_CPP:-/home/tony/lshulz/scion-cpp}"
-BUILDER_IMAGE="${BUILDER_IMAGE:-gcc:13-bookworm}"
+BUILDER_IMAGE="${BUILDER_IMAGE:-ubuntu:24.04}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$REPO_ROOT/.build/scitra/bin"
 WORK="${SCITRA_BUILD_WORK:-$HOME/.cache/scitra-work}"
@@ -77,8 +79,10 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "[1/5] apt build prerequisites"
 apt-get update -qq
+# build-essential (gcc-13/g++-13 on noble) is explicit here: the ubuntu:24.04
+# base ships no compiler, unlike the old gcc:13-bookworm image.
 apt-get install -y --no-install-recommends \
-  ninja-build pkg-config git curl zip unzip tar ca-certificates \
+  build-essential ninja-build pkg-config git curl zip unzip tar ca-certificates \
   autoconf automake libtool autoconf-archive python3 bison flex \
   linux-libc-dev libmnl-dev libcap-dev libncurses-dev >/dev/null
 
@@ -137,12 +141,12 @@ cp "$SCITRA_BIN" /out/scitra-tun
 cp "$(find /work/build -type f -name scion2ip  -perm -u+x | head -1)" /out/scion2ip
 chmod 0755 /out/scitra-tun /out/scion2ip
 echo "=== ldd scitra-tun ==="; ldd /out/scitra-tun || true
-echo "=== max GLIBC symbol version (must be <= 2.36) ==="
+echo "=== max GLIBC symbol version (must be <= 2.39) ==="
 GLIBC_VERS="$(objdump -T /out/scitra-tun 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sort -V | uniq)"
 echo "$GLIBC_VERS" | tail -3
 MAXVER="$(echo "$GLIBC_VERS" | tail -1 | sed 's/^GLIBC_//')"
-if [ "$(printf '%s\n2.36\n' "$MAXVER" | sort -V | tail -1)" != "2.36" ]; then
-  echo "ERROR: scitra-tun requires GLIBC_${MAXVER}, which exceeds the Debian 12 target (glibc 2.36) -- it will fail to run on the CT210-213 containers" >&2
+if [ "$(printf '%s\n2.39\n' "$MAXVER" | sort -V | tail -1)" != "2.39" ]; then
+  echo "ERROR: scitra-tun requires GLIBC_${MAXVER}, which exceeds the Ubuntu 24.04 target (glibc 2.39) -- it will fail to run on the CT210-213 containers" >&2
   exit 1
 fi
 INNER
