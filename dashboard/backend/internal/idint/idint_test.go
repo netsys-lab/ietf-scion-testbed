@@ -165,6 +165,95 @@ func TestTickOnceSuccess(t *testing.T) {
 	}
 }
 
+// --- Case 2b: reverse-stack collapse (live fork behavior) ---
+
+// revOnlyProbeResult mirrors the live 2026-07-07 probe 150->161: the fork
+// populates only the reverse ID-INT stack, so Fwd carries just the source
+// record and the per-hop egress records arrive dst->src in Rev.
+func revOnlyProbeResult() *ProbeResult {
+	res := goodProbeResult()
+	res.Fwd = []HopRecord{{Hop: 0, IA: "1-150", Source: true}}
+	res.Rev = []HopRecord{
+		{Hop: 0, IA: "1-161", Source: true},
+		{Hop: 1, IA: "1-161", Egress: true, RttNextBrUs: i64p(22062)},
+		{Hop: 2, IA: "1-155", Egress: true, RttNextBrUs: i64p(14955)},
+		{Hop: 3, IA: "1-154", Egress: true, RttNextBrUs: i64p(18412)},
+		{Hop: 4, IA: "1-150", Ingress: true},
+	}
+	return res
+}
+
+func TestTickOnceRevStackCollapse(t *testing.T) {
+	fp := &fakeProber{probeFn: func(ctx context.Context, src, dst int, fingerprint string) (*ProbeResult, error) {
+		return revOnlyProbeResult(), nil
+	}}
+	m := NewManager(testGraph(), fp, time.Second)
+	if err := m.Set(150, 161, ""); err != nil {
+		t.Fatal(err)
+	}
+	m.TickOnce(context.Background())
+
+	vm := m.VM()
+	if vm == nil {
+		t.Fatal("VM() nil after TickOnce")
+	}
+	if !vm.Ok {
+		t.Fatalf("Ok = false, want true; Error = %q", vm.Error)
+	}
+	wantLinks := []string{"150-154", "154-155", "155-161"}
+	if !equalStrings(vm.PathLinks, wantLinks) {
+		t.Errorf("PathLinks = %v, want %v", vm.PathLinks, wantLinks)
+	}
+	if len(vm.Hops) != 3 {
+		t.Fatalf("len(Hops) = %d, want 3", len(vm.Hops))
+	}
+	// Rev egress record k maps onto pathLinks[len-1-k]; the hop keeps the
+	// record's own IA (the far-side BR that reported it).
+	want := []struct {
+		link string
+		ia   string
+		rtt  int64
+	}{
+		{"150-154", "1-154", 18412},
+		{"154-155", "1-155", 14955},
+		{"155-161", "1-161", 22062},
+	}
+	for i, w := range want {
+		h := vm.Hops[i]
+		if h.Link != w.link {
+			t.Errorf("Hops[%d].Link = %q, want %q", i, h.Link, w.link)
+		}
+		if h.IA != w.ia {
+			t.Errorf("Hops[%d].IA = %q, want %q", i, h.IA, w.ia)
+		}
+		if h.RttNextBrUs == nil || *h.RttNextBrUs != w.rtt {
+			t.Errorf("Hops[%d].RttNextBrUs = %v, want %d", i, h.RttNextBrUs, w.rtt)
+		}
+	}
+}
+
+func TestTickOnceBothStacksEmpty(t *testing.T) {
+	res := goodProbeResult()
+	res.Fwd = []HopRecord{{Hop: 0, IA: "1-150", Source: true}}
+	res.Rev = nil
+	fp := &fakeProber{probeFn: func(ctx context.Context, src, dst int, fingerprint string) (*ProbeResult, error) {
+		return res, nil
+	}}
+	m := NewManager(testGraph(), fp, time.Second)
+	if err := m.Set(150, 161, ""); err != nil {
+		t.Fatal(err)
+	}
+	m.TickOnce(context.Background())
+
+	vm := m.VM()
+	if vm.Ok {
+		t.Fatal("Ok = true with no egress records in either stack, want false")
+	}
+	if !strings.Contains(vm.Error, "fwd/rev egress records (0/0) != path links (3)") {
+		t.Errorf("Error = %q, want it to name both counts and the link count", vm.Error)
+	}
+}
+
 // --- Case 3: egress-count mismatch keeps previous hops ---
 
 func TestTickOnceEgressMismatch(t *testing.T) {

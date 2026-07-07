@@ -238,21 +238,35 @@ func (m *Manager) TickOnce(ctx context.Context) {
 
 // buildVM turns one successful ProbeResult into a fresh derive.TraceVM: the
 // probed path's links, and its per-link ID-INT telemetry collapsed from the
-// forward egress records.
+// forward egress records — or, when the forward stack carries no usable BR
+// entries, from the reverse egress records mapped back dst->src.
 func (m *Manager) buildVM(sess session, res *ProbeResult) (*derive.TraceVM, error) {
 	pathLinks, err := m.pairLinks(res.Path.Interfaces)
 	if err != nil {
 		return nil, err
 	}
 
-	egress := make([]HopRecord, 0, len(pathLinks))
-	for _, rec := range res.Fwd {
-		if rec.Egress {
-			egress = append(egress, rec)
+	fwdEgress := egressRecords(res.Fwd)
+	var egress []HopRecord
+	if len(fwdEgress) == len(pathLinks) {
+		// k-th forward egress record crossed the k-th link.
+		egress = fwdEgress
+	} else {
+		// The deployed fork populates only the reverse ID-INT stack: the
+		// forward report carries just the source record and the per-hop
+		// telemetry rides the reverse stack, dst->src (verified live
+		// 2026-07-07, probe 150->161). Rev egress record k maps onto
+		// pathLinks[len-1-k]; the hop keeps the record's own IA — the
+		// far-side BR that actually reported it (honest attribution).
+		revEgress := egressRecords(res.Rev)
+		if len(revEgress) != len(pathLinks) {
+			return nil, fmt.Errorf("fwd/rev egress records (%d/%d) != path links (%d)",
+				len(fwdEgress), len(revEgress), len(pathLinks))
 		}
-	}
-	if len(egress) != len(pathLinks) {
-		return nil, fmt.Errorf("fwd egress records (%d) != path links (%d)", len(egress), len(pathLinks))
+		egress = make([]HopRecord, len(revEgress))
+		for k := range revEgress {
+			egress[k] = revEgress[len(revEgress)-1-k]
+		}
 	}
 
 	hops := make([]derive.TraceHop, len(egress))
@@ -279,6 +293,18 @@ func (m *Manager) buildVM(sess session, res *ProbeResult) (*derive.TraceVM, erro
 		ProbeRttMs:  res.ProbeRttMs,
 		Hops:        hops,
 	}, nil
+}
+
+// egressRecords filters one direction's hop records down to its egress
+// entries, preserving order.
+func egressRecords(recs []HopRecord) []HopRecord {
+	out := make([]HopRecord, 0, len(recs))
+	for _, rec := range recs {
+		if rec.Egress {
+			out = append(out, rec)
+		}
+	}
+	return out
 }
 
 // pairLinks maps a flattened path interface list onto dashboard link IDs,
