@@ -20,7 +20,10 @@ TEMPLATE="${TEMPLATE:-local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst}"
 # --rootfs on local-lvm (lvmthin): the only storage here that supports container
 # rootdir. Without it pct defaults to 'local' (dir storage) and fails with
 # "storage 'local' does not support container directories". 8 GiB thin cap.
-COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys --rootfs local-lvm:8"
+# --features nesting=1: Ubuntu 24.04 ships systemd 255, which warns/misbehaves
+# inside an LXC container without nesting ("Systemd 255 detected. You may need
+# to enable nesting."). Debian 12's systemd 252 didn't need it.
+COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys --rootfs local-lvm:8 --features nesting=1"
 AS_OPTS="--cores 2 --memory 1024 --cpuunits 1000 $COMMON"
 DASH_OPTS="--cores 2 --memory 1024 --cpuunits 300 $COMMON"
 HUB_OPTS="--cores 2 --memory 1024 --cpuunits 200 $COMMON"
