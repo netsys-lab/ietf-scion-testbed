@@ -142,10 +142,11 @@ pct create 213 $TEMPLATE $PLAY_OPTS --description "play-161" \
     --net0 name=eth0,bridge=mgmt,hwaddr=00:00:00:00:00:D5,ip=10.20.3.213/24,gw=10.20.3.1
 
 # --- Headless service endhost: svc-151 (scitra --scmp + fork sciond) ---
-# Not a hospitality shell; unprivileged + nesting like the attendee design.
+# PRIVILEGED (not a guest-facing shell): it needs full net capabilities
+# (raw sockets for ping/scmp, etc.). nesting=1 for systemd 255.
 pct create 214 $TEMPLATE --cores 1 --memory 512 --swap 512 --cpuunits 50 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
-    --unprivileged 1 --features nesting=1 --onboot 1 --description "svc-151" \
+    --unprivileged 0 --features nesting=1 --onboot 1 --description "svc-151" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1
 
 # scitra-tun (playground 210-213 + svc-151 214) needs /dev/net/tun, which is a
