@@ -1,0 +1,14 @@
+[Unit]
+Description=ID-INT prober sidecar for the dashboard path inspector (HTTP {{ idint_probed_port }})
+After=network-online.target scion-daemon.service
+Wants=scion-daemon.service
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=/usr/local/bin/idint-probed -listen {{ ansible_host }}:{{ idint_probed_port }} -sciond {{ ansible_host }}:30255
+DynamicUser=yes
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

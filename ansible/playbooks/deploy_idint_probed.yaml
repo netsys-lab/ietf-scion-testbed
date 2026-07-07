@@ -1,0 +1,30 @@
+---
+- name: Deploy idint-probed sidecars (all 12 ASes, HTTP 30490)
+  hosts: ases
+  become: true
+  vars:
+    idint_probed_port: 30490
+  tasks:
+    - name: Copy idint-probed binary
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/idint-probed/bin/idint-probed"
+        dest: /usr/local/bin/idint-probed
+        mode: "0755"
+    - name: Render idint-probed unit
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/idint/idint-probed.service.j2"
+        dest: /etc/systemd/system/idint-probed.service
+        mode: "0644"
+    - name: Enable + restart idint-probed
+      ansible.builtin.systemd:
+        name: idint-probed
+        enabled: true
+        state: restarted
+        daemon_reload: true
+    - name: Verify prober bound on {{ idint_probed_port }}
+      ansible.builtin.shell: ss -tln | grep -q '{{ ansible_host }}:{{ idint_probed_port }}'
+      register: probed_ss
+      changed_when: false
+      retries: 5
+      delay: 2
+      until: probed_ss.rc == 0
