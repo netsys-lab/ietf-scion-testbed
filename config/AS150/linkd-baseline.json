@@ -9,7 +9,7 @@
  },
  "6300": {
   "delay_ms": 9.0,
-  "rate_mbit": 100
+  "rate_mbit": 50
  },
  "65377": {
   "delay_ms": 3.0,

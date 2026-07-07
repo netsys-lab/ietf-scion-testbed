@@ -27,7 +27,7 @@
           "link_to": "parent",
           "mtu": 1452,
           "idint": {
-            "speed": 100000000
+            "speed": 50000000
           }
         }
       },

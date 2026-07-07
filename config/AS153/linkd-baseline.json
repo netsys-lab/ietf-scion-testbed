@@ -1,7 +1,7 @@
 {
  "14606": {
   "delay_ms": 2.6,
-  "rate_mbit": 100
+  "rate_mbit": 50
  },
  "15515": {
   "delay_ms": 2.1,
@@ -13,7 +13,7 @@
  },
  "30478": {
   "delay_ms": 3.2,
-  "rate_mbit": 100
+  "rate_mbit": 50
  },
  "30732": {
   "delay_ms": 2.6,

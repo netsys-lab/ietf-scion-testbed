@@ -1,11 +1,11 @@
 {
  "24381": {
   "delay_ms": 4.5,
-  "rate_mbit": 100
+  "rate_mbit": 50
  },
  "25173": {
   "delay_ms": 1.8,
-  "rate_mbit": 100
+  "rate_mbit": 50
  },
  "43214": {
   "delay_ms": 2.1,
@@ -17,7 +17,7 @@
  },
  "50187": {
   "delay_ms": 2.6,
-  "rate_mbit": 100
+  "rate_mbit": 50
  },
  "6957": {
   "delay_ms": 3.0,
