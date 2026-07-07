@@ -431,12 +431,13 @@ export default function FabricMap() {
             sits above every other overlay. */}
         {trace && traceD && (
           <g className="trace-overlay" aria-hidden="true">
-            <path className="trace-base" d={traceD} />
+            {/* Healthy probe: marching dashes carry the whole path (no solid
+                line underneath — a base fills the dash gaps and washes the
+                marching out to a shimmer). Probe error: motion stops and the
+                static base marks the path instead. */}
+            {!trace.ok && <path className="trace-base" d={traceD} />}
             {trace.ok && (
               <>
-                {/* Marching dashes flow src -> dst so the traced path reads
-                    clearly across the booth even between comet passes; they
-                    stop with the comet on probe errors (base stays). */}
                 <path className="trace-dash" d={traceD} />
                 <circle className="trace-comet" r={4}>
                   <animateMotion dur="2.2s" repeatCount="indefinite" path={traceD} />
