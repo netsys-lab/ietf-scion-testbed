@@ -27,6 +27,19 @@
         - staticInfoConfig.base.json
         - linkd-baseline.json
 
+    - name: Install the static advertisements (story values, never rewritten by shaping)
+      ansible.builtin.copy:
+        remote_src: true
+        src: "/etc/scion/AS{{ asnum }}/staticInfoConfig.base.json"
+        dest: "/etc/scion/AS{{ asnum }}/staticInfoConfig.json"
+        mode: "0644"
+      register: staticinfo_installed
+
+    - name: Reload CS to pick up the (re)installed static advertisements
+      ansible.builtin.command:
+        cmd: "systemctl kill --signal=SIGHUP {{ linkd_cs_unit | default('scion-control@cs1-' + asnum + '-1') }}"
+      when: staticinfo_installed.changed
+
     - name: Configure scion-linkd to bind the management address
       ansible.builtin.copy:
         dest: /etc/scion-linkd/config.toml
@@ -34,13 +47,10 @@
         content: |
           listen = "{{ ansible_host }}:30480"
           topology_glob = "/etc/scion/AS*/topology.json"
-          staticinfo_base = "/etc/scion/AS*/staticInfoConfig.base.json"
-          # Concrete per-AS path: the writer's atomic temp-file create uses this
-          # verbatim (unlike the glob-resolved *_base/baseline reads), so a
-          # literal "AS*" here makes every write fail on a nonexistent dir.
-          staticinfo_out = "/etc/scion/AS{{ asnum }}/staticInfoConfig.json"
+          # static info stays static (spec 2026-07-07): no staticinfo_base ->
+          # linkd's writer+CS-SIGHUP machinery is disabled; advertisements
+          # keep the story values installed below.
           baseline_profile = "/etc/scion/AS*/linkd-baseline.json"
-          cs_reload_unit = "{{ linkd_cs_unit | default('scion-control@cs1-' + asnum + '-1') }}"
 
     - name: Ensure service is running
       ansible.builtin.systemd:

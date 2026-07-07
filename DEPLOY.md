@@ -133,20 +133,26 @@ ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_linkd.yaml
 ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_dashboard.yaml
 ```
 
-Run `deploy_scion_cs.yaml` before `deploy_linkd.yaml` so the first SIGHUP
-linkd sends lands on a reload-capable CS. On a stock (unpatched) CS a SIGHUP
-just re-reads `topology.json` — harmless — so this order is a nicety, not a
-requirement.
+Run `deploy_scion_cs.yaml` before `deploy_linkd.yaml` so the one-time SIGHUP
+`deploy_linkd.yaml` sends after installing the static advertisements lands on
+a reload-capable CS. On a stock (unpatched) CS a SIGHUP just re-reads
+`topology.json` — harmless — so this order is a nicety, not a requirement.
 
 `deploy_linkd.yaml` installs scion-linkd on every AS container, copies the
 per-AS `staticInfoConfig.base.json` and `linkd-baseline.json` to
-`/etc/scion/AS<n>/`, and configures it to listen on the container's
-management IP (`10.20.3.15x:30480`) — AS containers are dual-homed on the
-public IETF net, so it must not bind all interfaces. `deploy_scion_cs.yaml`
-stops the CS, ships the patched `bin/control`, restarts it, and verifies the
-SIGHUP reload path logs `Reloaded static info`. `deploy_dashboard.yaml`
-installs fabricd and copies only the AS topologies + core list it reads
-(never SCION private keys) to `/etc/fabric/config/`.
+`/etc/scion/AS<n>/`, installs `staticInfoConfig.json` as a copy of that base
+file — the permanent story advertisements, unaffected by shaping — and
+configures scion-linkd to listen on the container's management IP
+(`10.20.3.15x:30480`) — AS containers are dual-homed on the public IETF net,
+so it must not bind all interfaces. Static info stays static: linkd's own
+staticinfo-writer + CS-SIGHUP machinery ships disabled by default
+(`staticinfo_base = ""`, an escape hatch — see `linkd/internal/config`); the
+playbook itself sends the CS a one-time SIGHUP, and only when the copied file
+actually changed. `deploy_scion_cs.yaml` stops the CS, ships the patched
+`bin/control`, restarts it, and verifies the SIGHUP reload path logs
+`Reloaded static info`. `deploy_dashboard.yaml` installs fabricd and copies
+only the AS topologies + core list it reads (never SCION private keys) to
+`/etc/fabric/config/`.
 
 The dashboard is reachable at `http://10.20.3.200:8080` (mgmt) and on its
 public IETF net address (fabricd deliberately binds all interfaces). Append
@@ -171,20 +177,26 @@ curl -s http://10.20.3.200:8080/api/health   # linkd map all 12 true, targets al
 
 python3 topology/gen_staticinfo.py --check   # expect: OK: 12 ASes generated, files match
 curl -s http://10.20.3.150:30480/api/v1/links | grep -o '"shaped":[a-z]*'   # all false at rest
-curl -s http://10.20.3.150:30480/healthz     # metadata_ok:true reload_ok:true
-# end-to-end: shape 155-158 in the dashboard, then within ~60 s (query_interval=30s):
-#   scion showpaths --extended --refresh <dst>   # latency reflects the change
+curl -s http://10.20.3.150:30480/healthz     # status:ok; no metadata_ok/reload_ok fields
+                                              # (writer disabled by default — see below)
+# end-to-end: shape 155-158 in the dashboard —
+#   scion showpaths --extended --refresh <dst>   # advertised latency is UNCHANGED, by design
+#   dashboard TracePanel / idint-traceroute       # measured hop RTT reflects the shape
 ```
 
-Beacon metadata propagates at beaconing speed (origination/propagation/
-registration + the sciond path cache), not instantly — expect the shaped
-change to show up in `showpaths` roughly 10-30 s after shaping, not
-immediately. The testbed sets `query_interval = "30s"` fleet-wide (sciond
-`[sd]` + control service `[path]`) to keep this demo-friendly; the scion
-default is 5m, which made shaping appear "stuck" for minutes and mixed old
-and new per-path metadata during the window. Demo tip: hold a shape for at
-least a minute before judging `showpaths`, and expect a brief mixed-vintage
-window where different paths disagree.
+Static info stays static: advertisements (`staticInfoConfig.json`, installed
+once by `deploy_linkd.yaml` as a copy of `staticInfoConfig.base.json` from
+`topology/gen_staticinfo.py`) are the permanent story values. Shaping never
+rewrites them and never SIGHUPs the CS as a side effect — it changes only
+*measured* state (BFD RTT, ID-INT telemetry). The demo contrast is
+deliberate: the TracePanel's "Σ … ms adv." stays put at the story value while
+the measured hop RTT spikes, which is the reason ID-INT exists; the operator
+pins an alternate path around the damage rather than waiting on an automatic
+re-route (see "ID-INT path inspector" below). `query_interval = "30s"`
+(sciond `[sd]` + control service `[path]`) is still deployed fleet-wide but
+is now vestigial for the shaping story — segment refetch no longer carries a
+shaping signal, since advertisements don't change; it still governs ordinary
+beaconing/path-cache refresh.
 
 ## Runbook
 
@@ -333,6 +345,10 @@ from the host; a wedged prober is safe to `systemctl restart idint-probed`
 `mock=true` fabricd demos the shaped-hop RTT spike fine, but NOT AUTO
 re-route: mock paths are static and never re-rank by advertised latency, so
 picking AUTO never jumps off a shaped path — that needs the live probers.
+That said, AUTO follows advertised-fastest, which no longer tracks shaping
+under the static-info model (see "Static info stays static" in Verify,
+above) — so this holds with live probers too now; the re-route story is the
+operator pinning an alternate path, not an automatic AUTO jump.
 
 ## Service endhost (svc-151)
 
