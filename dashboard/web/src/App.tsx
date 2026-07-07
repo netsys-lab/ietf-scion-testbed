@@ -7,6 +7,7 @@ import ParticleLayer from "./components/ParticleLayer";
 import Ticker from "./components/Ticker";
 import LinkPanel from "./components/LinkPanel";
 import AsPanel from "./components/AsPanel";
+import TracePanel from "./components/TracePanel";
 import "./components/chrome.css";
 import "./components/panel.css";
 
@@ -62,6 +63,7 @@ function App() {
         <aside id="panel" aria-live="polite">
           {selected?.kind === "link" && <LinkPanel id={selected.id} />}
           {selected?.kind === "as" && <AsPanel num={Number(selected.id)} />}
+          {selected?.kind === "trace" && <TracePanel />}
         </aside>
       </main>
       <footer>

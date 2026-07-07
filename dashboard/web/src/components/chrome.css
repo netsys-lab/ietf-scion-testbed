@@ -77,6 +77,16 @@ header {
 .actions a:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
 body.screen .actions { display: none; }
 
+/* TRACE masthead button — opens TracePanel. A plain <button> alongside the
+ * JOIN/PLAYGROUND <a> tags, styled identically to .actions a. */
+.tracebtn {
+  font-family: var(--din); font-size: 11px; letter-spacing: 0.1em;
+  color: var(--ink-2); background: none; border: 0;
+  padding: 7px 14px; cursor: pointer;
+}
+.tracebtn:hover, .tracebtn:focus-visible { background: var(--raised); color: var(--brass); }
+.tracebtn:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
+
 /* ── Ticker ───────────────────────────────────────────── */
 footer {
   border-top: 1px solid var(--hairline); background: var(--surface);

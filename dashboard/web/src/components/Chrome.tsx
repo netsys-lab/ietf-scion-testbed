@@ -1,5 +1,6 @@
 // Chrome — the masthead <header>: brand lockup, live/reconnecting indicator,
-// KPI strip, the attendee JOIN TESTBED / PLAYGROUND links (new tabs), and the
+// KPI strip, the TRACE button (opens TracePanel via the store's selection),
+// the attendee JOIN TESTBED / PLAYGROUND links (new tabs), and the
 // OPERATE/SCREEN mode toggle. Ported from the mockup's <header>. Screen mode
 // drives document.body's "screen" class (the mockup's body.screen scale-ups
 // live in chrome.css); ?mode=screen sets it initially so the booth can boot
@@ -15,6 +16,7 @@ export default function Chrome() {
   const connected = useFabricStore((s) => s.connected);
   const screen = useFabricStore((s) => s.screen);
   const setScreen = useFabricStore((s) => s.setScreen);
+  const select = useFabricStore((s) => s.select);
 
   useEffect(() => {
     document.body.classList.toggle("screen", screen);
@@ -34,6 +36,9 @@ export default function Chrome() {
       </div>
       <KpiStrip />
       <div className="actions" role="group" aria-label="Attendee links">
+        <button className="tracebtn" onClick={() => select({ kind: "trace", id: "trace" })}>
+          TRACE
+        </button>
         <a href="/join" target="_blank" rel="noopener">
           JOIN TESTBED
         </a>
