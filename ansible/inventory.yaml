@@ -77,6 +77,15 @@ svc:
     svc-151:
       ansible_host: 10.20.3.214
       endhost_as: "151"
+    svc-150:
+      ansible_host: 10.20.3.215
+      endhost_as: "150"
+    svc-152:
+      ansible_host: 10.20.3.216
+      endhost_as: "152"
+    svc-153:
+      ansible_host: 10.20.3.217
+      endhost_as: "153"
   vars:
     ansible_user: ietf
     ansible_python_interpreter: auto_silent

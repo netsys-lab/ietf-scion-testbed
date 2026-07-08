@@ -48,6 +48,12 @@
         - { src: "scitra/bin/scitra-tun", dest: "scitra-tun" }
         - { src: "idint-traceroute/bin/idint-traceroute", dest: "idint-traceroute" }
 
+    - name: Install HTTP/3 curl (shadows distro curl on PATH)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/curl/bin/curl"
+        dest: /usr/local/bin/curl
+        mode: "0755"
+
     - name: Create SCION config dir
       ansible.builtin.file:
         path: /etc/scion/certs
