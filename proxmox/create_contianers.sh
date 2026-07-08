@@ -27,7 +27,7 @@ COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys --rootfs local-lvm:
 AS_OPTS="--cores 2 --memory 1024 --cpuunits 1000 $COMMON"
 DASH_OPTS="--cores 2 --memory 1024 --cpuunits 300 $COMMON"
 HUB_OPTS="--cores 2 --memory 1024 --cpuunits 200 $COMMON"
-PLAY_OPTS="--cores 1 --memory 512 --cpuunits 50 $COMMON"
+PLAY_OPTS="--cores 1 --memory 1024 --cpuunits 50 $COMMON"
 
 # CT100 (Kea DHCP server) is NOT used on the reconstructed ietf-proxmox node:
 # containers have static IPs and the HOST holds 10.20.3.1 on the mgmt bridge.
@@ -148,7 +148,7 @@ pct create 213 $TEMPLATE $PLAY_OPTS --description "play-161" \
 # reachable from the network by regular-IP clients, not only over SCION. The
 # venue net is globally routable, so this leg is firewalled by ufw (deny
 # incoming; only mgmt/eth0 trusted) — see deploy_svc_endhost.yaml.
-pct create 214 $TEMPLATE --cores 1 --memory 512 --swap 512 --cpuunits 50 \
+pct create 214 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
     --unprivileged 0 --features nesting=1 --onboot 1 --description "svc-151" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1 \
