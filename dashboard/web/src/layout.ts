@@ -19,18 +19,18 @@ export interface Node {
 // Fixed hand-tuned station coordinates (three horizontal bands: core 150-153,
 // mid 154-157, leaf 158-161). No force simulation — see the design doc.
 export const NODES: Record<number, Node> = {
-  150: { x: 480, y: 150, core: true },
-  151: { x: 760, y: 150, core: true },
-  152: { x: 1040, y: 150, core: true },
-  153: { x: 1320, y: 150, core: true },
-  154: { x: 350, y: 440 },
-  155: { x: 760, y: 440 },
-  156: { x: 1120, y: 440 },
-  157: { x: 1400, y: 440 },
-  158: { x: 480, y: 710 },
-  159: { x: 700, y: 710 },
-  160: { x: 900, y: 710 },
-  161: { x: 1180, y: 710 },
+  150: { x: 365, y: 150, core: true },
+  151: { x: 645, y: 150, core: true },
+  152: { x: 925, y: 150, core: true },
+  153: { x: 1205, y: 150, core: true },
+  154: { x: 235, y: 440 },
+  155: { x: 645, y: 440 },
+  156: { x: 1005, y: 440 },
+  157: { x: 1285, y: 440 },
+  158: { x: 365, y: 710 },
+  159: { x: 585, y: 710 },
+  160: { x: 785, y: 710 },
+  161: { x: 1065, y: 710 },
 };
 
 export interface LinkLayout {
@@ -69,7 +69,7 @@ export const LINKS: LinkLayout[] = [
   { a: 158, b: 159, sub: "13" },
   { a: 155, b: 159, sub: "14" },
   { a: 155, b: 160, sub: "15" },
-  { a: 155, b: 161, sub: "16", via: [[760, 440], [1030, 710], [1180, 710]] },
+  { a: 155, b: 161, sub: "16", via: [[645, 440], [915, 710], [1065, 710]] },
   { a: 156, b: 161, sub: "17" },
   { a: 157, b: 161, sub: "18" },
 ];

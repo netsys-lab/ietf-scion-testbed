@@ -15,10 +15,10 @@ describe("tracePathD", () => {
     const [x161, y161] = [NODES[161].x, NODES[161].y];
     expect(d!.startsWith(`M ${x150} ${y150}`)).toBe(true);
     expect(d!.endsWith(`${x161} ${y161}`)).toBe(true);
-    // 155-161 is via-routed in layout.ts ([[760,440],[1030,710],[1180,710]]):
-    // the trace must follow the drawn polyline through its (1030, 710) bend,
+    // 155-161 is via-routed in layout.ts ([[645,440],[915,710],[1065,710]]):
+    // the trace must follow the drawn polyline through its (915, 710) bend,
     // not routePoints geometry (which would skirt off the drawn trunk).
-    expect(d).toContain("1030 710");
+    expect(d).toContain("915 710");
   });
 
   it("chains in reverse traversal order (same links, src at the other end)", () => {
@@ -31,7 +31,7 @@ describe("tracePathD", () => {
     expect(d!.startsWith(`M ${x161} ${y161}`)).toBe(true);
     expect(d!.endsWith(`${x150} ${y150}`)).toBe(true);
     // Reversed traversal of the via-routed 155-161 still passes its bend.
-    expect(d).toContain("1030 710");
+    expect(d).toContain("915 710");
   });
 
   it("returns null for a broken chain", () => {

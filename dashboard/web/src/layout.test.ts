@@ -19,13 +19,13 @@ const REAL_LINK_IDS = [
 describe("pathFrom / routePoints", () => {
   it("routes 150-154 as a vertical-diagonal-vertical octilinear path with two rounded bends", () => {
     const d = pathFrom(routePoints(150, 154));
-    expect(d.startsWith("M 480 150")).toBe(true);
+    expect(d.startsWith("M 365 150")).toBe(true);
     expect(countQ(d)).toBe(2);
   });
 
   it("routes the 155-161 via-path from its first via point with exactly one rounded bend", () => {
     const d = linkPath("155-161");
-    expect(d.startsWith("M 760 440")).toBe(true);
+    expect(d.startsWith("M 645 440")).toBe(true);
     expect(countQ(d)).toBe(1);
   });
 });
