@@ -2,15 +2,14 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { claimConf, fetchInstruction, fetchInstructions, fetchJoinMeta, type JoinMeta } from "../api";
-import { confFilename, loadClaim, pickConf, saveClaim, type ClaimResult } from "../join";
+import { claimConf, fetchInstruction, fetchInstructions, fetchJoinMeta, type JoinableInfo, type JoinMeta } from "../api";
+import { asRole, confFilename, loadClaim, pickConf, saveClaim, type ClaimResult } from "../join";
 import "../join.css";
 
 export default function JoinPage() {
   const [meta, setMeta] = useState<JoinMeta | null>(null);
   const [metaErr, setMetaErr] = useState<string | null>(null);
   const [claim, setClaim] = useState<ClaimResult | null>(loadClaim());
-  const [as, setAs] = useState<number | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [claimErr, setClaimErr] = useState<string | null>(null);
@@ -21,11 +20,10 @@ export default function JoinPage() {
   }, []);
 
   async function doClaim() {
-    if (as === null) return;
     setBusy(true);
     setClaimErr(null);
     try {
-      const c = await claimConf(as, code);
+      const c = await claimConf(code);
       saveClaim(c);
       setClaim(c);
     } catch (e) {
@@ -70,19 +68,12 @@ export default function JoinPage() {
         )}
         {!claim && meta && (
           <div className="join-form">
-            <div className="join-cards">
-              {meta.joinable_ases.map((n) => (
-                <button key={n} className={as === n ? "join-card sel" : "join-card"} onClick={() => setAs(n)}>
-                  AS 1-{n}
-                </button>
-              ))}
-            </div>
             <input placeholder="booth code" value={code} onChange={(e) => setCode(e.target.value)} />
-            <button disabled={busy || as === null || !code} onClick={doClaim}>Get my conf</button>
+            <button disabled={busy || !code} onClick={doClaim}>Get my conf</button>
             {claimErr && <p className="join-err">{claimErr}</p>}
           </div>
         )}
-        {claim && <ClaimView claim={claim} v4={v4} setV4={setV4} />}
+        {claim && meta && <ClaimView claim={claim} meta={meta} v4={v4} setV4={setV4} />}
       </section>
 
       <Instructions />
@@ -90,9 +81,13 @@ export default function JoinPage() {
   );
 }
 
-function ClaimView({ claim, v4, setV4 }: { claim: ClaimResult; v4: boolean; setV4: (b: boolean) => void }) {
+function ClaimView({ claim, meta, v4, setV4 }: { claim: ClaimResult; meta: JoinMeta; v4: boolean; setV4: (b: boolean) => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const conf = pickConf(claim, v4);
+  const joinable: JoinableInfo[] = meta.joinable ?? meta.joinable_ases.map((n) => ({
+    as: n, isd_as: `1-${n}`, bundle_url: `/api/join/bundle/${n}`, bootstrap_url: "",
+  }));
+  const [tab, setTab] = useState(joinable[0]?.as ?? claim.as);
   useEffect(() => {
     if (canvas.current) QRCode.toCanvas(canvas.current, conf, { width: 220 });
   }, [conf]);
@@ -102,19 +97,36 @@ function ClaimView({ claim, v4, setV4 }: { claim: ClaimResult; v4: boolean; setV
     a.download = confFilename(claim.as);
     a.click();
   };
+  const cur = joinable.find((j) => j.as === tab) ?? joinable[0];
+  const fc = claim.fc00_identities?.[String(tab)] ?? claim.fc00_identity;
   return (
     <div className="join-claim">
-      <p>Your endhost in <b>{claim.isd_as}</b>: <code>{claim.ip}</code></p>
-      <p>scitra identity: <code>{claim.fc00_identity}</code></p>
+      <p>Your tunnel endpoint: <code>{claim.ip}</code></p>
       <canvas ref={canvas} />
       <div className="join-actions">
         <button onClick={dl}>Download {confFilename(claim.as)}</button>
-        <a href={`/api/join/bundle/${claim.as}`}>Download SCION bundle (AS {claim.as})</a>
         {claim.conf_v4 && (
           <label><input type="checkbox" checked={v4} onChange={(e) => setV4(e.target.checked)} /> IPv4 endpoint</label>
         )}
       </div>
-      <p className="join-note">Switching AS later? Re-download the other AS's bundle — your conf stays the same, your scitra prefix changes.</p>
+      <p className="join-note">One conf tunnels the whole testbed. Pick an AS below to be an endhost in it — you can set up in several.</p>
+      <div className="join-tabs" role="tablist">
+        {joinable.map((j) => (
+          <button key={j.as} role="tab" aria-selected={j.as === tab}
+            className={j.as === tab ? "join-tab sel" : "join-tab"} onClick={() => setTab(j.as)}>
+            AS 1-{j.as} <span className="join-tab-role">{asRole(j.as)}</span>
+          </button>
+        ))}
+      </div>
+      {cur && (
+        <div className="join-tabpanel">
+          <p>scitra identity in <b>{cur.isd_as}</b>: <code>{fc}</code></p>
+          <div className="join-actions">
+            <a href={cur.bundle_url}>Download SCION bundle (AS {cur.as})</a>
+            {cur.bootstrap_url && <a href={cur.bootstrap_url} target="_blank" rel="noopener">Bootstrap URL ({cur.bootstrap_url})</a>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

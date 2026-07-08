@@ -20,3 +20,9 @@
 .join-md { margin-top: 14px; line-height: 1.55; overflow-x: auto; }
 .join-md code { background: var(--page, #0d0f12); padding: 1px 5px; border-radius: 4px; }
 .join-md pre { background: var(--page, #0d0f12); padding: 10px; border-radius: 6px; overflow-x: auto; }
+.join-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; border-bottom: 1px solid var(--hairline, #2a2d34); }
+.join-tab { padding: 7px 12px; border: 1px solid var(--hairline, #2a2d34); border-bottom: none;
+  border-radius: 6px 6px 0 0; background: none; color: inherit; cursor: pointer; font: inherit; }
+.join-tab.sel { border-color: var(--brass, #b90); color: var(--brass, #b90); }
+.join-tab-role { opacity: 0.6; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.06em; }
+.join-tabpanel { padding: 4px 2px 8px; }

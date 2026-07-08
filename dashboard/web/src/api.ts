@@ -119,8 +119,10 @@ export function fetchHistory(key: string, mins: number): Promise<Sample[]> {
   return request<Sample[]>(`/api/history?${params.toString()}`);
 }
 
+export type JoinableInfo = { as: number; isd_as: string; bundle_url: string; bootstrap_url: string };
+
 export type JoinMeta = {
-  enabled: boolean; joinable_ases: number[]; playground_ases: number[];
+  enabled: boolean; joinable_ases: number[]; joinable?: JoinableInfo[]; playground_ases: number[];
   slots_total: number; slots_claimed: number; slots_burned: number;
   hub_ok: boolean; endpoint_v6: string; endpoint_v4?: string;
 };
@@ -131,11 +133,11 @@ export async function fetchJoinMeta(): Promise<JoinMeta> {
   return r.json();
 }
 
-export async function claimConf(as: number, code: string): Promise<ClaimResult> {
+export async function claimConf(code: string, as?: number): Promise<ClaimResult> {
   const r = await fetch("/api/join/claim", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ as, code }),
+    body: JSON.stringify(as ? { as, code } : { code }),
   });
   if (!r.ok) throw new Error(String(r.status));
   return r.json();

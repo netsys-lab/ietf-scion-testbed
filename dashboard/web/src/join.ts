@@ -3,6 +3,7 @@
 
 export type ClaimResult = {
   slot: number; ip: string; as: number; isd_as: string; fc00_identity: string;
+  fc00_identities?: Record<string, string>;
   conf: string; conf_v4?: string; endpoint_v6: string; endpoint_v4?: string;
 };
 
@@ -28,4 +29,12 @@ export function loadClaim(): ClaimResult | null {
   } catch {
     return null;
   }
+}
+
+// Role note for a joinable AS, from the testbed topology (core 150-153,
+// AS155 is the tier-2 hub, the rest are leaves).
+export function asRole(as: number): string {
+  if (as >= 150 && as <= 153) return "core";
+  if (as === 155) return "hub";
+  return "leaf";
 }
