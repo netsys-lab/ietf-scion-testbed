@@ -75,10 +75,10 @@ describe("hopRows", () => {
     expect(rows.map((r) => r.shaped)).toEqual([true, false, false]);
   });
 
-  it("carries egr/queue through, defaulting missing values to null", () => {
-    const rows = hopRows(vm([hop({ link: "a", egr_tx_pct: 12.5, queue_len: 3 }), hop({ link: "b" })]), {});
-    expect(rows[0]).toMatchObject({ egrPct: 12.5, queue: 3 });
-    expect(rows[1]).toMatchObject({ egrPct: null, queue: null });
+  it("carries egr through, defaulting a missing value to null", () => {
+    const rows = hopRows(vm([hop({ link: "a", egr_tx_pct: 12.5 }), hop({ link: "b" })]), {});
+    expect(rows[0]).toMatchObject({ egrPct: 12.5 });
+    expect(rows[1]).toMatchObject({ egrPct: null });
   });
 
   it("returns [] instead of throwing when hops is null (backend regression belt-and-suspenders)", () => {
@@ -113,8 +113,8 @@ describe("latencyLabel", () => {
     current_best: false,
   };
 
-  it("formats a non-negative advertised latency in ms", () => {
-    expect(latencyLabel({ ...base, latency_us_total: 18900 })).toBe("Σ 18.9 ms adv.");
+  it("renders the advertised total in plain ms", () => {
+    expect(latencyLabel({ ...base, latency_us_total: 18900 })).toBe("18.9 ms");
   });
 
   it("reads 'no latency data' for a -1 sentinel", () => {

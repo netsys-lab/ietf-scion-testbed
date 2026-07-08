@@ -12,7 +12,6 @@ export interface HopRow {
   rttMs: number | null;
   barPct: number;
   egrPct: number | null;
-  queue: number | null;
   shaped: boolean;
 }
 
@@ -29,7 +28,6 @@ export function hopRows(vm: TraceVM, linksById: Record<string, LinkVM>): HopRow[
     rttMs: h.rtt_next_br_us != null ? h.rtt_next_br_us / 1000 : null,
     barPct: h.rtt_next_br_us != null ? (100 * h.rtt_next_br_us) / max : 0,
     egrPct: h.egr_tx_pct ?? null,
-    queue: h.queue_len ?? null,
     shaped: linksById[h.link]?.shaping != null,
   }));
 }
@@ -39,9 +37,10 @@ export function pathLabel(p: PathOption): string {
   return p.hops.join(" · ");
 }
 
-// latencyLabel renders the path's advertised (segment-metadata) total latency,
-// or "no latency data" for the -1 sentinel the backend uses when no segment
-// on the path carries latency metadata.
+// latencyLabel renders the path's advertised (segment-metadata) one-way total
+// latency in plain ms, or "no latency data" for the -1 sentinel the backend
+// uses when no segment on the path carries latency metadata. The "advertised
+// in beacons" framing is a one-time caption in TracePanel, not repeated here.
 export function latencyLabel(p: PathOption): string {
-  return p.latency_us_total >= 0 ? `Σ ${(p.latency_us_total / 1000).toFixed(1)} ms adv.` : "no latency data";
+  return p.latency_us_total >= 0 ? `${(p.latency_us_total / 1000).toFixed(1)} ms` : "no latency data";
 }
