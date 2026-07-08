@@ -73,8 +73,11 @@ func TestPreshapeAfterWarmupReachesElevatedBand(t *testing.T) {
 
 	gen.SetShaping("155-160", &derive.Shaping{DelayMs: f64(12), JitterMs: f64(2)})
 
+	// hysteresis is now 3 frames (was 2), so six post-shaping frames gives it
+	// room to commit and still leave three settled frames to check stability
+	// over.
 	var bands []string
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 6; i++ {
 		now += 1000
 		gen.Step(now)
 		bands = append(bands, d.Frame(now).Links[0].Band)

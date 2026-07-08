@@ -3,7 +3,7 @@
 // machine that drives the dashboard visualization: it classifies each link
 // into a color band (nominal/elevated/degraded/critical/down/stale) using
 // RTT-vs-baseline and wire-loss thresholds, and debounces band changes with
-// 2-sample hysteresis so transient blips do not flicker the map.
+// 3-sample hysteresis so transient blips do not flicker the map.
 //
 // The JSON tags on the exported types are the wire protocol shared with the
 // frontend; do not change them without updating the client.
@@ -146,8 +146,9 @@ const (
 	// counter deltas are too small to estimate loss reliably.
 	lossMinMbit = 0.1
 	// hysteresis is the number of consecutive frames a new band must persist
-	// before it commits, mirroring the mockup's pend/pendBand/pendCount.
-	hysteresis = 2
+	// before it commits, mirroring the mockup's pend/pendBand/pendCount:
+	// three consecutive frames (~3s at 1Hz).
+	hysteresis = 3
 )
 
 // linkState holds the per-link hysteresis state across Frame calls.
@@ -346,9 +347,9 @@ func (d *Deriver) deriveLink(l topo.Link) LinkVM {
 	}
 }
 
-// commit runs the 2-sample hysteresis for one link and returns the committed
+// commit runs the 3-sample hysteresis for one link and returns the committed
 // band. It mirrors the mockup's stepMock: a candidate band must be seen on
-// two consecutive frames before it replaces the committed band. Must be
+// three consecutive frames before it replaces the committed band. Must be
 // called with d.mu held.
 func (d *Deriver) commit(linkID, raw string) string {
 	ls := d.state[linkID]
@@ -373,7 +374,11 @@ func (d *Deriver) commit(linkID, raw string) string {
 }
 
 // rttBand classifies one side's current RTT against its baseline. added is
-// the absolute increase (ms); ratio is the multiplicative increase.
+// the absolute increase (ms); ratio is the multiplicative increase. The ratio
+// arms are gated behind a meaningful absolute increase so that a sub-ms
+// baseline flicking up a few ms (a large ratio but a tiny real change) does
+// not trip a worse band — the fabric's mgmt-net RTTs are small enough that a
+// bare ratio was far too twitchy.
 func rttBand(rtt, baseline float64) string {
 	added := rtt - baseline
 	ratio := 0.0
@@ -381,11 +386,11 @@ func rttBand(rtt, baseline float64) string {
 		ratio = rtt / baseline
 	}
 	switch {
-	case added >= 150 || ratio >= 25:
+	case added >= 150 || (ratio >= 25 && added >= 60):
 		return bandCritical
-	case added >= 40 || ratio >= 8:
+	case added >= 40 || (ratio >= 8 && added >= 15):
 		return bandDegraded
-	case added >= 8 || ratio >= 3:
+	case added >= 10 || (ratio >= 3 && added >= 4):
 		return bandElevated
 	default:
 		return bandNominal

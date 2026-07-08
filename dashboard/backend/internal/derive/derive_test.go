@@ -154,46 +154,61 @@ func TestRTTJumpHysteresisToDegraded(t *testing.T) {
 	d := New(oneCoreLink(), st)
 	ti := baselineFrames(t, d, st, 4)
 
-	// First 20ms sample: 20/2 = 10x >= 8x -> raw degraded, but hysteresis
-	// holds the committed band at nominal for one frame.
-	ti += 1000
-	putRTT(st, ti, 20, 20)
-	putBytes(st, ti, 4, 1*mbit, 1*mbit)
-	health(st, ti)
-	if b := d.Frame(ti).Links[0].Band; b != "nominal" {
-		t.Fatalf("after 1 jump frame band = %q, want nominal (hysteresis)", b)
-	}
-
-	// Second consecutive 20ms sample commits the change.
-	ti += 1000
-	putRTT(st, ti, 20, 20)
-	putBytes(st, ti, 5, 1*mbit, 1*mbit)
-	health(st, ti)
-	if b := d.Frame(ti).Links[0].Band; b != "degraded" {
-		t.Fatalf("after 2 jump frames band = %q, want degraded", b)
+	// 20ms vs 2ms baseline: added 18 (>=15) and ratio 10x (>=8) -> raw
+	// degraded. Hysteresis (now 3) holds the committed band for two frames.
+	for i, want := range []string{"nominal", "nominal", "degraded"} {
+		ti += 1000
+		putRTT(st, ti, 20, 20)
+		putBytes(st, ti, 4+i, 1*mbit, 1*mbit)
+		health(st, ti)
+		if b := d.Frame(ti).Links[0].Band; b != want {
+			t.Fatalf("jump frame %d band = %q, want %q", i+1, b, want)
+		}
 	}
 }
 
-func TestRTTElevatedAfterTwoFrames(t *testing.T) {
+func TestRTTElevatedAfterThreeFrames(t *testing.T) {
 	st := store.New(64)
 	d := New(oneCoreLink(), st)
 	ti := baselineFrames(t, d, st, 4)
 
-	// 7ms vs 2ms baseline: added 5 (<8) but ratio 3.5 (>=3) -> elevated.
-	ti += 1000
-	putRTT(st, ti, 7, 7)
-	putBytes(st, ti, 4, 1*mbit, 1*mbit)
-	health(st, ti)
-	if b := d.Frame(ti).Links[0].Band; b != "nominal" {
-		t.Fatalf("after 1 elevated frame band = %q, want nominal", b)
+	// 7ms vs 2ms: added 5 (>=4) and ratio 3.5 (>=3) -> elevated after 3 frames.
+	for i, want := range []string{"nominal", "nominal", "elevated"} {
+		ti += 1000
+		putRTT(st, ti, 7, 7)
+		putBytes(st, ti, 4+i, 1*mbit, 1*mbit)
+		health(st, ti)
+		if b := d.Frame(ti).Links[0].Band; b != want {
+			t.Fatalf("elevated frame %d band = %q, want %q", i+1, b, want)
+		}
 	}
+}
 
-	ti += 1000
-	putRTT(st, ti, 7, 7)
-	putBytes(st, ti, 5, 1*mbit, 1*mbit)
-	health(st, ti)
-	if b := d.Frame(ti).Links[0].Band; b != "elevated" {
-		t.Fatalf("after 2 elevated frames band = %q, want elevated", b)
+// TestLowBaselineWobbleStaysNominal: a 0.5ms baseline flicking to 4ms is 8x
+// but only +3.5ms absolute -> must NOT reach degraded (ratio arm gated on a
+// meaningful absolute increase). It clears neither elevated arm either
+// (added 3.5 < 4 for the gated arm, and < 10 for the absolute arm).
+func TestLowBaselineWobbleStaysNominal(t *testing.T) {
+	st := store.New(64)
+	d := New(oneCoreLink(), st)
+
+	// Establish a ~0.5ms baseline.
+	var ti int64
+	for i := 0; i < 6; i++ {
+		ti = int64(i * 1000)
+		putRTT(st, ti, 0.5, 0.5)
+		putBytes(st, ti, i, 1*mbit, 1*mbit)
+		health(st, ti)
+	}
+	// Hold 4ms for several frames — well past hysteresis.
+	for i := 0; i < 5; i++ {
+		ti += 1000
+		putRTT(st, ti, 4, 4)
+		putBytes(st, ti, 6+i, 1*mbit, 1*mbit)
+		health(st, ti)
+		if b := d.Frame(ti).Links[0].Band; b == "degraded" || b == "critical" {
+			t.Fatalf("low-baseline 0.5->4ms wobble reached %q, want nominal/elevated at worst", b)
+		}
 	}
 }
 
@@ -223,10 +238,10 @@ func TestUpZeroBecomesDown(t *testing.T) {
 	d := New(oneCoreLink(), st)
 	ti := baselineFrames(t, d, st, 4)
 
-	// Interface up gauge drops to 0 on side A. Feed two frames so the band
+	// Interface up gauge drops to 0 on side A. Feed three frames so the band
 	// commits through hysteresis.
 	var l LinkVM
-	for k := 0; k < 2; k++ {
+	for k := 0; k < 3; k++ {
 		ti += 1000
 		putRTT(st, ti, 2, 2)
 		putBytes(st, ti, 4+k, 1*mbit, 1*mbit)
@@ -275,14 +290,14 @@ func TestStaleWhenHealthZero(t *testing.T) {
 	d := New(oneCoreLink(), st)
 	ti := baselineFrames(t, d, st, 4)
 
-	// Side B's border-router scrape fails (_up = 0). After two frames the
+	// Side B's border-router scrape fails (_up = 0). After three frames the
 	// band commits to stale and the Stale flag is set. Note the interface-up
 	// gauge (router_interface_up) is never zeroed here -- it just freezes at
 	// its last reading, which is exactly how a dead AS looks in practice:
 	// vm.Up stays true while vm.Stale becomes true.
 	var l LinkVM
 	var f Frame
-	for k := 0; k < 2; k++ {
+	for k := 0; k < 3; k++ {
 		ti += 1000
 		putRTT(st, ti, 2, 2)
 		putBytes(st, ti, 4+k, 1*mbit, 1*mbit)
@@ -327,14 +342,15 @@ func TestBaselineSurvivesRingRollover(t *testing.T) {
 	// Establish a true baseline of 2ms while the ring still holds it.
 	ti := baselineFrames(t, d, st, 3)
 
-	// Push far more 60ms samples than the ring's capacity, so the original
-	// 2ms samples are fully evicted from the ring. 60/2 = 30x >= the 25x
-	// critical ratio threshold, so as long as the true baseline is
-	// remembered the band must stay (and remain) critical.
+	// Push far more 70ms samples than the ring's capacity, so the original
+	// 2ms samples are fully evicted from the ring. 70/2 = 35x ratio (>=25x)
+	// and +68ms added (>=60ms), clearing the gated critical arm, so as long
+	// as the true baseline is remembered the band must stay (and remain)
+	// critical.
 	var f Frame
 	for k := 0; k < 8; k++ {
 		ti += 1000
-		putRTT(st, ti, 60, 60)
+		putRTT(st, ti, 70, 70)
 		putBytes(st, ti, 3+k, 1*mbit, 1*mbit)
 		health(st, ti)
 		f = d.Frame(ti)
@@ -372,6 +388,15 @@ func TestSeedBaselinesMergeMin(t *testing.T) {
 // TestSeededBaselineAffectsBand checks that a seeded baseline (as would be
 // restored from disk at startup via cmd/fabricd's baselines_path) actually
 // feeds into deriveLink's RTT classification, not just the Baselines() map.
+//
+// The RTT is 5ms (not the original 2ms): against the seeded 0.5ms baseline,
+// 2ms only has added 1.5ms, which no longer clears the new gated elevated
+// arm (needs added>=4 alongside ratio>=3), so it would read nominal under
+// the new rule and the test would no longer prove the seed is honored (a
+// ring-only baseline of 2ms — i.e. the seed being ignored — would also read
+// nominal). 5ms gives added 4.5 (>=4) and ratio 10x (>=3), clearing the
+// gated arm, while an unseeded ring baseline of 5ms would still read
+// nominal (added 0, ratio 1) — so only the honored seed explains "elevated".
 func TestSeededBaselineAffectsBand(t *testing.T) {
 	st := store.New(64)
 	d := New(oneCoreLink(), st)
@@ -380,15 +405,15 @@ func TestSeededBaselineAffectsBand(t *testing.T) {
 	d.SeedBaselines(map[string]float64{"150/br/rtt/1": baselineFloor, "151/br/rtt/1": baselineFloor})
 
 	var f Frame
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		ti := int64(i * 1000)
-		putRTT(st, ti, 2, 2)
+		putRTT(st, ti, 5, 5)
 		putBytes(st, ti, i, 1*mbit, 1*mbit)
 		health(st, ti)
 		f = d.Frame(ti)
 	}
 	if f.Links[0].Band != bandElevated {
-		t.Fatalf("band = %q, want %q (seeded baseline should be honored: 2ms/0.5ms = 4x ratio)", f.Links[0].Band, bandElevated)
+		t.Fatalf("band = %q, want %q (seeded baseline should be honored: 5ms/0.5ms = 10x ratio, +4.5ms added)", f.Links[0].Band, bandElevated)
 	}
 }
 
