@@ -9,9 +9,10 @@
 // Two REST calls (Task 7's api.ts) plus the live frame do all the work:
 // fetchIdintPaths lists candidates for the selected pair (refetched whenever
 // src/dst changes), putTrace pins a path (or AUTO with no fingerprint) and
-// starts/retargets the shared session, stopTrace ends it. The panel's close
-// button only deselects — the trace keeps running server-side so a second
-// operator (or the same one, later) can reopen the panel and see it live.
+// starts/retargets the shared session, stopTrace ends it. Both closing the
+// panel and changing src/dst while a trace is running stop the session (via
+// stopIfActive) — a v1 trace has exactly one live consumer, so there is no
+// "leave it running for someone else" case to preserve.
 //
 // Sparkline: mirrors LinkPanel's ring-per-frame pattern — the last RING probe
 // RTTs, appended once per new vm.updated_at (deduped via a ref, same trick
@@ -54,12 +55,20 @@ export default function TracePanel() {
   const [busy, setBusy] = useState(false);
   const [rttRing, setRttRing] = useState<number[]>([]);
   const lastUpdated = useRef<number | undefined>(undefined);
+  // Mirror of "is a trace session active", read by the close/retarget stoppers
+  // without depending on the async vm frame. Set true on pickPath, false on
+  // stop; the vm frame confirms it a beat later.
+  const active = useRef(false);
 
   // Refetch the candidate path list whenever the operator changes either
   // endpoint. A 404 (feature disabled in fabricd's config) is the only way
   // this throws, so any thrown error is treated as that case.
   useEffect(() => {
     let cancelled = false;
+    // Changing either endpoint invalidates the running session — stop it so a
+    // stale trace for the old pair doesn't keep probing after the operator
+    // has moved on.
+    stopIfActive();
     setPaths(null);
     setPathsError(null);
     setPickError(null);
@@ -73,6 +82,7 @@ export default function TracePanel() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, dst]);
 
   // Append the current frame's probe RTT to the ring, once per new reading.
@@ -88,6 +98,7 @@ export default function TracePanel() {
     setPickError(null);
     try {
       await putTrace(src, dst, fingerprint);
+      active.current = true;
     } catch (e) {
       setPickError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -101,6 +112,7 @@ export default function TracePanel() {
     setPickError(null);
     try {
       await stopTrace();
+      active.current = false;
     } catch (e) {
       setPickError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -108,20 +120,22 @@ export default function TracePanel() {
     }
   };
 
+  const stopIfActive = () => {
+    if (!active.current) return;
+    active.current = false;
+    // Fire-and-forget: the panel is closing or retargeting, so there is no
+    // UI left to surface an error to. stopTrace is idempotent server-side.
+    void stopTrace().catch(() => {});
+  };
+
   const rows = vm ? hopRows(vm, linksById) : [];
   const hops = vm?.hops ?? [];
   const allVerified = vm !== undefined && hops.length > 0 && hops.every((h) => h.verified);
-  const footer =
-    rows.length > 0
-      ? [...rows.map((r) => (r.rttMs != null ? `${r.rttMs.toFixed(1)} ms` : "– ms")), allVerified ? "MAC verified ✓" : "unverified"].join(
-          " · ",
-        )
-      : "";
 
   return (
     <div className="panel-inner">
       <div className="panel-head">
-        <button className="closebtn" aria-label="Close panel" onClick={() => select(undefined)}>
+        <button className="closebtn" aria-label="Close panel" onClick={() => { stopIfActive(); select(undefined); }}>
           ✕
         </button>
         <div className="eyebrow">ID-INT path trace</div>
@@ -129,6 +143,50 @@ export default function TracePanel() {
           {ia(src)} → {ia(dst)}
         </h2>
       </div>
+
+      {vm && vm.ok && (
+        <div className="sparkblock">
+          <div className="row">
+            <span className="name">Probe RTT</span>
+            <span className="reading">{vm.probe_rtt_ms.toFixed(1)} ms</span>
+          </div>
+          <Spark data={rttRing} color="#C9B37E" />
+        </div>
+      )}
+
+      {vm && (
+        <div className="shapingbox">
+          <div className="tracehophead">
+            <h3>Hops</h3>
+            {hops.length > 0 && (
+              <span className={allVerified ? "macchip ok" : "macchip"}>{allVerified ? "MAC verified ✓" : "unverified"}</span>
+            )}
+          </div>
+          {vm.error && <span className="daemon-note err">{vm.error}</span>}
+          {!vm.error && vm.ok && hops.length === 0 && <span className="daemon-note">PROBING…</span>}
+          {(vm.error || rows.length > 0) && (
+            <div className={vm.error ? "trace-stale" : undefined}>
+              <div className="tracehead">
+                <span>LINK</span>
+                <span>RTT BR</span>
+                <span>EGR TX</span>
+              </div>
+              {rows.map((r) => (
+                <div className="tracerow" key={r.link}>
+                  <span>{r.link}</span>
+                  <div className="tracebarcell">
+                    <div className="tracebar">
+                      <i style={{ width: `${r.barPct}%` }} className={r.shaped ? "hot" : undefined} />
+                    </div>
+                    <span className="tracerttval">{r.rttMs != null ? `${r.rttMs.toFixed(1)} ms` : "– ms"}</span>
+                  </div>
+                  <span>{r.egrPct != null ? `${r.egrPct.toFixed(1)}%` : "–"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="shapingbox">
         <h3>Path</h3>
@@ -153,78 +211,43 @@ export default function TracePanel() {
         {pathsError ? (
           <span className="daemon-note err">{pathsError}</span>
         ) : (
-          <div className="pathlist">
-            <button
-              type="button"
-              className="pathrow"
-              disabled={busy}
-              aria-pressed={!!vm?.auto && vm.src === ia(src) && vm.dst === ia(dst)}
-              onClick={() => pickPath(undefined)}
-            >
-              <span>AUTO — follow advertised-fastest path</span>
-            </button>
-            {paths?.map((p) => (
+          <>
+            <div className="pathcaption">one-way latency advertised in beacons</div>
+            <div className="pathlist">
               <button
-                key={p.fingerprint}
                 type="button"
                 className="pathrow"
                 disabled={busy}
-                aria-pressed={vm?.fingerprint === p.fingerprint && !vm?.auto}
-                onClick={() => pickPath(p.fingerprint)}
+                aria-pressed={!!vm?.auto && vm.src === ia(src) && vm.dst === ia(dst)}
+                onClick={() => pickPath(undefined)}
               >
-                <span>{pathLabel(p)}</span>
-                <span>{latencyLabel(p)} · PIN</span>
+                <span>AUTO — follow advertised-fastest path</span>
               </button>
-            ))}
-          </div>
-        )}
-        {pickError && <span className="daemon-note err">{pickError}</span>}
-      </div>
-
-      {vm && vm.ok && (
-        <div className="sparkblock">
-          <div className="row">
-            <span className="name">Probe RTT</span>
-            <span className="reading">{vm.probe_rtt_ms.toFixed(1)} ms</span>
-          </div>
-          <Spark data={rttRing} color="#C9B37E" />
-        </div>
-      )}
-
-      <div className="shapingbox">
-        <h3>Hops</h3>
-        {!vm && <span className="daemon-note">NO ACTIVE TRACE — pick a path above</span>}
-        {vm?.error && <span className="daemon-note err">{vm.error}</span>}
-        {vm && !vm.error && vm.ok && hops.length === 0 && <span className="daemon-note">PROBING…</span>}
-        {vm && (vm.error || rows.length > 0) && (
-          <>
-            <div className={vm.error ? "trace-stale" : undefined}>
-              <div className="tracehead">
-                <span>LINK</span>
-                <span>RTT BR</span>
-                <span>EGR TX</span>
-                <span>Q</span>
-              </div>
-              {rows.map((r) => (
-                <div className="tracerow" key={r.link}>
-                  <span>{r.link}</span>
-                  <div className="tracebar">
-                    <i style={{ width: `${r.barPct}%` }} className={r.shaped ? "hot" : undefined} />
-                  </div>
-                  <span>{r.egrPct != null ? `${r.egrPct.toFixed(1)}%` : "–"}</span>
-                  <span>{r.queue ?? "–"}</span>
-                </div>
+              {paths?.map((p) => (
+                <button
+                  key={p.fingerprint}
+                  type="button"
+                  className="pathrow"
+                  disabled={busy}
+                  aria-pressed={vm?.fingerprint === p.fingerprint && !vm?.auto}
+                  onClick={() => pickPath(p.fingerprint)}
+                >
+                  <span>{pathLabel(p)}</span>
+                  <span>{latencyLabel(p)}</span>
+                </button>
               ))}
             </div>
-            {rows.length > 0 && <span className="daemon-note">{footer}</span>}
           </>
         )}
+        {pickError && <span className="daemon-note err">{pickError}</span>}
 
-        <div className="btnrow">
-          <button className="ghost" disabled={busy} onClick={runStop}>
-            STOP
-          </button>
-        </div>
+        {vm && (
+          <div className="btnrow">
+            <button className="ghost" disabled={busy} onClick={runStop}>
+              STOP
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

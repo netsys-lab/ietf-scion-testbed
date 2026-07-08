@@ -114,9 +114,10 @@ input[type=range]:focus-visible { outline: 2px solid var(--brass); outline-offse
 .pathrow:disabled { opacity: 0.5; cursor: default; }
 .pathrow:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .pathrow[aria-pressed="true"] { outline: 1px solid var(--brass); }
+.pathcaption { font-family: var(--din); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-mute); text-transform: uppercase; margin-bottom: 6px; }
 
 .tracehead, .tracerow {
-  display: grid; grid-template-columns: 74px 1fr 62px 36px; align-items: center; gap: 8px;
+  display: grid; grid-template-columns: 74px 1fr 62px; align-items: center; gap: 8px;
 }
 .tracehead {
   font-family: var(--din); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
@@ -128,10 +129,16 @@ input[type=range]:focus-visible { outline: 2px solid var(--brass); outline-offse
 }
 .tracerow span:first-child { color: var(--ink); }
 .tracehead span:not(:first-child), .tracerow span:not(:first-child) { text-align: right; }
-.tracebar { height: 11px; background: var(--raised); border-radius: 2px; overflow: hidden; }
+/* RTT cell sits beside the bar: the bar fills, the value reads at its right. */
+.tracebarcell { display: flex; align-items: center; gap: 8px; }
+.tracebar { flex: 1; height: 11px; background: var(--raised); border-radius: 2px; overflow: hidden; }
 .tracebar i { display: block; height: 100%; background: var(--brass); }
 .tracebar i.hot { background: var(--warn); }
+.tracerttval { font-family: var(--mono); font-size: 11px; color: var(--ink-2); min-width: 52px; text-align: right; }
 /* Applied to the hop table's wrapper while the live session is in an error
  * state: the table still shows the last-known hop readings, just dimmed to
  * read as "not current" rather than disappearing outright. */
 .trace-stale { opacity: 0.45; }
+.tracehophead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.macchip { font-family: var(--din); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
+.macchip.ok { color: var(--brass); }
