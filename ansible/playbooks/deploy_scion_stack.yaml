@@ -39,8 +39,11 @@
     # so scion-linkd (runs as root but with CapabilityBoundingSet=CAP_NET_ADMIN,
     # i.e. no CAP_DAC_OVERRIDE) can create /etc/scion/AS<n>/staticInfoConfig.json
     # as the dir owner. A scion-owned dir would block linkd's staticinfo write.
-    # The CS reads config as 'scion' via other/group perms; secrets under
-    # crypto/ and keys/ stay scion-owned 0600 (copied below).
+    # The CS reads config as 'scion' via other/group perms; certs/ holds
+    # PUBLIC trust material (TRC + AS cert chain, no private keys) and stays
+    # 0644/0755 so the bootstrap-server's DynamicUser can read it to serve
+    # /trcs; crypto/ and keys/ hold private keys and stay scion-owned
+    # 0600/0700 (both copied below).
     - name: Create /etc/scion and per-AS config dir (root-owned)
       ansible.builtin.file:
         path: "{{ item }}"
@@ -60,7 +63,16 @@
         group: scion
         mode: "0644"
 
-    - name: Copy crypto material dirs into config_dir (certs/crypto/keys)
+    - name: Copy public trust material into config_dir (certs)
+      ansible.builtin.copy:
+        src: "{{ cfg_src }}/certs"
+        dest: "/etc/scion/AS{{ asnum }}/"
+        owner: scion
+        group: scion
+        mode: "0644"
+        directory_mode: "0755"
+
+    - name: Copy private crypto material dirs into config_dir (crypto/keys)
       ansible.builtin.copy:
         src: "{{ cfg_src }}/{{ item }}"
         dest: "/etc/scion/AS{{ asnum }}/"
@@ -68,7 +80,7 @@
         group: scion
         mode: "0600"
         directory_mode: "0700"
-      loop: [certs, crypto, keys]
+      loop: [crypto, keys]
 
     - name: Place flat service tomls (BR + CS) at /etc/scion/<id>.toml
       ansible.builtin.copy:

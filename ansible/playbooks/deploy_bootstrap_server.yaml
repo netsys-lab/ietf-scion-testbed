@@ -39,3 +39,11 @@
         return_content: true
       register: topo_probe
       failed_when: "'isd_as' not in topo_probe.content"
+
+    - name: Verify /trcs serves a non-empty TRC list (certs must be readable by DynamicUser)
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ bootstrap_port }}/trcs"
+        return_content: true
+      register: trcs_probe
+      failed_when: >-
+        trcs_probe.content == '[]' or 'isd' not in trcs_probe.content

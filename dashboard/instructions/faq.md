@@ -3,7 +3,7 @@
 **What is this?** A 12-AS SCION network built for IETF 126, running as real
 SCION control/data plane software (border routers, control services,
 sciond) across containers, with a live topology dashboard. Attendees can
-join as real endhosts in ASes 1-158..1-161 (laptop over WireGuard, or a
+join as real endhosts in ASes 1-152, 1-155, 1-158, 1-161 (laptop over WireGuard, or a
 zero-install browser terminal), and can also just watch the map.
 
 **What's a "SCION link"?** Each line on the dashboard map is an inter-AS
