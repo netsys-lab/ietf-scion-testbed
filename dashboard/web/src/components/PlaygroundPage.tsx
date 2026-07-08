@@ -19,7 +19,7 @@ export default function PlaygroundPage() {
     <div className="playground">
       <header className="playground-strip">
         <h1>SCION Playground — 4 live terminals</h1>
-        <a href="/">← fabric map</a>
+        <a href="/">← testbed map</a>
       </header>
       <div className="playground-grid">
         {PLAYGROUND_ASES.map((n) => (
