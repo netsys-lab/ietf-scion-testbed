@@ -13,3 +13,6 @@ addr = "10.20.3.154:31142"
 
 [log.console]
 level = "info"
+
+[router]
+num_processors = 1

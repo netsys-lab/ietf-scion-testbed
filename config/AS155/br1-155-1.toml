@@ -10,3 +10,6 @@ experimental_idint = true
 
 [log.console]
 level = "info"
+
+[router]
+num_processors = 1
