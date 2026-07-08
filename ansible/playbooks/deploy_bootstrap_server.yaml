@@ -6,6 +6,12 @@
     bootstrap_port: 8041
     asnum: "{{ ansible_host.split('.')[-1] }}"
   tasks:
+    - name: Ensure bootstrap-server lib dir exists (copy does not create nested parents)
+      ansible.builtin.file:
+        path: /usr/local/lib/scion-bootstrap-server
+        state: directory
+        mode: "0755"
+
     - name: Install bootstrap-server script
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/bootstrap-server/bootstrap-server.py"
