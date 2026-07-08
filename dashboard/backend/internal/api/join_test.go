@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -40,7 +41,12 @@ func TestASAllowed(t *testing.T) {
 	}
 }
 
-func newJoinServer(t *testing.T, slots int) http.Handler {
+// newJoinServerWithConfig builds a join-enabled server from an
+// attendee-supplied JoinConfig, backed by a fresh temp-file wgpool with the
+// given number of slots. It's the common setup every join test shares; jc
+// lets a test override JoinableASes / BootstrapURLTemplate / etc. without
+// duplicating the pool-file and graph plumbing.
+func newJoinServerWithConfig(t *testing.T, slots int, jc JoinConfig) http.Handler {
 	t.Helper()
 	dir := t.TempDir()
 	pf := fmt.Sprintf(`{"server_public_key":"SPUB","listen_port":51820,"slots":[%s]}`,
@@ -60,13 +66,17 @@ func newJoinServer(t *testing.T, slots int) http.Handler {
 	g := loadGraph(t)
 	st := store.New(60)
 	d := derive.New(g, st)
-	jc := JoinConfig{
+	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, pool, nil)
+}
+
+func newJoinServer(t *testing.T, slots int) http.Handler {
+	t.Helper()
+	return newJoinServerWithConfig(t, slots, JoinConfig{
 		Enabled: true, BoothCode: "secret", ISD: 1,
 		JoinableASes: []int{158, 159, 160, 161},
 		EndpointV6:   "fd99::201", EndpointV4: "203.0.113.7", ListenPort: 51820,
 		RateMax: 100, RateWindow: time.Minute,
-	}
-	return New(g, st, d, &fakeController{health: map[int]bool{}, shaping: map[string]*derive.Shaping{}}, nil, jc, pool, nil)
+	})
 }
 
 func postClaim(t *testing.T, h http.Handler, body string) *httptest.ResponseRecorder {
@@ -145,5 +155,110 @@ func TestMetaNoCodeNeeded(t *testing.T) {
 	}
 	if m["endpoint_v6"] != "[fd99::201]:51820" {
 		t.Fatalf("endpoint_v6: %v", m["endpoint_v6"])
+	}
+}
+
+func TestMetaJoinableInfo(t *testing.T) {
+	h := newJoinServerWithConfig(t, 2, JoinConfig{
+		Enabled: true, BoothCode: "secret", ISD: 1,
+		JoinableASes:         []int{152, 155},
+		BootstrapURLTemplate: "http://10.20.3.%d:8041",
+		EndpointV6:           "fd99::201", EndpointV4: "203.0.113.7", ListenPort: 51820,
+		RateMax: 100, RateWindow: time.Minute,
+	})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/join/meta", nil)
+	req.SetBasicAuth("scion", "secret")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Joinable []struct {
+			AS           int    `json:"as"`
+			IsdAs        string `json:"isd_as"`
+			BundleURL    string `json:"bundle_url"`
+			BootstrapURL string `json:"bootstrap_url"`
+		} `json:"joinable"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Joinable) != 2 {
+		t.Fatalf("joinable len = %d, want 2", len(body.Joinable))
+	}
+	if body.Joinable[0].AS != 152 || body.Joinable[0].IsdAs != "1-152" ||
+		body.Joinable[0].BundleURL != "/api/join/bundle/152" ||
+		body.Joinable[0].BootstrapURL != "http://10.20.3.152:8041" {
+		t.Fatalf("joinable[0] = %+v", body.Joinable[0])
+	}
+	if body.Joinable[1].AS != 155 || body.Joinable[1].IsdAs != "1-155" ||
+		body.Joinable[1].BundleURL != "/api/join/bundle/155" ||
+		body.Joinable[1].BootstrapURL != "http://10.20.3.155:8041" {
+		t.Fatalf("joinable[1] = %+v", body.Joinable[1])
+	}
+}
+
+func TestMetaBootstrapURLOmittedWhenTemplateEmpty(t *testing.T) {
+	h := newJoinServerWithConfig(t, 2, JoinConfig{
+		Enabled: true, BoothCode: "secret", ISD: 1,
+		JoinableASes: []int{152, 155},
+		EndpointV6:   "fd99::201", EndpointV4: "203.0.113.7", ListenPort: 51820,
+		RateMax: 100, RateWindow: time.Minute,
+		// BootstrapURLTemplate left empty.
+	})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/join/meta", nil)
+	req.SetBasicAuth("scion", "secret")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Joinable []struct {
+			BootstrapURL string `json:"bootstrap_url"`
+		} `json:"joinable"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Joinable) != 2 {
+		t.Fatalf("joinable len = %d, want 2", len(body.Joinable))
+	}
+	for i, j := range body.Joinable {
+		if j.BootstrapURL != "" {
+			t.Fatalf("joinable[%d].bootstrap_url = %q, want empty", i, j.BootstrapURL)
+		}
+	}
+}
+
+func TestClaimWithoutASDefaultsToFirstJoinable(t *testing.T) {
+	h := newJoinServerWithConfig(t, 2, JoinConfig{
+		Enabled: true, BoothCode: "secret", ISD: 1,
+		JoinableASes:         []int{152, 155, 158, 161},
+		BootstrapURLTemplate: "http://10.20.3.%d:8041",
+		EndpointV6:           "fd99::201", EndpointV4: "203.0.113.7", ListenPort: 51820,
+		RateMax: 100, RateWindow: time.Minute,
+	})
+	rr := postClaim(t, h, `{"code":"secret"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["as"] != float64(152) {
+		t.Fatalf("as = %v, want 152", resp["as"])
+	}
+	ids, ok := resp["fc00_identities"].(map[string]any)
+	if !ok {
+		t.Fatalf("fc00_identities missing or wrong shape: %v", resp["fc00_identities"])
+	}
+	for _, as := range []int{152, 155, 158, 161} {
+		key := strconv.Itoa(as)
+		if v, ok := ids[key]; !ok || v == "" {
+			t.Fatalf("fc00_identities[%q] = %v, want non-empty", key, v)
+		}
 	}
 }

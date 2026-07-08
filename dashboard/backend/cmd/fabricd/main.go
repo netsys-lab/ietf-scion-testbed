@@ -112,6 +112,9 @@ type config struct {
 	// api package default of 5). Venue NAT64 can put many attendees behind
 	// one source IP, so the on-site value must absorb a booth-opening rush.
 	ClaimRateMax int `toml:"claim_rate_max"`
+	// BootstrapURLTemplate is a fmt template with one %d (AS number) for the
+	// per-AS end-host bootstrap-server URL surfaced on the join page.
+	BootstrapURLTemplate string `toml:"bootstrap_url_template"`
 
 	// Idint configures the ID-INT path-inspector trace feature (spec
 	// 2026-07-07). Disabled by default; in mock mode a synthetic prober is
@@ -195,6 +198,8 @@ func main() {
 		PlayTargets:     playTargets,
 		RateMax:         cfg.ClaimRateMax, // <=0 falls back to api.New's default (5/min)
 		RateWindow:      time.Minute,
+
+		BootstrapURLTemplate: cfg.BootstrapURLTemplate,
 	}
 	var pool api.PoolStore // nil until B3 wires a real wgpool-backed store.
 

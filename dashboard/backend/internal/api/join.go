@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/ratelimit"
@@ -70,6 +71,12 @@ func (s *server) handleJoinClaim(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad code", http.StatusForbidden)
 		return
 	}
+	// AS is optional now: one conf tunnels the whole mgmt net, so the slot is
+	// not bound to a single AS. Default to the first joinable AS; if a
+	// specific AS is given it must still be joinable.
+	if req.AS == 0 && len(s.join.JoinableASes) > 0 {
+		req.AS = s.join.JoinableASes[0]
+	}
 	if !s.join.asAllowed(req.AS) {
 		http.NotFound(w, r)
 		return
@@ -93,12 +100,26 @@ func (s *server) handleJoinClaim(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "identity derivation failed", http.StatusInternalServerError)
 		return
 	}
+	// The claimed slot's single WireGuard IP maps to a distinct fc00
+	// identity per joinable AS (scitra keys identity off ISD-AS + host, not
+	// the WG address alone), so surface all of them: the attendee can act as
+	// an endhost in any joinable AS over the one conf.
+	identities := make(map[string]string, len(s.join.JoinableASes))
+	for _, as := range s.join.JoinableASes {
+		id, err := scitramap.MappedIPv6(s.join.ISD, as, ip)
+		if err != nil {
+			http.Error(w, "identity derivation failed", http.StatusInternalServerError)
+			return
+		}
+		identities[strconv.Itoa(as)] = id.String()
+	}
 	resp := map[string]any{
 		"slot": sl.N, "ip": sl.IP, "as": req.AS,
-		"isd_as":        fmt.Sprintf("%d-%d", s.join.ISD, req.AS),
-		"fc00_identity": fc.String(),
-		"conf":          renderConf(sl, s.pool.ServerPublicKey(), s.join.endpointV6Str()),
-		"endpoint_v6":   s.join.endpointV6Str(),
+		"isd_as":          fmt.Sprintf("%d-%d", s.join.ISD, req.AS),
+		"fc00_identity":   fc.String(),
+		"fc00_identities": identities,
+		"conf":            renderConf(sl, s.pool.ServerPublicKey(), s.join.endpointV6Str()),
+		"endpoint_v6":     s.join.endpointV6Str(),
 	}
 	if v4 := s.join.endpointV4Str(); v4 != "" {
 		resp["conf_v4"] = renderConf(sl, s.pool.ServerPublicKey(), v4)
@@ -131,9 +152,22 @@ func (s *server) handleJoinMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Ints(playAses)
 
+	// joinable carries per-AS join info (bundle + bootstrap URLs) alongside
+	// the plain joinable_ases list kept for backward compatibility.
+	joinable := make([]map[string]any, 0, len(s.join.JoinableASes))
+	for _, as := range s.join.JoinableASes {
+		joinable = append(joinable, map[string]any{
+			"as":            as,
+			"isd_as":        fmt.Sprintf("%d-%d", s.join.ISD, as),
+			"bundle_url":    fmt.Sprintf("/api/join/bundle/%d", as),
+			"bootstrap_url": s.join.bootstrapURL(as),
+		})
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"enabled":         true,
 		"joinable_ases":   s.join.JoinableASes,
+		"joinable":        joinable,
 		"playground_ases": playAses,
 		"slots_total":     total, "slots_claimed": claimed, "slots_burned": burned,
 		"hub_ok":      hubOK,

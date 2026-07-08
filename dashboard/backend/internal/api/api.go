@@ -12,6 +12,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"strconv"
@@ -67,6 +68,11 @@ type JoinConfig struct {
 	PlayTargets     map[int]string
 	RateMax         int // claim attempts per key
 	RateWindow      time.Duration
+
+	// BootstrapURLTemplate is a fmt template with a single %d (the AS number)
+	// yielding the per-AS bootstrap-server URL, e.g. "http://10.20.3.%d:8041".
+	// Empty means bootstrap URLs are omitted from /api/join/meta.
+	BootstrapURLTemplate string
 }
 
 // asAllowed reports whether AS number n is one of the joinable ASes.
@@ -77,6 +83,15 @@ func (jc JoinConfig) asAllowed(n int) bool {
 		}
 	}
 	return false
+}
+
+// bootstrapURL renders the bootstrap-server URL for AS n, or "" if no template
+// is configured.
+func (jc JoinConfig) bootstrapURL(n int) string {
+	if jc.BootstrapURLTemplate == "" {
+		return ""
+	}
+	return fmt.Sprintf(jc.BootstrapURLTemplate, n)
 }
 
 // PoolStore is the subset of the wg-pool store (internal/wgpool, B3) the
