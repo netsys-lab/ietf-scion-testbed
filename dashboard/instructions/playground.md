@@ -3,7 +3,7 @@
 Zero install: a live SCION endhost shell right in your browser, running
 inside one of ASes 1-158..1-161 on the real testbed. Good if you don't want
 to install anything, or just want a 2-minute taste before setting up your
-own laptop (see `laptop-linux.md` / `laptop-macos.md`).
+own laptop (see `laptop-linux.md`).
 
 1. **Open a terminal.** On this page, pick one of the "AS 1-158..161
    terminal" cards. You'll land on a booth-code-gated web terminal

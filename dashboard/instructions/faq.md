@@ -21,7 +21,7 @@ scionproto release binaries (including `v0.15.0`) are built
 which requires cgo for the trust/path DBs. The result: the official
 `scion-daemon` panics on startup (`go-sqlite3 ... is a stub`) and never
 gets to open a socket. Build from source instead with `CGO_ENABLED=1` (see
-`laptop-linux.md`/`laptop-macos.md`) — we've proven upstream `v0.15.0`
+`laptop-linux.md`) — we've proven upstream `v0.15.0`
 built this way interoperates with this testbed. If the booth is offering a
 prebuilt CGO-enabled binary for your platform, that works too.
 
