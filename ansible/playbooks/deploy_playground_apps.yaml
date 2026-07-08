@@ -15,7 +15,7 @@
   tasks:
     - name: Install curl, git, python venv tooling
       ansible.builtin.apt:
-        name: [curl, git, python3-venv, python3-pip]
+        name: [curl, git, python3-venv, python3-pip, lynx]
         state: present
         update_cache: true
 
@@ -25,6 +25,12 @@
         dest: "/usr/local/bin/{{ item }}"
         mode: "0755"
       loop: [scion-bwtestclient, scion-bwtestserver, scion-netcat, scion-bat]
+
+    - name: Install HTTP/3 curl (shadows distro curl on PATH)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/curl/bin/curl"
+        dest: /usr/local/bin/curl
+        mode: "0755"
 
     - name: Install scion2ip (pure-python stdlib converter)
       ansible.builtin.copy:
@@ -50,6 +56,38 @@
       ansible.builtin.command:
         cmd: python3 -m venv {{ scapy_dir }}/.venv
         creates: "{{ scapy_dir }}/.venv/bin/python"
+
+    - name: Resolve the venv python to a real interpreter (setcap needs a file, not a symlink)
+      ansible.builtin.command: readlink -f "{{ scapy_dir }}/.venv/bin/python"
+      register: venv_py_real
+      changed_when: false
+
+    - name: Copy the real interpreter into the venv (so caps ride a private binary, not system python3)
+      ansible.builtin.copy:
+        src: "{{ venv_py_real.stdout }}"
+        dest: "{{ scapy_dir }}/.venv/bin/python3.real"
+        remote_src: true
+        mode: "0755"
+
+    - name: Point the venv python symlinks at the private capped interpreter
+      ansible.builtin.file:
+        src: python3.real
+        dest: "{{ scapy_dir }}/.venv/bin/{{ item }}"
+        state: link
+        force: true
+      loop: [python, python3]
+
+    # Security note (accepted, user-approved): file capabilities are dropped in
+    # unprivileged containers only if the container lacks the cap in its bounding
+    # set. The playground CTs are unprivileged, so verify at integration/deploy
+    # time that cap_net_raw actually persists (`getcap`) and that scapy-scion can
+    # sniff. If unprivileged containers strip the cap (likely for cap_net_admin),
+    # fall back to cap_net_raw alone, or run scapy under sudo restricted to the
+    # guest user. Raw AF_PACKET sockets bypass the guest nftables egress filter
+    # this way — accepted because the mgmt net is isolated and booth-gated.
+    - name: Grant raw-socket + net-admin caps to the venv interpreter (scapy sniff/send without sudo)
+      ansible.builtin.command: setcap cap_net_raw,cap_net_admin+ep "{{ scapy_dir }}/.venv/bin/python3.real"
+      changed_when: false
 
     - name: Install scapy-scion-int into the venv (editable + extras)
       ansible.builtin.command:
