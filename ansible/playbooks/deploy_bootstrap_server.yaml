@@ -1,0 +1,41 @@
+---
+- name: Deploy the SCION end-host bootstrap server (all 12 ASes, HTTP 8041 on mgmt)
+  hosts: ases
+  become: true
+  vars:
+    bootstrap_port: 8041
+    asnum: "{{ ansible_host.split('.')[-1] }}"
+  tasks:
+    - name: Install bootstrap-server script
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/bootstrap-server/bootstrap-server.py"
+        dest: /usr/local/lib/scion-bootstrap-server/bootstrap-server.py
+        mode: "0755"
+
+    - name: Render bootstrap-server unit
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/bootstrap/bootstrap-server.service.j2"
+        dest: /etc/systemd/system/bootstrap-server.service
+        mode: "0644"
+
+    - name: Enable + restart bootstrap-server
+      ansible.builtin.systemd:
+        name: bootstrap-server
+        enabled: true
+        state: restarted
+        daemon_reload: true
+
+    - name: Verify bootstrap server bound on {{ bootstrap_port }}
+      ansible.builtin.shell: ss -tln | grep -q '{{ ansible_host }}:{{ bootstrap_port }}'
+      register: boot_ss
+      changed_when: false
+      retries: 5
+      delay: 2
+      until: boot_ss.rc == 0
+
+    - name: Verify /topology serves JSON
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ bootstrap_port }}/topology"
+        return_content: true
+      register: topo_probe
+      failed_when: "'isd_as' not in topo_probe.content"
