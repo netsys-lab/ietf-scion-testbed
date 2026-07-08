@@ -50,12 +50,12 @@ playground:
     play-158:
       ansible_host: 10.20.3.210
       playground_as: "158"
-    play-159:
+    play-152:
       ansible_host: 10.20.3.211
-      playground_as: "159"
-    play-160:
+      playground_as: "152"
+    play-155:
       ansible_host: 10.20.3.212
-      playground_as: "160"
+      playground_as: "155"
     play-161:
       ansible_host: 10.20.3.213
       playground_as: "161"

@@ -141,9 +141,10 @@
       loop: [nftables, scion-sciond, scitra, ttyd, iperf3-server]
 
     - name: Verify sciond answers locally
-      ansible.builtin.command: /usr/local/bin/scion showpaths 1-159 --sciond 127.0.0.1:30255 --maxpaths 1
+      ansible.builtin.command: /usr/local/bin/scion showpaths 1-150 --sciond 127.0.0.1:30255 --maxpaths 1
       register: sp
       changed_when: false
       failed_when: sp.rc != 0
-      # AS159->159 self is degenerate; for play-158 target a different AS.
-      when: playground_as != "159"
+      retries: 5
+      delay: 2
+      until: sp.rc == 0

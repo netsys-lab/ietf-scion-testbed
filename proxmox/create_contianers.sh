@@ -132,10 +132,10 @@ pct create 201 $TEMPLATE $HUB_OPTS --unprivileged 1 --description "wg-hub" \
 pct create 210 $TEMPLATE $PLAY_OPTS --description "play-158" \
     --net0 name=eth0,bridge=mgmt,hwaddr=00:00:00:00:00:D2,ip=10.20.3.210/24,gw=10.20.3.1
 
-pct create 211 $TEMPLATE $PLAY_OPTS --description "play-159" \
+pct create 211 $TEMPLATE $PLAY_OPTS --description "play-152" \
     --net0 name=eth0,bridge=mgmt,hwaddr=00:00:00:00:00:D3,ip=10.20.3.211/24,gw=10.20.3.1
 
-pct create 212 $TEMPLATE $PLAY_OPTS --description "play-160" \
+pct create 212 $TEMPLATE $PLAY_OPTS --description "play-155" \
     --net0 name=eth0,bridge=mgmt,hwaddr=00:00:00:00:00:D4,ip=10.20.3.212/24,gw=10.20.3.1
 
 pct create 213 $TEMPLATE $PLAY_OPTS --description "play-161" \

@@ -2,12 +2,12 @@
 You are an endhost inside AS 1-{{ playground_as }} of the IETF testbed.
 Try these, and watch the dashboard map react:
 
-  scion showpaths 1-159 --extended     # paths to another AS
-  scion ping 1-160,10.20.3.212         # ping an endhost in AS 1-160
-  scion traceroute 1-161,10.20.3.213
-  ping -6 {{ 'fc00:1000:a100::ffff:10.20.3.213' if playground_as != '161' else 'fc00:1000:9e00::ffff:10.20.3.210' }}   # IPv6 app -> SCION via scitra
-  iperf3 -6 -c {{ 'fc00:1000:a100::ffff:10.20.3.213' if playground_as != '161' else 'fc00:1000:9e00::ffff:10.20.3.210' }}   # bandwidth over SCION (shows the shaped link speed)
+  scion showpaths 1-150 --extended     # paths to a core AS
+  scion ping 1-150,10.20.3.150         # ping a border router in AS 1-150
+  scion traceroute 1-153,10.20.3.153
+  curl --http3 https://<host>          # HTTP/3 (this playground ships an HTTP/3 curl)
+  scapy-scion                          # SCION-aware scapy (raw sockets enabled)
 
-Hospitality ASes you can reach: 1-158, 1-159, 1-160, 1-161.
+Endhost ASes you can join with your laptop: 1-152, 1-155, 1-158, 1-161.
 Session is sandboxed and resets on disconnect. Have fun!
 =============================================================================
