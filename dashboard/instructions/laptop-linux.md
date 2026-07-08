@@ -1,14 +1,15 @@
 # Laptop — Linux
 
 Bring your own laptop onto the SCION testbed as a real endhost in one of
-ASes 1-158..1-161. Takes about 10 minutes; the SCION build is the slow part.
+ASes 1-152, 1-155, 1-158, 1-161. Takes about 10 minutes; the SCION build is
+the slow part.
 
 1. **WireGuard**: `sudo apt install wireguard` (Debian/Ubuntu — use your
    distro's package otherwise, e.g. `sudo dnf install wireguard-tools`).
 
-2. **Claim your conf** on this page (`/join`) — pick an AS, enter the booth
-   code. Save the download as `scion-ietf126-as<N>.conf` (the page names it
-   for you), then:
+2. **Claim your conf** on this page (`/join`) — enter the booth code. There's
+   no AS picker at claim time: one conf tunnels the whole testbed, and the
+   page names the download `scion-ietf126-as<N>.conf` for you. Then:
 
    ```
    sudo wg-quick up ./scion-ietf126-as<N>.conf
@@ -16,6 +17,11 @@ ASes 1-158..1-161. Takes about 10 minutes; the SCION build is the slow part.
 
    Check the tunnel is up: `ping 10.20.3.1` should answer (that's the
    testbed's management gateway, reachable once the tunnel is up).
+
+   After claiming, the page shows a tab per joinable AS (1-152, 1-155, 1-158,
+   1-161) — each has its own downloadable endhost bundle, scitra fc00
+   identity, and bootstrap-server link. Pick whichever AS(es) you want to be
+   an endhost in for steps 4 and 7 below; you can set up in more than one.
 
 3. **Build the SCION tools from source, upstream `v0.15.0`.** We proved on
    2026-07-06 that upstream scionproto at tag `v0.15.0`, built with
@@ -42,9 +48,9 @@ ASes 1-158..1-161. Takes about 10 minutes; the SCION build is the slow part.
    There is no config workaround; building from source with
    `CGO_ENABLED=1` as above is the supported path.
 
-4. **Bundle**: download your AS bundle from this page (or
-   `/api/join/bundle/<N>`, filename `scion-endhost-AS<N>.tar.gz`), untar it
-   into an empty directory:
+4. **Bundle**: download your AS bundle from the tab you picked on this page
+   (or `/api/join/bundle/<N>` directly, filename `scion-endhost-AS<N>.tar.gz`),
+   untar it into an empty directory:
 
    ```
    mkdir ~/scion-kit && cd ~/scion-kit
@@ -54,6 +60,11 @@ ASes 1-158..1-161. Takes about 10 minutes; the SCION build is the slow part.
 
    (run the `daemon` binary you built in step 3 from inside the unpacked
    bundle directory — `sd.toml` uses relative paths, so `cd` there first.)
+
+   **Alternative to hand-unpacking**: if your `sciond` build supports HTTP
+   bootstrap discovery, point it at `http://10.20.3.<AS>:8041` (the bootstrap
+   URL shown on your AS's tab) instead of the tar/untar dance above — it
+   serves the same `topology.json` + TRC that's in the bundle.
 
 5. **Go**: with the daemon running in that terminal, in another one:
 
@@ -79,5 +90,5 @@ ASes 1-158..1-161. Takes about 10 minutes; the SCION build is the slow part.
    ```
 
    Once it's up, plain `ping -6 fc00:...` (use the `fc00...` identity shown
-   on this page for your claimed conf) rides SCION underneath — no SCION
-   tooling involved on the sending side, just ordinary IPv6.
+   on your AS's tab on this page) rides SCION underneath — no SCION tooling
+   involved on the sending side, just ordinary IPv6.

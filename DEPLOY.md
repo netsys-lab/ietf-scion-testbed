@@ -1,6 +1,6 @@
 # Deploy runbook
 
-Build and deploy the SCION Fabrik dashboard (fabricd + web) and the
+Build and deploy the SCION in a Box dashboard (fabricd + web) and the
 link-shaping daemon (scion-linkd) to the IETF 126 testbed.
 
 ## Host network
@@ -25,8 +25,9 @@ were previously manual, so a clean rebuild is one command:
   rootdir (pct defaults to the `local` dir storage and fails without it).
 - **`--features nesting=1`** on every container — Ubuntu 24.04's systemd 255
   warns/misbehaves in an LXC without it ("Systemd 255 detected…").
-- **`/dev/net/tun` passthrough** for `scitra-tun` (CT210–213 + svc-151/CT214):
-  loads the `tun` module (persisted to `/etc/modules-load.d/`) and appends
+- **`/dev/net/tun` passthrough** for `scitra-tun` (CT210–217: playground
+  210–213 + svc endhosts 214–217): loads the `tun` module (persisted to
+  `/etc/modules-load.d/`) and appends
   `lxc.cgroup2.devices.allow: c 10:200 rwm` +
   `lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file` to each
   `/etc/pve/lxc/<id>.conf`, then reboots the container.
@@ -125,7 +126,7 @@ ansible-playbook -i ansible/inventory.yaml ansible/playbooks/localhost_accept_ho
 ```
 
 (After a fresh rebuild the containers have new SSH host keys; clear the stale
-ones first — `for ip in 150..161 200 201 210..214; do ssh-keygen -R 10.20.3.$ip; done`
+ones first — `for ip in 150..161 200 201 210..217; do ssh-keygen -R 10.20.3.$ip; done`
 — then re-scan, or ansible fails with "REMOTE HOST IDENTIFICATION HAS CHANGED".)
 
 **Bootstrap the `ietf` deploy user (first thing after `create_contianers.sh`).**
@@ -202,6 +203,28 @@ stays open). The venue leg additionally accepts :8080 only from
 `venue_allowed_v4`/`venue_allowed_v6` (group_vars/playground.yml — IETF
 meeting prefixes + the `10.0.0.0/24`/`10.1.0.0/24` lab subnets; confirm per
 meeting).
+
+### Bootstrap servers
+
+Each AS container also runs a vendored `scion-bootstrap-server`, serving
+that AS's `topology.json` + TRC over plain HTTP on the mgmt IP so endhosts
+can bootstrap without hand-copying a bundle. Deploy **after** the base SCION
+stack (`deploy_scion_stack.yaml`) has run — it needs `/etc/scion/AS<n>/` in
+place:
+
+```sh
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_bootstrap_server.yaml
+```
+
+Serves on `10.20.3.15x:8041` for every AS `15x`. Verify:
+
+```sh
+curl http://10.20.3.152:8041/topology
+```
+
+fabricd's `bootstrap_url_template = "http://10.20.3.%d:8041"` (set in
+`deploy_dashboard.yaml`) turns this into the clickable bootstrap-URL links
+on the `/join` page's per-AS tabs — see "Attendee access" below.
 
 ## Verify
 
@@ -304,7 +327,9 @@ that happens.
 ## Playground (Tier 1)
 
 Hosted SCION endhosts attendees reach as a browser shell. Containers 210–213
-(`play-158`…`play-161`) on the mgmt+pubnet nets.
+— `play-158`, `play-152`, `play-155`, `play-161` — homed on the same AS set
+attendees can WireGuard into (see "Attendee access" below), on the
+mgmt+pubnet nets.
 
 Build + deploy:
 
@@ -312,16 +337,28 @@ Build + deploy:
 ./tools/build-endhost.sh
 ./tools/build-scitra.sh      # -> .build/scitra/bin/{scitra-tun,scion2ip} (Docker, ubuntu:24.04 / glibc-2.39 target)
 ./tools/build-scion-apps.sh  # -> .build/scion-apps/bin/{scion-bwtestclient,scion-bwtestserver,scion-netcat,scion-bat}
+./tools/build-curl.sh        # -> .build/curl/bin/curl (Docker; see "curl build" below)
 cp ansible/group_vars/playground.yml.example ansible/group_vars/playground.yml  # set booth_code
 ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_playground.yaml
 ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_playground_apps.yaml
 ```
 
+**curl build.** `./tools/build-curl.sh` builds a self-contained HTTP/3-capable
+curl shipped to both the playground shells and the svc endhosts (see
+"Service endhosts" below). It uses curl's OpenSSL-QUIC backend — a
+from-source OpenSSL 3.5 (which has a native QUIC API) plus nghttp3 for HTTP/3
+framing — rather than the ngtcp2 backend, which wants quictls/BoringSSL's
+QUIC API that stock OpenSSL doesn't expose. Builds inside Docker
+(`ubuntu:24.04`, matching the fleet's glibc 2.39); run it directly on the
+host if Docker isn't available on your dev box. Output: `.build/curl/bin/curl`.
+
 `deploy_playground_apps.yaml` layers the SCION app fleet onto the shells:
 `scion-bwtestclient`/`scion-bwtestserver` (server on `:40002`), `scion-netcat`,
-`scion-bat` (curl-like), the `scion2ip`/`ip2scion` address converters, a
-`scapy-scion-int` venv (`/opt/scapy-scion-int/.venv`, wrapper `scapy-scion`),
-and plain `curl`. Smoke tests (from a shell): `scion-bwtestclient -s
+`scion-bat` (curl-like), the `scion2ip`/`ip2scion` address converters, `lynx`,
+the HTTP/3 curl built above (shadows the distro curl on PATH), and a
+`scapy-scion-int` venv (`/opt/scapy-scion-int/.venv`, wrapper `scapy-scion`)
+whose interpreter is `setcap cap_net_raw,cap_net_admin` so it can send/sniff
+raw SCION packets without sudo. Smoke tests (from a shell): `scion-bwtestclient -s
 1-161,10.20.3.213:40002` (0% loss), `scion2ip 1-150 0 0 1` → `fc00:1000:9600::1`,
 `scapy-scion -c "from scapy_scion.layers.scion import SCION"`.
 
@@ -338,7 +375,7 @@ Verify (from a laptop on pubnet):
    container shows a non-zero drop counter after these.
 
 Reset a wedged playground: `ansible-playbook -i ansible/inventory.yaml
-ansible/playbooks/deploy_playground.yaml --limit play-159`, or recreate the
+ansible/playbooks/deploy_playground.yaml --limit play-152`, or recreate the
 container from `create_contianers.sh`.
 
 ## ID-INT traceroute servers
@@ -397,51 +434,79 @@ under the static-info model (see "Static info stays static" in Verify,
 above) — so this holds with live probers too now; the re-route story is the
 operator pinning an alternate path, not an automatic AUTO jump.
 
-## Service endhost (svc-151)
+## Service endhosts (svc-150/151/152/153)
 
-CT214 (`svc-151`, mgmt `10.20.3.214`) is a headless SCION endhost in AS151
-for hosting services behind scitra (planned: DNS over SCION). It runs the
-fork endhost stack (sciond with `experimental_idint = true`) and
-`scitra-tun --scmp`; `idint-traceroute` is installed for client/debug use
-(no server unit). No venue leg, no booth machinery.
+Headless SCION endhosts for hosting services behind scitra (e.g. DNS over
+SCION) — one per core AS, each a privileged container with a venue leg
+(`eth1` on `vmbr0`, DHCP v4 + SLAAC v6) so regular-IP clients on the venue
+network can reach whatever's exposed, not only SCION-speaking peers. The
+`svc` group in `ansible/inventory.yaml`:
 
-CT214 is now created by `proxmox/create_contianers.sh` along with the rest of
+| Host | CT | mgmt IP | AS |
+|---|---|---|---|
+| svc-151 | 214 | 10.20.3.214 | 151 |
+| svc-150 | 215 | 10.20.3.215 | 150 |
+| svc-152 | 216 | 10.20.3.216 | 152 |
+| svc-153 | 217 | 10.20.3.217 | 153 |
+
+Each runs the fork endhost stack (sciond with `experimental_idint = true`)
+and `scitra-tun --scmp`; `idint-traceroute` is installed for client/debug use
+(no server unit); fail2ban guards the sshd jail; ufw denies incoming by
+default and trusts only the mgmt leg (`eth0`) — the venue leg is globally
+routable, so exposing a service on it needs an explicit ufw allow alongside
+the `scitra_extra_args` forward below.
+
+All four are created by `proxmox/create_contianers.sh` along with the rest of
 the fleet (Ubuntu 24.04 template, `--rootfs local-lvm:4`, `--features
-nesting=1`, and the `/dev/net/tun` passthrough the script applies to 210–214) —
-no separate `pct create` step. After creation it is bootstrapped by
-`bootstrap_ietf_user.yaml` like every other node, then provisioned with:
+nesting=1`, venue leg, and the `/dev/net/tun` passthrough the script applies
+to 210–217) — no separate `pct create` step. Bootstrap fresh containers with
+the usual `ietf`-user play; scope it to just the new hosts with `--limit` if
+the rest of the fleet is already provisioned:
 
 ```sh
-ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_svc_endhost.yaml
+ansible-playbook -i ansible/inventory.yaml -e ansible_user=root \
+  ansible/playbooks/bootstrap_ietf_user.yaml --limit svc-150,svc-152,svc-153
 ```
 
-Deploy (reuses the endhost/scitra/idint-traceroute build outputs — nothing
-new to build):
+Deploy (reuses the endhost/scitra/idint-traceroute build outputs from the
+Playground section above, plus `.build/curl/bin/curl` from `build-curl.sh` —
+nothing new to build). `deploy_svc_endhost.yaml` covers the whole `svc`
+group in one run:
 
 ```sh
 ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_svc_endhost.yaml
 ```
 
 SSH access (mgmt is NATed, not routed from the LAN):
-`ssh -J root@ietf-proxmox ietf@10.20.3.214`, or `pct enter 214` on the host
+`ssh -J root@ietf-proxmox ietf@10.20.3.21x`, or `pct enter 21x` on the host
 as the rescue hatch.
 
-Hosting a service behind scitra: set `scitra_extra_args: " -p <port>"` on
-`svc-151` in `ansible/inventory.yaml` (static inbound forward, e.g.
+Hosting a service behind scitra: set `scitra_extra_args: " -p <port>"` on the
+relevant host in `ansible/inventory.yaml` (static inbound forward, e.g.
 `" -p 53"` for DNS) and rerun the playbook; the service is then reachable
-over SCION at svc-151's fc00 address (printed in `journalctl -u scitra` on
+over SCION at that host's fc00 address (printed in `journalctl -u scitra` on
 the container).
 
-Verify: `scion ping 1-151,10.20.3.214` from a playground shell replies
-(scitra answers SCMP echo); pinging svc-151's fc00 address from play-158
-replies too.
+Verify: `scion ping 1-151,10.20.3.214` (substitute the AS/mgmt IP for the
+other three) from a playground shell replies (scitra answers SCMP echo);
+pinging a svc host's fc00 address from a playground shell replies too.
 
 ## Attendee access (Tier 2 — WireGuard)
 
-Attendees' own laptops join as real SCION endhosts in ASes 1-158..1-161 over
-WireGuard, via the `/join` page on the dashboard. This is separate from the
-Tier 1 browser-terminal playground above — the WG hub (CT201) and the
-dashboard's join API (fabricd, CT200) are the two containers involved.
+Attendees' own laptops join as real SCION endhosts in ASes 1-152, 1-155,
+1-158, 1-161 over WireGuard, via the `/join` page on the dashboard. This is
+separate from the Tier 1 browser-terminal playground above — the WG hub
+(CT201) and the dashboard's join API (fabricd, CT200) are the two containers
+involved.
+
+**Join flow.** Claiming is booth-code-only — there's no AS picker before you
+claim, and one conf tunnels the whole testbed. After claiming, the join page
+shows a tab per `joinable_ases` entry (152, 155, 158, 161): each tab carries
+its own downloadable endhost bundle and scitra fc00 identity, plus a
+clickable bootstrap-server URL (`http://10.20.3.15x:8041`, from
+`bootstrap_url_template` in `deploy_dashboard.yaml` — see "Bootstrap
+servers" above) as an alternative to hand-unpacking the bundle, for sciond
+builds that support HTTP bootstrap.
 
 ### Build + deploy order
 
@@ -458,13 +523,13 @@ ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_dashboard.ya
 invalidates every conf already handed out**, so only do this deliberately
 (see "Pool exhausted" below). `deploy_wghub.yaml` installs the hub (wg0 +
 nftables on CT201), pushes `pool.json` to CT200 as
-`/var/lib/fabricd/wg-pool.json`, and installs the return-route unit on
-AS158-161 (`ip route 10.20.5.0/24 via <hub>` — without this the reply half of
-an attendee's tunnel never gets back to the hub). This must run **before**
-`deploy_dashboard.yaml`: with `join_enabled = true`, fabricd reads the pool
-file at startup and exits (`log.Fatalf`) if it's missing, so deploying the
-dashboard first with no pool in place takes the whole dashboard down, not
-just the join feature.
+`/var/lib/fabricd/wg-pool.json`, and installs the return-route unit on the
+`wg_ases` group (AS152/155/158/161) (`ip route 10.20.5.0/24 via <hub>` —
+without this the reply half of an attendee's tunnel never gets back to the
+hub). This must run **before** `deploy_dashboard.yaml`: with
+`join_enabled = true`, fabricd reads the pool file at startup and exits
+(`log.Fatalf`) if it's missing, so deploying the dashboard first with no
+pool in place takes the whole dashboard down, not just the join feature.
 
 ### On-site bring-up
 
@@ -562,7 +627,7 @@ so attendees mid-tunnel know to re-claim.
 Two standing facts worth keeping in mind while debugging either tier: the
 management plane (`10.20.3.0/24`) is unreachable from the venue network
 except through the WG tunnel, and WG egress is pinned by the hub's nftables
-`forward` chain to AS158-161 only — an attendee's tunnel can reach their own
+`forward` chain to AS152/155/158/161 only — an attendee's tunnel can reach their own
 AS's border router/control service and hairpin to other attendees, nothing
 else on the mgmt net.
 
@@ -611,8 +676,9 @@ for the scitra IPv6 story and mgmt-plane isolation.)
 [ ] nft drop counters on the hub bump after a :22 probe to 10.20.3.150 (a
     non-joinable AS / the mgmt plane) from inside the tunnel — mirrors the
     Tier-1 confinement check. The hub's forward chain ACCEPTS tcp to
-    10.20.3.158-161, so the probe must target an AS outside that set to drop;
-    the wg0->eth0 pin to 158-161 only is what bumps the drop counter.
+    10.20.3.152/155/158/161, so the probe must target an AS outside that set
+    to drop; the wg0->eth0 pin to 152/155/158/161 only is what bumps the
+    drop counter.
 ```
 
 ### Known gotchas
