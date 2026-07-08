@@ -13,3 +13,4 @@ level = "info"
 
 [router]
 num_processors = 1
+batch_size = 64
