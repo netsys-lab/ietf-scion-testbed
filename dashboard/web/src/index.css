@@ -12,6 +12,10 @@ body {
   overflow: hidden;
 }
 
+/* /join and /playground are scrollable documents, not the fixed map viewport
+ * (main.tsx stamps this class by pathname). */
+body.doc-page { overflow-y: auto; overflow-x: hidden; }
+
 #app { display: grid; grid-template-rows: auto 1fr auto; height: 100dvh; }
 
 /* ── Map stage ────────────────────────────────────────── */

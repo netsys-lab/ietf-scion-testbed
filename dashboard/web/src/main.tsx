@@ -17,6 +17,13 @@ const page = location.pathname.startsWith('/join')
   ? <PlaygroundPage />
   : <App />
 
+// The map app owns a fixed, non-scrolling viewport (body { overflow: hidden }
+// in index.css). The /join and /playground routes are ordinary documents that
+// must scroll their content, so tag the body for the CSS override below.
+if (location.pathname.startsWith('/join') || location.pathname.startsWith('/playground')) {
+  document.body.classList.add('doc-page')
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {page}
