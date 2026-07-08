@@ -137,7 +137,7 @@ export async function claimConf(code: string, as?: number): Promise<ClaimResult>
   const r = await fetch("/api/join/claim", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(as ? { as, code } : { code }),
+    body: JSON.stringify(as != null ? { as, code } : { code }),
   });
   if (!r.ok) throw new Error(String(r.status));
   return r.json();

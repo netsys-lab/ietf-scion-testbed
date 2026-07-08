@@ -73,7 +73,7 @@ export default function JoinPage() {
             {claimErr && <p className="join-err">{claimErr}</p>}
           </div>
         )}
-        {claim && meta && <ClaimView claim={claim} meta={meta} v4={v4} setV4={setV4} />}
+        {claim && <ClaimView claim={claim} meta={meta} v4={v4} setV4={setV4} />}
       </section>
 
       <Instructions />
@@ -81,12 +81,16 @@ export default function JoinPage() {
   );
 }
 
-function ClaimView({ claim, meta, v4, setV4 }: { claim: ClaimResult; meta: JoinMeta; v4: boolean; setV4: (b: boolean) => void }) {
+function ClaimView({ claim, meta, v4, setV4 }: { claim: ClaimResult; meta: JoinMeta | null; v4: boolean; setV4: (b: boolean) => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const conf = pickConf(claim, v4);
-  const joinable: JoinableInfo[] = meta.joinable ?? meta.joinable_ases.map((n) => ({
+  // Tabs need meta, but the conf/QR/download come from `claim` alone. When
+  // meta is absent (offline, or /api/join/meta still loading for a returning
+  // attendee whose claim was restored from localStorage), fall back to a
+  // single tab for the attendee's own claimed AS so their conf still shows.
+  const joinable: JoinableInfo[] = meta?.joinable ?? meta?.joinable_ases.map((n) => ({
     as: n, isd_as: `1-${n}`, bundle_url: `/api/join/bundle/${n}`, bootstrap_url: "",
-  }));
+  })) ?? [{ as: claim.as, isd_as: claim.isd_as, bundle_url: `/api/join/bundle/${claim.as}`, bootstrap_url: "" }];
   const [tab, setTab] = useState(joinable[0]?.as ?? claim.as);
   useEffect(() => {
     if (canvas.current) QRCode.toCanvas(canvas.current, conf, { width: 220 });

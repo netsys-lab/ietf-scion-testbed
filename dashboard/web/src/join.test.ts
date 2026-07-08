@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { confFilename, loadClaim, pickConf, saveClaim, type ClaimResult } from "./join";
+import { asRole, confFilename, loadClaim, pickConf, saveClaim, type ClaimResult } from "./join";
 
 const claim: ClaimResult = {
   slot: 2, ip: "10.20.5.2", as: 158, isd_as: "1-158",
@@ -32,5 +32,13 @@ describe("join helpers", () => {
   it("survives corrupt storage", () => {
     localStorage.setItem("wg-claim", "{nope");
     expect(loadClaim()).toBeNull();
+  });
+
+  it("labels AS roles by topology tier", () => {
+    expect(asRole(150)).toBe("core");
+    expect(asRole(153)).toBe("core");
+    expect(asRole(155)).toBe("hub");
+    expect(asRole(158)).toBe("leaf");
+    expect(asRole(161)).toBe("leaf");
   });
 });
