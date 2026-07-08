@@ -1,5 +1,5 @@
 // PlaygroundPage — a booth-ops convenience view: all four SCION playground
-// terminals (AS 158/159/160/161) tiled 2x2 in one full-viewport page, so a
+// terminals (AS 152/155/158/161) tiled 2x2 in one full-viewport page, so a
 // demo can drive/watch every endhost shell at once instead of tabbing
 // between four /play/<as>/ windows. Like JoinPage, this is a separate,
 // self-contained tree switched on pathname in main.tsx (outside App) — it
@@ -12,7 +12,7 @@
 // the rest — that's expected, not a bug to work around.
 import "./playground.css";
 
-const PLAYGROUND_ASES = [158, 159, 160, 161];
+const PLAYGROUND_ASES = [152, 155, 158, 161];
 
 export default function PlaygroundPage() {
   return (
