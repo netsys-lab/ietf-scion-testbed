@@ -1,6 +1,6 @@
 // Chrome — the masthead <header>: brand lockup, live/reconnecting indicator,
 // KPI strip, the TRACE button (opens TracePanel via the store's selection),
-// the attendee JOIN TESTBED / PLAYGROUND links (new tabs), and the
+// the attendee JOIN TESTBED / PLAYGROUND links (same tab), and the
 // OPERATE/SCREEN mode toggle. Ported from the mockup's <header>. Screen mode
 // drives document.body's "screen" class (the mockup's body.screen scale-ups
 // live in chrome.css); ?mode=screen sets it initially so the booth can boot
@@ -26,7 +26,7 @@ export default function Chrome() {
     <header>
       <div className="brand">
         <h1>
-          SCION <span className="thin">FABRIK</span>
+          SCION <span className="thin">IN A BOX</span>
         </h1>
         <span className="sub">IETF 126 · VIENNA · LIVE TESTBED</span>
         <span className={"livestate" + (connected ? "" : " down")} role="status">
@@ -39,10 +39,10 @@ export default function Chrome() {
         <button className="tracebtn" onClick={() => select({ kind: "trace", id: "trace" })}>
           TRACE
         </button>
-        <a href="/join" target="_blank" rel="noopener">
+        <a href="/join">
           JOIN TESTBED
         </a>
-        <a href="/playground" target="_blank" rel="noopener">
+        <a href="/playground">
           PLAYGROUND
         </a>
       </div>

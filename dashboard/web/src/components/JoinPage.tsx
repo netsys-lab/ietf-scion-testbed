@@ -44,7 +44,7 @@ export default function JoinPage() {
     <div className="join">
       <header className="join-head">
         <h1>Join the SCION testbed</h1>
-        <a href="/">← fabric map</a>
+        <a href="/">← testbed map</a>
       </header>
 
       <section className="join-tier">
