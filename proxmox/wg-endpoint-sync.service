@@ -1,0 +1,15 @@
+[Unit]
+# Keeps the WireGuard join endpoint (/api/join/meta -> the conf handed to
+# attendees) in sync with the hub CT201's CURRENT venue address. The hub leg is
+# DHCP/SLAAC, so its v4 (and its global v6 prefix at a new network) change on a
+# venue move or lease renewal; this re-derives them and redeploys the dashboard
+# ONLY when they actually changed (the script is idempotent). Paired with the
+# containers' onboot=1 so a reboot both starts the fleet and refreshes the endpoint.
+Description=Sync WireGuard join endpoint from the hub's current venue address
+After=pve-guests.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=AUTO=1
+ExecStart=/usr/bin/bash /root/ietf-scion-testbed/tools/update-wg-endpoint.sh

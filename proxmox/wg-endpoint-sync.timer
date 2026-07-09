@@ -1,0 +1,14 @@
+[Unit]
+Description=Periodically sync the WireGuard join endpoint from the hub's venue address
+
+[Timer]
+# ~2 min after boot (give CT201 time to start + DHCP/SLAAC), then every 5 min.
+# Each run is a cheap no-op unless the hub's venue address changed (idempotent
+# script), so it catches a venue move / connect-after-boot / lease change
+# hands-free. Persistent so a missed run fires on the next boot.
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

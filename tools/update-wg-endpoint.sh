@@ -28,11 +28,26 @@ v6=""
 for a in "${g6[@]}"; do case "$a" in 2*|3*) v6="$a"; break;; esac; done
 [ -z "$v6" ] && v6="${g6[0]:-}"
 
-[ -z "$v4" ] && { echo "error: hub eth1 has no IPv4" >&2; exit 1; }
-[ -z "$v6" ] && { echo "error: hub eth1 has no global IPv6" >&2; exit 1; }
+# AUTO=1 (timer/boot use): soft-skip when the hub isn't ready yet (still
+# booting / hasn't reached the venue net), so a periodic run doesn't flag a
+# failed unit — the next tick retries. Manual runs error hard (exit 1).
+notready() { echo "$1" >&2; [ "${AUTO:-0}" = 1 ] && exit 0 || exit 1; }
+[ -z "$v4" ] && notready "hub eth1 has no IPv4 yet"
+[ -z "$v6" ] && notready "hub eth1 has no global IPv6 yet"
 
 echo "hub CT$HUB_CT eth1 -> wg_endpoint_v4=$v4  wg_endpoint_v6=$v6"
 
+# Idempotence guard: skip the (heavy) redeploy when the endpoint is unchanged,
+# so this is cheap to run on every boot / from a periodic timer. FORCE=1 to
+# redeploy regardless (e.g. after editing the join surface by hand).
+cur_v4="$(grep -oP 'wg_endpoint_v4:\s*"\K[^"]+' "$GV" || true)"
+cur_v6="$(grep -oP 'wg_endpoint_v6:\s*"\K[^"]+' "$GV" || true)"
+if [ "$cur_v4" = "$v4" ] && [ "$cur_v6" = "$v6" ] && [ "${FORCE:-0}" != "1" ]; then
+    echo "endpoint unchanged — nothing to do"
+    exit 0
+fi
+
+echo "endpoint changed (was v4=$cur_v4 v6=$cur_v6) — updating group_vars + redeploying"
 sed -i "s|wg_endpoint_v4:.*|wg_endpoint_v4: \"$v4\"|" "$GV"
 sed -i "s|wg_endpoint_v6:.*|wg_endpoint_v6: \"$v6\"|" "$GV"
 grep -E "wg_endpoint" "$GV"
