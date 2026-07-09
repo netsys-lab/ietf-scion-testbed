@@ -71,6 +71,15 @@
         mode: "0644"
       loop: [152, 155, 158, 161]
 
+    # copy is additive (it never deletes files absent from the source), so a
+    # removed instruction file lingers on the host forever. Purge the dir first
+    # to make the copy authoritative. Instructions are repo-sourced only (no
+    # host-only files here), so a clean reset is safe.
+    - name: Reset instructions dir (authoritative — purge files removed from the repo)
+      ansible.builtin.file:
+        path: /etc/fabric/instructions
+        state: absent
+
     - name: Copy attendee instructions content
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../dashboard/instructions/"

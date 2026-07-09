@@ -188,6 +188,14 @@ export default function TracePanel() {
         </div>
       )}
 
+      {vm && (
+        <div className="btnrow">
+          <button className="ghost" disabled={busy} onClick={runStop}>
+            STOP
+          </button>
+        </div>
+      )}
+
       <div className="shapingbox">
         <h3>Path</h3>
         <div className="traceselect">
@@ -240,14 +248,6 @@ export default function TracePanel() {
           </>
         )}
         {pickError && <span className="daemon-note err">{pickError}</span>}
-
-        {vm && (
-          <div className="btnrow">
-            <button className="ghost" disabled={busy} onClick={runStop}>
-              STOP
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
