@@ -23,11 +23,15 @@ TEMPLATE="${TEMPLATE:-local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst}"
 # --features nesting=1: Ubuntu 24.04 ships systemd 255, which warns/misbehaves
 # inside an LXC container without nesting ("Systemd 255 detected. You may need
 # to enable nesting."). Debian 12's systemd 252 didn't need it.
-COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys --rootfs local-lvm:8 --features nesting=1"
-AS_OPTS="--cores 2 --memory 1024 --cpuunits 1000 $COMMON"
-DASH_OPTS="--cores 2 --memory 1024 --cpuunits 300 $COMMON"
-HUB_OPTS="--cores 2 --memory 1024 --cpuunits 200 $COMMON"
-PLAY_OPTS="--cores 1 --memory 1024 --cpuunits 50 $COMMON"
+# --onboot 1: auto-start every container on host boot (otherwise a host reboot
+# leaves the fleet stopped — pct defaults onboot to 0). --startup order=N,up=S
+# staggers a cold boot fabric-first (ASes -> hub/svc -> dashboard -> playground)
+# so a reboot converges cleanly without all 22 CTs hammering the host at once.
+COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys --rootfs local-lvm:8 --features nesting=1 --onboot 1"
+AS_OPTS="--cores 2 --memory 1024 --cpuunits 1000 --startup order=1,up=1 $COMMON"
+DASH_OPTS="--cores 2 --memory 1024 --cpuunits 300 --startup order=3,up=3 $COMMON"
+HUB_OPTS="--cores 2 --memory 1024 --cpuunits 200 --startup order=2,up=1 $COMMON"
+PLAY_OPTS="--cores 1 --memory 1024 --cpuunits 50 --startup order=4,up=1 $COMMON"
 
 # CT100 (Kea DHCP server) is NOT used on the reconstructed ietf-proxmox node:
 # containers have static IPs and the HOST holds 10.20.3.1 on the mgmt bridge.
@@ -150,26 +154,26 @@ pct create 213 $TEMPLATE $PLAY_OPTS --description "play-161" \
 # incoming; only mgmt/eth0 trusted) — see deploy_svc_endhost.yaml.
 pct create 214 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
-    --unprivileged 0 --features nesting=1 --onboot 1 --description "svc-151" \
+    --unprivileged 0 --features nesting=1 --onboot 1 --startup order=2,up=1 --description "svc-151" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1 \
     --net1 name=eth1,bridge=vmbr0,ip=dhcp,ip6=auto
 
 # --- svc-150/152/153: same shape as svc-151, on the remaining core ASes ---
 pct create 215 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
-    --unprivileged 0 --features nesting=1 --onboot 1 --description "svc-150" \
+    --unprivileged 0 --features nesting=1 --onboot 1 --startup order=2,up=1 --description "svc-150" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.215/24,gw=10.20.3.1 \
     --net1 name=eth1,bridge=vmbr0,ip=dhcp,ip6=auto
 
 pct create 216 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
-    --unprivileged 0 --features nesting=1 --onboot 1 --description "svc-152" \
+    --unprivileged 0 --features nesting=1 --onboot 1 --startup order=2,up=1 --description "svc-152" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.216/24,gw=10.20.3.1 \
     --net1 name=eth1,bridge=vmbr0,ip=dhcp,ip6=auto
 
 pct create 217 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
-    --unprivileged 0 --features nesting=1 --onboot 1 --description "svc-153" \
+    --unprivileged 0 --features nesting=1 --onboot 1 --startup order=2,up=1 --description "svc-153" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.217/24,gw=10.20.3.1 \
     --net1 name=eth1,bridge=vmbr0,ip=dhcp,ip6=auto
 
