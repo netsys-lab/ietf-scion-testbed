@@ -1,6 +1,6 @@
 module github.com/netsys-lab/ietf-scion-testbed/idint-probed
 
-go 1.26.0
+go 1.26.4
 
 require github.com/scionproto/scion v0.11.0
 
@@ -44,4 +44,4 @@ require (
 	zgo.at/zcache/v2 v2.1.0 // indirect
 )
 
-replace github.com/scionproto/scion => github.com/lschulz/scion v0.11.1-0.20260623212859-8ce7ed2f857d
+replace github.com/scionproto/scion => github.com/lschulz/scion v0.11.1-0.20260709203036-e356d834bba6

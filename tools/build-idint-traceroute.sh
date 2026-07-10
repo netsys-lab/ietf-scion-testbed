@@ -8,9 +8,9 @@
 # Portability: the build host's glibc must be <= the fleet's
 # (Ubuntu 24.04, glibc 2.39); a symbol-version guard below enforces this.
 #
-# The tool's go.mod pins the lschulz/scion fork at 8ce7ed2f857d — the exact
-# upstream base of the deployed fork (158d2060b, ietf-126) — so ID-INT wire
-# compatibility with the testbed BRs is by construction.
+# The tool's go.mod pins the lschulz/scion fork; this script re-pins it to
+# e356d834b (the deployed ietf-126 BR/CS build) after checkout, so ID-INT wire
+# + crypto stay in lockstep with the testbed BRs. Override with IDINT_TR_FORK.
 #
 # USAGE:
 #   ./tools/build-idint-traceroute.sh   # -> .build/idint-traceroute/bin/idint-traceroute
@@ -31,7 +31,15 @@ if [ ! -d "$WORK/.git" ]; then
     git clone "$IDINT_TR_REPO" "$WORK"
 fi
 git -C "$WORK" fetch origin --quiet
-git -C "$WORK" checkout --detach --quiet "$IDINT_TR_COMMIT"
+git -C "$WORK" checkout --detach --quiet --force "$IDINT_TR_COMMIT"
+
+# Re-pin the fork to the deployed stack commit so ID-INT stays in lockstep with
+# the redeployed BRs (mirrors idint-probed's go.mod pin). --force checkout above
+# discards any prior run's go.mod edit before we re-apply it cleanly.
+IDINT_TR_FORK="${IDINT_TR_FORK:-e356d834b}"
+( cd "$WORK" \
+    && go mod edit -replace "github.com/scionproto/scion=github.com/lschulz/scion@$IDINT_TR_FORK" \
+    && GOFLAGS=-mod=mod go mod tidy )
 
 mkdir -p "$OUT"
 echo "Building idint-traceroute @ $IDINT_TR_COMMIT -> $OUT"
