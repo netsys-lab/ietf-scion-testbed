@@ -15,6 +15,7 @@ import (
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/shape"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/staticinfo"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/topo"
+	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/topowriter"
 )
 
 // reloadCoalesceWindow bounds how often a burst of dashboard edits can
@@ -50,8 +51,9 @@ func main() {
 
 	// --- beacon metadata sync (all optional: missing files degrade gracefully) ---
 	var (
-		blm    map[string]shape.Params
-		writer *staticinfo.Writer
+		blm        map[string]shape.Params
+		writer     *staticinfo.Writer
+		topoWriter *topowriter.Writer
 	)
 	if p, err := baseline.ResolveOne(cfg.BaselineProfile); err != nil {
 		log.Printf("baseline profile disabled: %v", err)
@@ -69,6 +71,15 @@ func main() {
 			out = strings.TrimSuffix(bp, ".base.json") + ".json"
 		}
 		writer = &staticinfo.Writer{BasePath: bp, OutPath: out, Unit: cfg.CSReloadUnit}
+	}
+	if tp, err := baseline.ResolveOne(cfg.TopologyBase); err != nil {
+		log.Printf("topology speed sync disabled: %v", err)
+	} else {
+		out := cfg.TopologyOut
+		if out == "" {
+			out = strings.TrimSuffix(tp, ".base.json") + ".json"
+		}
+		topoWriter = &topowriter.Writer{BasePath: tp, OutPath: out, Unit: cfg.BRReloadUnit}
 	}
 
 	shaper := shape.NewNetlinkShaper()
@@ -92,7 +103,7 @@ func main() {
 
 	regen := func() {}
 	var status func() (bool, bool)
-	if writer != nil {
+	if writer != nil || topoWriter != nil {
 		regen = func() {
 			live := map[string]shape.Params{}
 			for _, m := range managed {
@@ -100,11 +111,29 @@ func main() {
 					live[m.IfID] = p
 				}
 			}
-			if err := writer.Write(live); err != nil {
-				log.Printf("static info: %v", err)
+			if writer != nil {
+				if err := writer.Write(live); err != nil {
+					log.Printf("static info: %v", err)
+				}
+			}
+			if topoWriter != nil {
+				if err := topoWriter.Write(live); err != nil {
+					log.Printf("topology speed: %v", err)
+				}
 			}
 		}
-		status = writer.Status
+		status = func() (bool, bool) {
+			m, r := true, true
+			if writer != nil {
+				wm, wr := writer.Status()
+				m, r = m && wm, r && wr
+			}
+			if topoWriter != nil {
+				tm, tr := topoWriter.Status()
+				m, r = m && tm, r && tr
+			}
+			return m, r
+		}
 		regen() // converge on startup
 	}
 
