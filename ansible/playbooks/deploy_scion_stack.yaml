@@ -63,6 +63,14 @@
         group: scion
         mode: "0644"
 
+    - name: Stash nominal topology.base.json (linkd's topowriter overlays idint.speed onto this)
+      ansible.builtin.copy:
+        src: "{{ cfg_src }}/topology.json"
+        dest: "/etc/scion/AS{{ asnum }}/topology.base.json"
+        owner: scion
+        group: scion
+        mode: "0644"
+
     - name: Copy public trust material into config_dir (certs)
       ansible.builtin.copy:
         src: "{{ cfg_src }}/certs"

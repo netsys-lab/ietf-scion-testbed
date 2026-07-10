@@ -27,7 +27,7 @@
         - staticInfoConfig.base.json
         - linkd-baseline.json
 
-    - name: Install the static advertisements (story values, never rewritten by shaping)
+    - name: Seed staticInfoConfig.json at nominal on deploy (linkd's writer then tracks shaping live)
       ansible.builtin.copy:
         remote_src: true
         src: "/etc/scion/AS{{ asnum }}/staticInfoConfig.base.json"
@@ -47,10 +47,15 @@
         content: |
           listen = "{{ ansible_host }}:30480"
           topology_glob = "/etc/scion/AS*/topology.json"
-          # static info stays static (spec 2026-07-07): no staticinfo_base ->
-          # linkd's writer+CS-SIGHUP machinery is disabled; advertisements
-          # keep the story values installed below.
           baseline_profile = "/etc/scion/AS*/linkd-baseline.json"
+          # shape-driven beacon metadata -> rewrite staticInfoConfig.json + SIGHUP CS
+          staticinfo_base = "/etc/scion/AS{{ asnum }}/staticInfoConfig.base.json"
+          staticinfo_out = "/etc/scion/AS{{ asnum }}/staticInfoConfig.json"
+          cs_reload_unit = "scion-control@cs1-{{ asnum }}-1"
+          # shape-driven ID-INT capacity -> rewrite topology.json idint.speed + SIGHUP BR
+          topology_base = "/etc/scion/AS{{ asnum }}/topology.base.json"
+          topology_out = "/etc/scion/AS{{ asnum }}/topology.json"
+          br_reload_unit = "scion-router@br1-{{ asnum }}-1"
 
     - name: Ensure service is running
       ansible.builtin.systemd:
