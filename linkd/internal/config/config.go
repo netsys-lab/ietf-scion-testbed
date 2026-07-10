@@ -17,6 +17,9 @@ type Config struct {
 	StaticinfoOut   string `toml:"staticinfo_out"`
 	BaselineProfile string `toml:"baseline_profile"`
 	CSReloadUnit    string `toml:"cs_reload_unit"`
+	TopologyBase    string `toml:"topology_base"`
+	TopologyOut     string `toml:"topology_out"`
+	BRReloadUnit    string `toml:"br_reload_unit"`
 }
 
 func Load(path string) (Config, error) {

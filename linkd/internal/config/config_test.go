@@ -74,3 +74,22 @@ func TestMetadataOverrides(t *testing.T) {
 		t.Fatalf("overrides not applied: %+v", c)
 	}
 }
+
+func TestTopologyKeysDecode(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "c.toml")
+	os.WriteFile(p, []byte(`
+topology_base = "/etc/scion/AS150/topology.base.json"
+topology_out = "/etc/scion/AS150/topology.json"
+br_reload_unit = "scion-router@br1-150-1"
+`), 0o644)
+	c, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.TopologyBase != "/etc/scion/AS150/topology.base.json" ||
+		c.TopologyOut != "/etc/scion/AS150/topology.json" ||
+		c.BRReloadUnit != "scion-router@br1-150-1" {
+		t.Fatalf("topology keys not decoded: %+v", c)
+	}
+}
