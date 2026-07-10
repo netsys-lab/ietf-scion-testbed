@@ -81,7 +81,7 @@ func (w *Writer) Write(live map[string]shape.Params) error {
 		return nil
 	}
 
-	if err := writeAtomic(w.OutPath, doc); err != nil {
+	if err := WriteAtomic(w.OutPath, doc); err != nil {
 		w.metaFail = true
 		w.hupFail = true // no signal attempted: don't report a stale reload_ok
 		return err
@@ -150,8 +150,11 @@ func setInter(doc map[string]any, section, ifid string, v any) {
 	entry["Inter"] = v
 }
 
-func writeAtomic(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".staticinfo-*")
+// WriteAtomic writes data (plus a trailing newline) to path via a temp file +
+// rename, so a reader never sees a half-written file. Exported for reuse by
+// topowriter.
+func WriteAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".linkd-*")
 	if err != nil {
 		return err
 	}
