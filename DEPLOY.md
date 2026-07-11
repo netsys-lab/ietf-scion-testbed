@@ -491,6 +491,173 @@ Verify: `scion ping 1-151,10.20.3.214` (substitute the AS/mgmt IP for the
 other three) from a playground shell replies (scitra answers SCMP echo);
 pinging a svc host's fc00 address from a playground shell replies too.
 
+## SCION DNS (CoreDNS on svc-152)
+
+Resolves the `scion.` TLD (SVCB records carrying `scion=<IA>,<host>` next to
+ordinary A/AAAA, per `docs/drafts/draft-john-scion-svcb-00.md`) and forwards
+everything else to Quad9, on svc-152 (CT216, `10.20.3.216`). This is the DNS
+half of the hev3 story below — hev3 resolves SVCB to learn a name's SCION
+candidate alongside its IP ones.
+
+### Build order
+
+Two local forks feed the binary, both already on their `scion-dev` branch
+and merged: `/home/tony/tjohn327/dns` (Task 1 — adds the `scion` SVCB
+`SvcParamKey`, commit `f27c366e`) and `/home/tony/tjohn327/coredns` (Task 2
+— `replace`s in the dns fork and vendors the
+[netsys-lab/coredns-scitra](https://github.com/netsys-lab/coredns-scitra)
+plugin so `scitra`'s AAAA-synthesis runs inside CoreDNS itself, commit
+`57c13a5f`). Nothing to change here — just build:
+
+```sh
+./tools/build-coredns.sh   # -> .build/coredns/bin/coredns (COREDNS_SRC override; default /home/tony/tjohn327/coredns)
+```
+
+Fully static (`CGO_ENABLED=0`), so — unlike the idint-* binaries — there's no
+GLIBC ceiling guard to check before shipping it to the Ubuntu 24.04 fleet.
+
+### Deploy
+
+```sh
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_coredns.yaml
+```
+
+Play 1 installs CoreDNS on svc-152 alone: copies the binary plus
+`config/coredns/{Corefile,scion.zone}`, renders the unit, restarts, and
+verifies both `dig SVCB web.scion` (non-empty — the `scion.` zone answers)
+and `dig A one.one.one.one` (non-empty — the Quad9 forward path works).
+
+Play 2 rolls `systemd-resolved` over to CoreDNS on every playground + svc
+host (`playground:svc`), dropping in
+`/etc/systemd/resolved.conf.d/scion-dns.conf` with `DNS=10.20.3.216` +
+`Domains=~.` so **all** queries — not just `scion.` — go through CoreDNS,
+then verifies `resolvectl query web.scion` resolves locally. This play is
+gated behind `coredns_resolver_rollout` (default `true`); skip it with
+`-e coredns_resolver_rollout=false` if you want CoreDNS running on svc-152
+without repointing every other host's resolver yet (e.g. bringing the
+service up ahead of a demo without touching a fleet that's mid-session).
+
+### Zone / TXT rule
+
+`config/coredns/scion.zone` draws a hard line the zone editor (and
+`coredns-zone-sync.sh` below) must never cross: **dual-homed names — `web`
+and `web2`, the ones with a real venue A/AAAA answer alongside their SCION
+SVCB — must never also carry a `scion=` TXT record.** The vendored `scitra`
+plugin synthesizes an AAAA answer from a `scion=` TXT independently of
+whatever the `file` plugin has for that name; on a name that already has a
+real venue AAAA, that synthesis *hijacks* the answer instead of
+supplementing it, silently breaking the IP leg of the hev3 race. TXT is
+reserved for SCION-only names (`games`, `matrix.netsys.ovgu` in the shipped
+zone) that have no venue address to protect.
+
+### Zone sync (svc-150/153 venue IPs -> svc-152's zone)
+
+`web`/`web2`'s A/AAAA point at svc-150/153's **venue** leg (`eth1`, DHCP/
+SLAAC), which changes on rebuild, lease renewal, or a venue move.
+`proxmox/coredns-zone-sync.sh` re-derives both addresses and rewrites only
+the managed A/AAAA lines in svc-152's live zone file (bumping the SOA
+serial), the same idempotent shape as `tools/update-wg-endpoint.sh`. Install
+the timer on the Proxmox host so it runs hands-free after every boot/venue
+change:
+
+```sh
+cp proxmox/coredns-zone-sync.service proxmox/coredns-zone-sync.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now coredns-zone-sync.timer
+```
+
+Run it once by hand first, **without** `AUTO=1`, so a real problem (svc-152
+not deployed yet, svc-150/153 not booted, no SOA in the zone) fails loudly
+instead of soft-skipping silently the way the timer does:
+
+```sh
+bash proxmox/coredns-zone-sync.sh
+```
+
+The timer itself runs with `Environment=AUTO=1` (see
+`proxmox/coredns-zone-sync.service`) precisely so a boot-time or periodic
+run never fails the unit on a transient "not up yet" — only the manual
+first run is meant to catch a real misconfiguration.
+
+## Happy Eyeballs v3 demo (hev3)
+
+`hev3` is the SCION-aware Happy Eyeballs v3 CLI
+(`draft-ietf-happy-happyeyeballs-v3` extended with a SCION candidate family —
+see `docs/superpowers/specs/2026-07-10-scion-svcb-hev3-design.md`): it
+resolves a name's SVCB record, then races SCION, IPv6, and IPv4 candidates
+in parallel and reports the winner. `hev3-server` is the demo target it
+races toward — one process serving the same page over IP h2/h1.1, IP HTTP/3,
+and (with `-scion`) native HTTP/3 over SCION QUIC, tagging each response
+with the transport that actually won.
+
+### Build
+
+```sh
+cd hev3 && make deb   # -> dist/scion-hev3_0.1.0_amd64.deb
+```
+
+Ships `/usr/local/bin/{hev3,hev3-server}` plus the testbed CA at
+`/etc/hev3/ca.pem` (a conffile — the `hev3` CLI trusts it by default). The
+CA and the per-name `web.scion`/`web2.scion` leaf certs it signs live at
+`ansible/files/hev3-ca/` and are deliberately committed (throwaway
+testbed-only key material — see `ansible/files/hev3-ca/README.md`);
+regenerate/rotate with:
+
+```sh
+tools/gen-hev3-ca.sh
+```
+
+### Deploy
+
+```sh
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_hev3.yaml
+```
+
+Play 1 installs the `scion-hev3` deb (CLI + CA) on every playground and svc
+host. Play 2, scoped to `svc-150`/`svc-153` only, copies each host's
+per-name cert/key pair from `ansible/files/hev3-ca/` to
+`/etc/hev3/{cert,key}.pem`, renders `hev3-server.service` (runs
+`hev3-server -scion`, `SCION_DAEMON_ADDRESS=127.0.0.1:30255`, `After`/
+`Wants`/`Requires` the same `scion-sciond` unit the svc endhost stack
+installs), opens `443/tcp` + `443/udp` in ufw (the venue leg denies incoming
+by default — see "Service endhosts" above — so the IP race target needs an
+explicit allow; SCION traffic rides the existing underlay and needs no ufw
+rule), and verifies `curl -k https://127.0.0.1/whoami` plus both listeners
+in `ss`.
+
+### Demo runbook
+
+From a playground shell (`play-158`, once CoreDNS's resolver rollout has
+landed there — see above):
+
+```sh
+hev3 https://web.scion/
+```
+
+prints a race table (SCION / IPv6 / IPv4 candidates, start time, outcome,
+winner) followed by the response body — `web.scion` resolves to svc-150
+(`1-150,10.20.3.215`) over SCION and to svc-150's venue address over IP.
+Confirm the SVCB record directly:
+
+```sh
+dig SVCB web.scion @10.20.3.216
+```
+
+To see the SCION leg actually get slower (not just faster than nothing):
+shape a link on the 158->150 path in the dashboard, then rerun `hev3
+https://web.scion/` and watch the winner and per-candidate timings move.
+Attendee WireGuard clients need no extra setup for any of this — every
+issued conf already carries `DNS = 10.20.3.216`, so `scion.` names resolve
+automatically over the tunnel.
+
+**Parked caveat, stated plainly:** on the real venue/mgmt network, the IP
+legs (venue Wi-Fi/wired, or the mgmt LAN) will typically win the race
+against the *emulated* SCION latencies this testbed applies via `tc` —
+real fabric SCION isn't slower than IP here, the shaped link is. This is
+known, acknowledged, and **deliberately not mitigated yet**: the plan is to
+implement the race correctly first and tackle that trap later, not paper
+over it with a thumb on the scale.
+
 ## Attendee access (Tier 2 — WireGuard)
 
 Attendees' own laptops join as real SCION endhosts in ASes 1-152, 1-155,

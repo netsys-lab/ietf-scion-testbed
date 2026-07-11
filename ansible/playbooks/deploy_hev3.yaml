@@ -1,0 +1,94 @@
+---
+- name: Install scion-hev3 (hev3 CLI + hev3-server binaries + testbed CA) on playground + svc hosts
+  hosts: playground:svc
+  become: true
+  vars:
+    hev3_deb: "{{ playbook_dir }}/../../hev3/dist/scion-hev3_0.1.0_amd64.deb"
+  tasks:
+    - name: Copy scion-hev3 package
+      ansible.builtin.copy:
+        src: "{{ hev3_deb }}"
+        dest: /tmp/scion-hev3.deb
+        mode: "0644"
+
+    - name: Install scion-hev3 (dpkg -i always reinstalls the shipped deb, even on an identical version — apt/apt-get no-op on same-version, see deploy_linkd.yaml)
+      ansible.builtin.command:
+        cmd: dpkg -i /tmp/scion-hev3.deb
+      register: hev3_dpkg
+      changed_when: "'already installed' not in hev3_dpkg.stdout"
+
+    - name: Verify hev3 CLI is installed (--help exits 2 via Go's flag package's ErrHelp path, not 0 — expected, not a failure)
+      ansible.builtin.command: hev3 --help
+      register: hev3_help
+      changed_when: false
+      failed_when: hev3_help.rc != 2
+
+- name: Deploy hev3-server (Happy Eyeballs v3 demo target) on svc-150 + svc-153
+  hosts: svc-150,svc-153
+  become: true
+  vars:
+    # inventory_hostname -> per-host cert dir under ansible/files/hev3-ca/
+    # (svc-150 answers as web.scion, svc-153 as web2.scion — see
+    # tools/gen-hev3-ca.sh and config/coredns/scion.zone).
+    hev3_certs:
+      svc-150: web.scion
+      svc-153: web2.scion
+  tasks:
+    - name: Copy hev3-server TLS certificate
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/hev3-ca/{{ hev3_certs[inventory_hostname] }}/cert.pem"
+        dest: /etc/hev3/cert.pem
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Copy hev3-server TLS private key
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/hev3-ca/{{ hev3_certs[inventory_hostname] }}/key.pem"
+        dest: /etc/hev3/key.pem
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Render hev3-server unit
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/hev3/hev3-server.service.j2"
+        dest: /etc/systemd/system/hev3-server.service
+        mode: "0644"
+
+    # svc-150/153 both carry a venue leg (eth1 on vmbr0) — the IP race target
+    # for the hev3 demo — and deploy_svc_endhost.yaml's ufw baseline denies
+    # incoming by default, trusting only the mgmt leg (eth0). Explicitly
+    # allow 443 (TCP for h2/h1.1, UDP for h3) so IP clients on the venue
+    # network can race in; SCION traffic rides the existing underlay
+    # (already reachable via scitra/the AS's border router) and needs no
+    # extra ufw rule.
+    - name: ufw allow hev3-server (443/tcp + 443/udp, venue leg is the IP race target)
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - ufw allow 443/tcp
+        - ufw allow 443/udp
+      changed_when: false
+
+    - name: Enable + restart hev3-server
+      ansible.builtin.systemd:
+        name: hev3-server
+        state: restarted
+        enabled: true
+        daemon_reload: true
+
+    - name: Verify hev3-server answers /whoami over IP TLS
+      ansible.builtin.command: curl -k --max-time 5 https://127.0.0.1/whoami
+      register: whoami_check
+      changed_when: false
+      retries: 5
+      delay: 2
+      until: whoami_check.rc == 0 and (whoami_check.stdout | trim | length > 0)
+
+    - name: Verify hev3-server is listening on 443/udp (IP h3)
+      ansible.builtin.shell: ss -lun | grep -q ':443 '
+      changed_when: false
+
+    - name: Verify hev3-server is listening on 443/tcp (IP h2/h1.1)
+      ansible.builtin.shell: ss -ltn | grep -q ':443 '
+      changed_when: false
