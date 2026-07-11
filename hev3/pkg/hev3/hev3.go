@@ -169,7 +169,13 @@ func mergeResolved(ctx context.Context, r Resolved, host string) ([]Candidate, e
 				if !ok {
 					break drain
 				}
-				cands = more
+				if len(more) > 0 {
+					cands = more
+				}
+				// An empty-but-not-closed update is not expected from the
+				// current resolver, but — mirroring the empty-Initial
+				// branch below — must not clobber a good candidate set
+				// already in hand.
 			default:
 				break drain
 			}

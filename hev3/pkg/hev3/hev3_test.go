@@ -240,6 +240,25 @@ func TestMergeResolved_NonEmptyInitialDrainsAlreadyArrivedUpdateNonBlocking(t *t
 	}
 }
 
+// TestMergeResolved_NonEmptyInitialEmptyUpdateDoesNotClobber pins the guard
+// mirroring the empty-Initial branch: a (hypothetical) empty-but-not-closed
+// Updates batch seen during the non-blocking drain must not replace a good
+// Initial candidate set with nothing.
+func TestMergeResolved_NonEmptyInitialEmptyUpdateDoesNotClobber(t *testing.T) {
+	initial := []Candidate{{Label: "v4:1.2.3.4", Family: FamilyIPv4}}
+	ch := make(chan []Candidate, 1)
+	ch <- []Candidate{} // already arrived: an empty, non-nil batch
+	r := Resolved{Initial: initial, Updates: ch}
+
+	got, err := mergeResolved(context.Background(), r, "host")
+	if err != nil {
+		t.Fatalf("mergeResolved: %v", err)
+	}
+	if !reflect.DeepEqual(got, initial) {
+		t.Fatalf("mergeResolved = %v, want Initial %v preserved (empty update must not clobber)", got, initial)
+	}
+}
+
 func TestMergeResolved_NonEmptyInitialNoUpdateYetReturnsInitial(t *testing.T) {
 	initial := []Candidate{{Label: "v4:1.2.3.4", Family: FamilyIPv4}}
 	ch := make(chan []Candidate) // unbuffered, nothing sent

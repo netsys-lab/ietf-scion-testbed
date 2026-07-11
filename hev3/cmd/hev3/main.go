@@ -66,7 +66,7 @@ func run(args []string, stdout, stderr *os.File) int {
 		ResolutionDelay: *resolutionDelay,
 	})
 	if err != nil {
-		fmt.Fprintln(stderr, "hev3:", err)
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 
@@ -132,7 +132,37 @@ func buildRaceRows(events []hev3.Event) []raceRow {
 			r.outcomeMs = ev.At.Milliseconds()
 		}
 	}
-	return rows
+	return suppressExpandedProtoRows(rows)
+}
+
+// suppressExpandedProtoRows drops a never-started row whose label is a
+// strict prefix of another row's label that did receive an attempt.
+//
+// Every SCION proto-candidate gets a "candidate" Timeline event under its
+// un-suffixed label ("scion:<IA>,<host>"), but ExpandSCION turns it into one
+// or more per-path children labelled "…#p1".."…#pK" before racing, so
+// "attempt" (and any outcome) only ever fires on the "#pN" children — the
+// parent label is left as a permanent, misleading "never-started" ghost row
+// sitting next to its own expanded children. A never-started row with no
+// such started child (e.g. a genuinely unreachable IPv6/IPv4 candidate)
+// keeps rendering as before — this only suppresses the redundant parent.
+func suppressExpandedProtoRows(rows []raceRow) []raceRow {
+	hasStartedChild := func(label string) bool {
+		for _, r := range rows {
+			if r.started && len(r.label) > len(label) && strings.HasPrefix(r.label, label) {
+				return true
+			}
+		}
+		return false
+	}
+	out := make([]raceRow, 0, len(rows))
+	for _, r := range rows {
+		if !r.started && r.outcome == "" && hasStartedChild(r.label) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // familyFromLabel infers a Candidate's family from its Label prefix — the
