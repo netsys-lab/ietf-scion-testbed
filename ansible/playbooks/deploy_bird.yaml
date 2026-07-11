@@ -31,6 +31,17 @@
           # mid-demo shortcuts that bypass the fabric.
           net.ipv4.conf.all.send_redirects=0
           net.ipv4.conf.eth0.send_redirects=0
+          # rp_filter OFF on interior fabric routers: even LOOSE mode (Ubuntu
+          # default 2) EINVALs forwarded packets whose source is a connected
+          # subnet arriving on a sci* iface (deploy-surfaced: transit ASes
+          # dropped mgmt- and WG-sourced fabric traffic). Kernel takes
+          # max(all, iface), so per-iface values are pinned too; ifaces exist
+          # before systemd-sysctl in a container, so explicit keys apply.
+          net.ipv4.conf.all.rp_filter=0
+          net.ipv4.conf.default.rp_filter=0
+          {% for i in ansible_interfaces | sort if i == 'eth0' or i.startswith('sci') %}
+          net.ipv4.conf.{{ i }}.rp_filter=0
+          {% endfor %}
       notify: apply sysctls
 
     - name: fabric0 dummy netdev (anchor interface)
@@ -162,11 +173,13 @@
           [Route]
           Destination=10.{{ n }}.0.0/16
           Gateway=10.20.3.{{ home_as }}
+          PreferredSource=10.{{ home_as }}.0.{{ fabric_octet }}
           {% endfor %}
           [Route]
           Destination=fd00:beef::/32
           Gateway=fd00:beef:{{ home_as }}::fffe
           GatewayOnLink=yes
+          PreferredSource=fd00:beef:{{ home_as }}::{{ fabric_octet }}
           {% if endhost_as is defined %}
           # Return-path symmetry (svc only): fabric-SOURCED replies to WG
           # attendees ride the fabric; mgmt-sourced SCION underlay keeps its
