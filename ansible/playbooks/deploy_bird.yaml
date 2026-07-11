@@ -180,6 +180,14 @@
           Gateway=fd00:beef:{{ home_as }}::fffe
           GatewayOnLink=yes
           PreferredSource=fd00:beef:{{ home_as }}::{{ fabric_octet }}
+          # WG attendees, mgmt-sourced plane (DNS replies from CoreDNS, SCION
+          # underlay to Tier-2 endhosts): direct via the hub on the shared L2.
+          # Fabric-sourced WG flows on svc hosts take table 100 (home AS)
+          # first, so the demo path is unaffected. Without this, replies to
+          # 10.20.5.x follow the venue default and vanish (deploy-surfaced).
+          [Route]
+          Destination=10.20.5.0/24
+          Gateway=10.20.3.201
           {% if endhost_as is defined %}
           # Return-path symmetry (svc only): fabric-SOURCED replies to WG
           # attendees ride the fabric; mgmt-sourced SCION underlay keeps its

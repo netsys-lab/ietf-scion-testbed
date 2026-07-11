@@ -136,7 +136,7 @@ def render(asnum, ifs, all_as):
     a("  ipv6;")
     a(f"  route fd00:beef:{asnum}::/48 blackhole;")
     if asnum in WG_ASES:
-        a(f"  route {WG_V6} via {HUB_V6}%eth0;")
+        a(f"  route {WG_V6} via {HUB_V6}%eth0 onlink;  # global-scope v6 %iface nexthop stays dormant without onlink (BIRD 2.14, deploy-surfaced)")
     a("}")
     a("")
     a("protocol bfd {")
