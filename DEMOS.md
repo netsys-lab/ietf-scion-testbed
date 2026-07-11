@@ -85,6 +85,43 @@ each AS's live route table — no probe traffic). Panel shows the AS path
 
 The overlay only renders while a trace is running. Reset per demo 4.
 
+## 8. Shared fate: congestion hits both planes, only SCION escapes (staff-run)
+
+One real queue, no simulation: BGP bulk traffic and SCION contend on the SAME
+emulated link. All numbers below verified live 2026-07-11.
+
+```sh
+# staff shell — server (NO systemd unit on purpose; kill it after):
+ssh ietf@10.20.3.215 'iperf3 -s -B 10.150.0.80 -D'
+# sharpener — cap the demo link so saturation is instant:
+curl -su scion:<booth> -X PUT http://10.20.3.200:8080/api/links/150-154/shaping \
+  -H 'Content-Type: application/json' -d '{"direction":"both","rate_mbit":25}'
+# load (playground shell, guests can run this themselves):
+iperf3 -c 10.150.0.80 -t 30        # holds ~23 Mbit/s, 0 retransmits — the queue absorbs it
+```
+
+While the load runs (second playground shell):
+```sh
+traceroute 10.150.0.80                       # last hop 44ms -> 1000-1600ms. Bufferbloat, live.
+scion ping --sequence "1-158 1-154 1-150" 1-150,10.20.3.215 -c 4   # PINNED: ~650-800ms
+scion ping 1-150,10.20.3.215 -c 4            # free choice: ~47ms — routed AROUND via 151/153
+hev3 --no-ip -k 3 https://web.scion/         # same escape, as a page load
+```
+
+Narration: the pinned ping proves neither plane is privileged — same wire,
+same queue (~700ms for both). But SCION *clients pick paths*: shaping rewrote
+the link's advertised bandwidth (linkd shape-sync), beacons carried it, and
+sciond's first path now avoids the congested link — 47ms while BGP sits in a
+1.6-second queue it can never leave: **no loss ⇒ no BFD ⇒ no reroute. BGP is
+congestion-blind; the badge stays green while the band goes critical.**
+Dashboard: link 150-154 band flips to critical in ~5s; BGP badge stays UP.
+
+Gotchas: SCION ping targets the **mgmt addr** (`10.20.3.215`) — the fabric
+`.81` addr has no SCMP responder. Plain `ping` lacks cap_net_raw on the
+playground — use `traceroute` for IP RTT.
+
+RESET after: link reset (demo 4) AND `ssh ietf@10.20.3.215 'pkill iperf3'`.
+
 ## Cross-checks when something looks off
 
 - `bash tools/booth-check.sh` from the dev box — sessions, shapes, health, smoke.
