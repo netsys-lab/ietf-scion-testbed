@@ -50,9 +50,25 @@ func localAddr(conn *snet.Conn) (netip.Addr, error) {
 	return ip.Unmap(), nil
 }
 
+// scionLocalIP picks the SCION underlay bind IP: the -scion-ip flag when set
+// (must parse), otherwise the sciond-derived default. The flag exists because
+// the fabric puts the SCION listener on a sibling address (.81) so it cannot
+// collide with the ip-h3 listener on .80 (spec 2026-07-11-bgp-fabric).
+func scionLocalIP(flagVal string, auto func() (net.IP, error)) (net.IP, error) {
+	if flagVal != "" {
+		ip := net.ParseIP(flagVal)
+		if ip == nil {
+			return nil, fmt.Errorf("-scion-ip: %q is not an IP address", flagVal)
+		}
+		return ip, nil
+	}
+	return auto()
+}
+
 // newSCIONServer sets up the SCION QUIC HTTP/3 listener on the given underlay
-// port using the local sciond at daemonAddr.
-func newSCIONServer(ctx context.Context, handler http.Handler, cert tls.Certificate, daemonAddr string, port int) (*scionServer, error) {
+// port using the local sciond at daemonAddr. bindIP, when non-empty, pins the
+// underlay bind address instead of deriving it from sciond.
+func newSCIONServer(ctx context.Context, handler http.Handler, cert tls.Certificate, daemonAddr string, bindIP string, port int) (*scionServer, error) {
 	sciond, err := daemon.NewService(daemonAddr).Connect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to daemon %s: %w", daemonAddr, err)
@@ -62,7 +78,9 @@ func newSCIONServer(ctx context.Context, handler http.Handler, cert tls.Certific
 		_ = sciond.Close()
 		return nil, fmt.Errorf("loading topology: %w", err)
 	}
-	localIP, err := addrutil.DefaultLocalIP(ctx, daemon.TopoQuerier{Connector: sciond})
+	localIP, err := scionLocalIP(bindIP, func() (net.IP, error) {
+		return addrutil.DefaultLocalIP(ctx, daemon.TopoQuerier{Connector: sciond})
+	})
 	if err != nil {
 		_ = sciond.Close()
 		return nil, fmt.Errorf("resolving local IP: %w", err)

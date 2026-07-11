@@ -43,6 +43,7 @@ func run(args []string, stderr *os.File) int {
 	keyFile := fs.String("key", "/etc/hev3/key.pem", "TLS private key PEM")
 	useSCION := fs.Bool("scion", false, "also serve native HTTP/3 over SCION QUIC")
 	scionPort := fs.Int("scion-port", 443, "SCION/UDP underlay port for the -scion listener")
+	scionIPFlag := fs.String("scion-ip", "", "SCION underlay bind IP for -scion (default: auto via sciond)")
 	daemonAddr := fs.String("daemon", "", "sciond address for -scion (default $SCION_DAEMON_ADDRESS or 127.0.0.1:30255)")
 
 	if err := fs.Parse(args); err != nil {
@@ -69,7 +70,7 @@ func run(args []string, stderr *os.File) int {
 	var servers []*server
 	var scionIP netip.Addr
 	if *useSCION {
-		sc, err := newSCIONServer(context.Background(), withTransport(transportSCION, handler), cert, resolveDaemon(*daemonAddr), *scionPort)
+		sc, err := newSCIONServer(context.Background(), withTransport(transportSCION, handler), cert, resolveDaemon(*daemonAddr), *scionIPFlag, *scionPort)
 		if err != nil {
 			fmt.Fprintf(stderr, "hev3-server: setting up SCION listener: %v\n", err)
 			return 1
