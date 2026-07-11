@@ -18,6 +18,16 @@
 .panel-head h2 .mono { font-family: var(--mono); font-size: 13px; color: var(--ink-mute); font-weight: 400; margin-left: 8px; }
 .stateline { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-family: var(--din); font-size: 12px; letter-spacing: 0.12em; }
 .stateline .dot { width: 9px; height: 9px; border-radius: 50%; }
+
+/* BGP session badge (Task 7): absent unless the frame carries link.bgp. */
+.bgpbadge {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  padding: 1px 6px; border: 1px solid currentColor; border-radius: 4px;
+}
+.bgpbadge[data-bgp="up"] { color: var(--steel); }
+.bgpbadge[data-bgp="degraded"] { color: var(--warn); }
+.bgpbadge[data-bgp="down"] { color: var(--bad); }
+.bgpbadge[data-bgp="unknown"] { color: var(--steel); opacity: 0.45; }
 .closebtn {
   float: right; background: none; border: 1px solid var(--hairline); color: var(--ink-2);
   border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1;

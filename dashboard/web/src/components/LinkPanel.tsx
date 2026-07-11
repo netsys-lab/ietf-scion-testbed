@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Band, Direction, Shaping, ShapingResult } from "../types";
 import { useFabricStore } from "../store";
 import { putShaping, resetShaping, fetchHistory } from "../api";
+import { BGP_WORD } from "../bgp";
 import {
   DIRECTIONS,
   NEUTRAL,
@@ -235,6 +236,9 @@ export default function LinkPanel({ id }: { id: string }) {
         <div className="stateline">
           <span className="dot" style={{ background: BAND_COL[band] }} />
           <span>{BAND_WORD[band]}</span>
+          {link.bgp && (
+            <span className="bgpbadge" data-bgp={link.bgp}>BGP {BGP_WORD[link.bgp]}</span>
+          )}
         </div>
         {isParentChild && (
           <div className="linkrel">

@@ -17,6 +17,7 @@ import type { Band, LinkVM } from "../types";
 import { useFabricStore } from "../store";
 import { VIEWBOX, NODES, linkMeta, linkPath, stationList } from "../layout";
 import { traceEndpoints, tracePathD } from "../tracepath";
+import { bgpChipText } from "../bgp";
 import "./fabric.css";
 
 interface Mid {
@@ -396,6 +397,22 @@ export default function FabricMap() {
                 <text x={m.x} y={m.y + 22}>
                   {label}
                 </text>
+              </g>
+            );
+          })}
+        </g>
+
+        {/* BGP attention chips: only degraded/down sessions render (Task 7). */}
+        <g>
+          {links.map((l) => {
+            const m = mids[l.id];
+            const label = bgpChipText(linksById[l.id]?.bgp);
+            if (!m || !label) return null;
+            const w = label.length * 6.4 + 14;
+            return (
+              <g key={"bgp-" + l.id} className="bgpchip" data-bgp={linksById[l.id]?.bgp}>
+                <rect x={m.x - w / 2} y={m.y + 30} width={w} height={15} rx={4} />
+                <text x={m.x} y={m.y + 41}>{label}</text>
               </g>
             );
           })}

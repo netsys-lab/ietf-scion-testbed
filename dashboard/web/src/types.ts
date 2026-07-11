@@ -63,6 +63,9 @@ export interface LinkVM {
   // than its default. Absent if the backend reports no baseline.
   baseline_delay_ms?: number;
   baseline_rate_mbit?: number;
+  // BGP session state derived by fabricd from BIRD (Task 6); absent entirely
+  // until BIRD is rolled out, so consumers null-guard.
+  bgp?: "up" | "degraded" | "down" | "unknown";
 }
 
 export interface ASVM {

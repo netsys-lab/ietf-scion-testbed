@@ -54,6 +54,14 @@
   fill: var(--brass); text-anchor: middle;
 }
 
+/* BGP attention chip (Task 7): only degraded/down sessions render. */
+.bgpchip rect { fill: var(--surface); stroke-width: 1; }
+.bgpchip[data-bgp="down"] rect { stroke: var(--bad); }
+.bgpchip[data-bgp="degraded"] rect { stroke: var(--warn); }
+.bgpchip text { font-family: var(--mono); font-size: 9px; letter-spacing: 0.03em; text-anchor: middle; }
+.bgpchip[data-bgp="down"] text { fill: var(--bad); }
+.bgpchip[data-bgp="degraded"] text { fill: var(--warn); }
+
 .peer-glyph {
   font-family: var(--mono); font-size: 11px; fill: var(--ink-2); text-anchor: middle;
   letter-spacing: 0.1em;
