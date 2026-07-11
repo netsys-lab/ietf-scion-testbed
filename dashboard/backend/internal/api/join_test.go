@@ -104,7 +104,7 @@ func TestClaimHappyPath(t *testing.T) {
 		t.Fatalf("fc00: %v", resp["fc00_identity"])
 	}
 	conf := resp["conf"].(string)
-	for _, want := range []string{"PrivateKey = PRIV2", "Address = 10.20.5.2/32", "MTU = 1380",
+	for _, want := range []string{"PrivateKey = PRIV2", "Address = 10.20.5.2/32", "DNS = 10.20.3.216", "MTU = 1380",
 		"PublicKey = SPUB", "AllowedIPs = 10.20.3.0/24, 10.20.5.0/24",
 		"Endpoint = [fd99::201]:51820", "PersistentKeepalive = 25"} {
 		if !strings.Contains(conf, want) {
@@ -113,6 +113,18 @@ func TestClaimHappyPath(t *testing.T) {
 	}
 	if !strings.Contains(resp["conf_v4"].(string), "Endpoint = 203.0.113.7:51820") {
 		t.Fatalf("conf_v4 endpoint wrong")
+	}
+}
+
+// TestRenderConfDNS pins the DNS line's position: it must sit between
+// Address and MTU in the [Interface] block, pointing attendees at the
+// testbed's SCION-aware resolver.
+func TestRenderConfDNS(t *testing.T) {
+	sl := wgpool.Slot{N: 2, IP: "10.20.5.2", PrivateKey: "PRIV2", PublicKey: "PUB2"}
+	conf := renderConf(sl, "SPUB", "[fd99::201]:51820")
+	want := "Address = 10.20.5.2/32\nDNS = 10.20.3.216\nMTU = 1380\n"
+	if !strings.Contains(conf, want) {
+		t.Fatalf("conf missing DNS line between Address and MTU:\n%s", conf)
 	}
 }
 

@@ -22,6 +22,7 @@ func renderConf(sl wgpool.Slot, serverPub, endpoint string) string {
 	return fmt.Sprintf(`[Interface]
 PrivateKey = %s
 Address = %s/32
+DNS = 10.20.3.216
 MTU = 1380
 
 [Peer]

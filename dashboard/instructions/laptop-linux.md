@@ -15,6 +15,10 @@ the slow part.
    sudo wg-quick up ./scion-ietf126-as<N>.conf
    ```
 
+   The conf sets `DNS = 10.20.3.216` (the testbed's SCION-aware resolver,
+   which also resolves normal names via Quad9). Delete the `DNS =` line
+   before bringing the tunnel up if you'd rather keep your own resolver.
+
    Check the tunnel is up: `ping 10.20.3.1` should answer (that's the
    testbed's management gateway, reachable once the tunnel is up).
 
