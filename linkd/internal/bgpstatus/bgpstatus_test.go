@@ -1,6 +1,7 @@
 package bgpstatus
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -90,5 +91,16 @@ func TestSessionsCached(t *testing.T) {
 	}
 	if calls != 2 { // one protocols + one bfd; second Sessions() hits the cache
 		t.Fatalf("want 2 birdc calls, got %d", calls)
+	}
+}
+
+func TestSessionJSONKeys(t *testing.T) {
+	b, err := json.Marshal(Session{IfID: "65377", State: "Established", BFD: "Up", Since: 1770000000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"ifid":"65377","state":"Established","bfd":"Up","since_unix":1770000000}`
+	if string(b) != want {
+		t.Fatalf("wire format drifted:\n got %s\nwant %s", b, want)
 	}
 }
