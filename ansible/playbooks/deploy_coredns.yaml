@@ -37,12 +37,17 @@
         state: restarted
         daemon_reload: true
 
+    # Verifies run ON the target: the ansible controller reaches the mgmt net
+    # only via an SSH jump, so a delegate_to:localhost dig can never connect.
+    - name: Install dnsutils for on-host verification
+      ansible.builtin.apt:
+        name: dnsutils
+        state: present
+
     - name: Verify scion. zone answers (SVCB web.scion non-empty)
       ansible.builtin.command: dig @{{ ansible_host }} SVCB web.scion +short
       register: svcb_check
       changed_when: false
-      delegate_to: localhost
-      become: false
       retries: 5
       delay: 2
       until: svcb_check.stdout | trim | length > 0
@@ -51,8 +56,6 @@
       ansible.builtin.command: dig @{{ ansible_host }} A one.one.one.one +short
       register: forward_check
       changed_when: false
-      delegate_to: localhost
-      become: false
       retries: 5
       delay: 2
       until: forward_check.stdout | trim | length > 0
