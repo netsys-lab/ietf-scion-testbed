@@ -34,9 +34,12 @@
 #                                             deployed yet")
 #   $ZONE_SYNC_TEST_DIR/status/<ct>          "running" or "stopped"
 #                                             (absent == running)
-#   $ZONE_SYNC_TEST_DIR/ip/<ct>-v4.json      mock `ip -j -4 addr show eth1`
-#   $ZONE_SYNC_TEST_DIR/ip/<ct>-v6.json      mock `ip -j -6 addr show eth1
-#                                             scope global` (absent == [])
+#   $ZONE_SYNC_TEST_DIR/ip/<ct>-v4.txt       mock `ip -o -4 addr show dev eth1
+#                                             scope global` text output
+#                                             (absent/empty == no v4)
+#   $ZONE_SYNC_TEST_DIR/ip/<ct>-v6.txt       mock `ip -o -6 addr show dev eth1
+#                                             scope global` text output
+#                                             (absent/empty == no v6)
 # See proxmox/coredns-zone-sync-test.sh for the self-test harness that drives
 # this.
 set -euo pipefail
@@ -71,21 +74,21 @@ ct_status_running() {
     fi
 }
 
-ct_ip_json_v4() {
+ct_ip_text_v4() {
     local ct="$1"
     if [ -n "${ZONE_SYNC_TEST_DIR:-}" ]; then
-        cat "$ZONE_SYNC_TEST_DIR/ip/${ct}-v4.json" 2>/dev/null || echo '[]'
+        cat "$ZONE_SYNC_TEST_DIR/ip/${ct}-v4.txt" 2>/dev/null || true
     else
-        pct exec "$ct" -- ip -j -4 addr show eth1 2>/dev/null || echo '[]'
+        pct exec "$ct" -- ip -o -4 addr show dev eth1 scope global 2>/dev/null || true
     fi
 }
 
-ct_ip_json_v6() {
+ct_ip_text_v6() {
     local ct="$1"
     if [ -n "${ZONE_SYNC_TEST_DIR:-}" ]; then
-        cat "$ZONE_SYNC_TEST_DIR/ip/${ct}-v6.json" 2>/dev/null || echo '[]'
+        cat "$ZONE_SYNC_TEST_DIR/ip/${ct}-v6.txt" 2>/dev/null || true
     else
-        pct exec "$ct" -- ip -j -6 addr show eth1 scope global 2>/dev/null || echo '[]'
+        pct exec "$ct" -- ip -o -6 addr show dev eth1 scope global 2>/dev/null || true
     fi
 }
 
@@ -100,31 +103,36 @@ zone_fetch() {
 }
 
 zone_push() {
+    # $content has had its trailing newline(s) stripped by the `$()` calls
+    # upstream (rewrite_zone/bump_serial); restore exactly one, matching the
+    # zone file's original terminal newline.
     local content="$1"
     if [ -n "${ZONE_SYNC_TEST_DIR:-}" ]; then
-        printf '%s' "$content" >"$ZONE_SYNC_TEST_DIR/zone"
+        printf '%s\n' "$content" >"$ZONE_SYNC_TEST_DIR/zone"
     else
         local tmp
         tmp="$(mktemp)"
-        printf '%s' "$content" >"$tmp"
+        printf '%s\n' "$content" >"$tmp"
         pct push "$DNS_CT" "$tmp" "$ZONE_PATH" --user root --group root --perms 0644
         rm -f "$tmp"
     fi
 }
 
-# --- address selection (mirrors tools/update-wg-endpoint.sh) ---------------
+# --- address selection (mirrors tools/update-wg-endpoint.sh's `ip -o` + awk
+# parsing — no `jq` dependency; ietf-proxmox does not have jq installed) ----
 
+# First global IPv4 on eth1.
 select_v4() {
-    local ct="$1" json
-    json="$(ct_ip_json_v4 "$ct")"
-    jq -r '.[0].addr_info[]? | select(.scope=="global") | .local' <<<"$json" 2>/dev/null | head -1
+    local ct="$1"
+    ct_ip_text_v4 "$ct" | awk '{print $4}' | cut -d/ -f1 | head -1
 }
 
 # Global-unicast (2000::/3) only; never ULA (fd00::/8, fc00::/7) or
-# link-local (fe80::/10); never a temporary/privacy address.
+# link-local (fe80::/10); never a temporary/privacy or deprecated address (a
+# published DNS AAAA must be stable and actually reachable from the venue —
+# stricter than the ULA-tolerant wg endpoint script).
 select_v6() {
-    local ct="$1" json a
-    json="$(ct_ip_json_v6 "$ct")"
+    local ct="$1" a
     while IFS= read -r a; do
         [ -z "$a" ] && continue
         case "$a" in
@@ -134,7 +142,7 @@ select_v6() {
             return 0
             ;;
         esac
-    done < <(jq -r '.[0].addr_info[]? | select((.temporary // false)==false) | .local' <<<"$json" 2>/dev/null)
+    done < <(ct_ip_text_v6 "$ct" | grep -vE 'temporary|deprecated' | awk '{print $4}' | cut -d/ -f1)
     printf ''
 }
 
@@ -168,6 +176,11 @@ rewrite_zone() {
     printf '%s' "$out"
 }
 
+# Returns 1 (no output) if no SOA line is found, instead of dying directly:
+# extract_serial runs inside a `$(...)` command substitution in main(), which
+# is a subshell — an `exit` in here would only kill that subshell, not the
+# script, and a plain `die` would hard-fail even under AUTO=1. Let the caller
+# decide (mirrors the AUTO-gated checks earlier in main()).
 extract_serial() {
     local zone="$1" line
     local -a w
@@ -178,7 +191,7 @@ extract_serial() {
             return 0
         fi
     done <<<"$zone"
-    die "no SOA record found in zone"
+    return 1
 }
 
 # date-based YYYYMMDDnn: same-day bump increments nn (2-digit, capped at 99
@@ -268,7 +281,14 @@ main() {
     fi
 
     local old_serial new_serial final
-    old_serial="$(extract_serial "$zone_content")"
+    if ! old_serial="$(extract_serial "$zone_content")"; then
+        if [ "${AUTO:-0}" = "1" ]; then
+            log "WARNING: no SOA record found in zone - skipping (soft-skip)"
+            exit 0
+        else
+            die "no SOA record found in zone"
+        fi
+    fi
     new_serial="$(next_serial "$old_serial")"
     final="$(bump_serial "$candidate" "$old_serial" "$new_serial")"
 
