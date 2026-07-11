@@ -602,6 +602,10 @@ networkd drop-ins land under `/etc/systemd/network/*.network.d/` and reload via
 `networkctl reload`; the `pct`-managed `eth0.network` they extend must already
 exist (each play asserts it).
 
+Run this before `deploy_hev3.yaml`: Play 2's `.81` sibling address on the svc
+hosts' `eth0` is what `hev3-server -scion-ip` binds to, and deploying hev3
+first crash-loops it with `EADDRNOTAVAIL` (see the hev3 section below).
+
 ### Demo
 
 ```sh
@@ -667,6 +671,13 @@ tools/gen-hev3-ca.sh
 ```
 
 ### Deploy
+
+`deploy_bird.yaml` (BGP fabric endhost attachment, above) must run before this
+playbook on the svc hosts: `hev3-server`'s `-scion-ip 10.<AS>.0.81` bind fails
+(`EADDRNOTAVAIL`, `Restart=on-failure` crash-loop) until Play 2 of the fabric
+deploy has put the `.81` sibling address on `eth0`. If `hev3-server` was
+deployed first, rerun `deploy_bird.yaml` then restart the `hev3-server` unit
+on the affected svc hosts.
 
 ```sh
 ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_hev3.yaml
