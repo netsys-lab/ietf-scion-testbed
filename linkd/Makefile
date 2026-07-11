@@ -1,4 +1,4 @@
-VERSION ?= 0.3.0
+VERSION ?= 0.3.1
 BIN := bin/scion-linkd
 STAGE := dist/stage
 

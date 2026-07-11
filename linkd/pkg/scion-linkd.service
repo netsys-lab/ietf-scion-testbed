@@ -7,11 +7,16 @@ Wants=network-online.target
 ExecStart=/usr/bin/scion-linkd -config /etc/scion-linkd/config.toml
 Restart=on-failure
 RestartSec=2
-CapabilityBoundingSet=CAP_NET_ADMIN
+# CAP_DAC_OVERRIDE: /api/v1/bgp shells out to birdc, whose control socket is
+# bird:bird 0660 — without DAC_OVERRIDE in the bounding set even root cannot
+# connect. -/run/bird keeps the socket path writable under strict mode; the
+# '-' ignores it on BIRD-less hosts so linkd stays an optional add-on there
+# (endpoint just 503s).
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_DAC_OVERRIDE
 AmbientCapabilities=CAP_NET_ADMIN
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=/etc/scion
+ReadWritePaths=/etc/scion -/run/bird
 ProtectHome=yes
 
 [Install]
