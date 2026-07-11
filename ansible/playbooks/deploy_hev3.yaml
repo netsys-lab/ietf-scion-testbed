@@ -33,6 +33,9 @@
     hev3_certs:
       svc-150: web.scion
       svc-153: web2.scion
+    # SCION underlay binds the fabric sibling address .81 (see the unit's
+    # ExecStart comment) so it can't collide with ip-h3 on .80.
+    fabric_scion_ip: "10.{{ endhost_as }}.0.81"
   tasks:
     - name: Copy hev3-server TLS certificate
       ansible.builtin.copy:

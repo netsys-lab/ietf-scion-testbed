@@ -1,0 +1,250 @@
+---
+# BGP fabric (spec docs/superpowers/specs/2026-07-11-bgp-fabric-design.md).
+# Play 1: BIRD 2 + fabric addressing on the 12 AS containers.
+# Play 2: endhost attachment (playground + svc).
+# Play 3: hub attachment (CT201).
+# Config reloads use `birdc configure` (graceful) — never restart bird on a
+# config-only change (sessions and BFD state survive).
+
+- name: BGP fabric — AS containers
+  hosts: ases
+  become: true
+  tasks:
+    - name: Derive AS number
+      ansible.builtin.set_fact:
+        asnum: "{{ inventory_hostname | regex_replace('^AS1-', '') }}"
+
+    - name: Install bird2
+      ansible.builtin.apt:
+        name: bird2
+        state: present
+        update_cache: true
+
+    - name: Forwarding + no-redirect sysctls
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-bgp-fabric.conf
+        mode: "0644"
+        content: |
+          net.ipv4.ip_forward=1
+          net.ipv6.conf.all.forwarding=1
+          # AS152 hosts two endhosts on the flat L2: redirects would install
+          # mid-demo shortcuts that bypass the fabric.
+          net.ipv4.conf.all.send_redirects=0
+          net.ipv4.conf.eth0.send_redirects=0
+      notify: apply sysctls
+
+    - name: fabric0 dummy netdev (anchor interface)
+      ansible.builtin.copy:
+        dest: /etc/systemd/network/fabric0.netdev
+        mode: "0644"
+        content: |
+          [NetDev]
+          Name=fabric0
+          Kind=dummy
+      notify: reload networkd
+
+    - name: fabric0 anchor addresses
+      ansible.builtin.copy:
+        dest: /etc/systemd/network/fabric0.network
+        mode: "0644"
+        content: |
+          [Match]
+          Name=fabric0
+
+          [Network]
+          Address=10.{{ asnum }}.0.1/32
+          Address=fd00:beef:{{ asnum }}::1/128
+      notify: reload networkd
+
+    - name: Assert pct-managed eth0.network exists (drop-in target)
+      ansible.builtin.stat:
+        path: /etc/systemd/network/eth0.network
+      register: eth0net
+      failed_when: not eth0net.stat.exists
+
+    - name: eth0 fabric drop-in (v6 gateway + on-link delivery)
+      ansible.builtin.copy:
+        dest: /etc/systemd/network/eth0.network.d/fabric.conf
+        mode: "0644"
+        content: |
+          # BGP fabric: v6 gateway for endhost routes ( ::fffe, /64 gives the
+          # on-link v6 delivery route) + v4 on-link delivery /24. Endhost
+          # fabric addresses are host-scoped; they answer ARP/ND on this L2.
+          [Network]
+          Address=fd00:beef:{{ asnum }}::fffe/64
+
+          [Route]
+          Destination=10.{{ asnum }}.0.0/24
+          Scope=link
+      notify: reload networkd
+
+    - name: Install bird.conf
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../config/AS{{ asnum }}/bird.conf"
+        dest: /etc/bird/bird.conf
+        mode: "0644"
+      register: birdconf
+
+    - name: Flush handlers (networkd before bird)
+      ansible.builtin.meta: flush_handlers
+
+    - name: Enable + start bird
+      ansible.builtin.systemd:
+        name: bird
+        enabled: true
+        state: started
+
+    - name: Graceful reconfigure on config change
+      ansible.builtin.command: birdc configure
+      when: birdconf.changed
+      changed_when: true
+
+    - name: Verify all sessions exist
+      ansible.builtin.shell: birdc -r show protocols | grep -c '^bgp_if'
+      register: nsess
+      changed_when: false
+
+    - name: Session count matches bird.conf
+      ansible.builtin.shell: grep -c 'protocol bgp bgp_if' /etc/bird/bird.conf
+      register: nconf
+      changed_when: false
+      failed_when: nsess.stdout != nconf.stdout
+
+  handlers:
+    - name: apply sysctls
+      ansible.builtin.command: sysctl --system
+      changed_when: true
+    - name: reload networkd
+      ansible.builtin.command: networkctl reload
+      changed_when: true
+
+- name: BGP fabric — endhost attachment
+  hosts: playground:svc
+  become: true
+  tasks:
+    - name: Derive home AS and fabric octet
+      ansible.builtin.set_fact:
+        home_as: "{{ playground_as | default(endhost_as) }}"
+        fabric_octet: "{{ '10' if playground_as is defined else '80' }}"
+
+    - name: Assert pct-managed eth0.network exists
+      ansible.builtin.stat:
+        path: /etc/systemd/network/eth0.network
+      register: eth0net
+      failed_when: not eth0net.stat.exists
+
+    - name: eth0 fabric drop-in (host-scoped addresses + routes via home AS)
+      ansible.builtin.copy:
+        dest: /etc/systemd/network/eth0.network.d/fabric.conf
+        mode: "0644"
+        content: |
+          # BGP fabric endhost attachment. Addresses are HOST-SCOPED (/32,
+          # /128) — a subnet mask would create on-link routes that shortcut
+          # the flat mgmt L2 and bypass the fabric (spec: flat-L2 shortcuts).
+          [Network]
+          Address=10.{{ home_as }}.0.{{ fabric_octet }}/32
+          Address=fd00:beef:{{ home_as }}::{{ fabric_octet }}/128
+          {% if endhost_as is defined %}
+          Address=10.{{ home_as }}.0.81/32
+          {% endif %}
+
+          {% for n in range(150, 162) %}
+          [Route]
+          Destination=10.{{ n }}.0.0/16
+          Gateway=10.20.3.{{ home_as }}
+          {% endfor %}
+          [Route]
+          Destination=fd00:beef::/32
+          Gateway=fd00:beef:{{ home_as }}::fffe
+          GatewayOnLink=yes
+          {% if endhost_as is defined %}
+          # Return-path symmetry (svc only): fabric-SOURCED replies to WG
+          # attendees ride the fabric; mgmt-sourced SCION underlay keeps its
+          # existing hub path (table 100 misses fall through to main).
+          [RoutingPolicyRule]
+          From=10.{{ home_as }}.0.80/32
+          Table=100
+          [RoutingPolicyRule]
+          From=10.{{ home_as }}.0.81/32
+          Table=100
+          [RoutingPolicyRule]
+          From=fd00:beef:{{ home_as }}::80/128
+          Table=100
+          [Route]
+          Destination=10.20.5.0/24
+          Gateway=10.20.3.{{ home_as }}
+          Table=100
+          [Route]
+          Destination=fd00:beef:5::/64
+          Gateway=fd00:beef:{{ home_as }}::fffe
+          GatewayOnLink=yes
+          Table=100
+          {% endif %}
+      notify: reload networkd
+
+  handlers:
+    - name: reload networkd
+      ansible.builtin.command: networkctl reload
+      changed_when: true
+
+- name: BGP fabric — hub attachment
+  hosts: hub
+  become: true
+  tasks:
+    - name: v6 forwarding
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-bgp-fabric.conf
+        mode: "0644"
+        content: |
+          net.ipv6.conf.all.forwarding=1
+      notify: apply sysctls
+
+    - name: Assert pct-managed eth0.network exists
+      ansible.builtin.stat:
+        path: /etc/systemd/network/eth0.network
+      register: eth0net
+      failed_when: not eth0net.stat.exists
+
+    - name: eth0 fabric drop-in (stable v6 + fabric routes via AS155)
+      ansible.builtin.copy:
+        dest: /etc/systemd/network/eth0.network.d/fabric.conf
+        mode: "0644"
+        content: |
+          # Hub fabric attachment: stable AS-neutral v6 (CT201 has no pinned
+          # MAC, fe80 changes on recreation) + routes into the fabric via
+          # AS155. wg_ases route WG subnets back here (BIRD statics).
+          [Network]
+          Address=fd00:beef:5:1::1/64
+
+          {% for n in range(150, 162) %}
+          [Route]
+          Destination=10.{{ n }}.0.0/16
+          Gateway=10.20.3.155
+          {% endfor %}
+          [Route]
+          Destination=fd00:beef::/32
+          Gateway=fd00:beef:155::fffe
+          GatewayOnLink=yes
+      notify: reload networkd
+
+    - name: Audit hub NAT for fabric leakage
+      ansible.builtin.shell: nft list ruleset | grep -i masquerade || true
+      register: hubnat
+      changed_when: false
+
+    - name: Fail if masquerade could rewrite fabric-destined WG traffic
+      ansible.builtin.debug:
+        msg: >
+          MANUAL CHECK: {{ hubnat.stdout | default('no masquerade found') }} —
+          if a masquerade rule matches traffic leaving eth0 toward 10.150-161
+          or fd00:beef, scope it to the venue leg (oifname eth1) or add an
+          accept for fabric destinations BEFORE it. A masqueraded source
+          (10.20.3.201) pulls replies onto the flat L2 and halves measured RTT.
+
+  handlers:
+    - name: apply sysctls
+      ansible.builtin.command: sysctl --system
+      changed_when: true
+    - name: reload networkd
+      ansible.builtin.command: networkctl reload
+      changed_when: true

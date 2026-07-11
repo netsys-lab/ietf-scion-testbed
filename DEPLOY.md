@@ -560,6 +560,84 @@ return, revive proxmox/coredns-zone-sync.* from git history. On the host:
 systemctl disable --now coredns-zone-sync.timer && rm -f
 /etc/systemd/system/coredns-zone-sync.{service,timer}.
 
+## BGP fabric
+
+A real IP underlay laid over the flat mgmt L2, so endhosts have genuine IPv4
+and IPv6 legs to race against SCION (the hev3 story below) instead of the
+single flat `10.20.3.0/24`. Each of the 12 AS containers runs BIRD 2 speaking
+BGP to its inter-AS neighbours over the SCION link bridges, advertising its own
+`10.<AS>.0.0/16` + `fd00:beef:<AS>::/48` and learning the rest — so a packet
+from an endhost in AS158 to `10.150.0.80` traverses the fabric hop by hop,
+following the same topology the SCION plane does. Generator + per-AS configs
+are `topology/gen_bird.py` → `config/AS*/bird.conf` (spec
+`docs/superpowers/specs/2026-07-11-bgp-fabric-design.md`).
+
+### Deploy
+
+```sh
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_bird.yaml
+```
+
+Play 1 (`ases`) installs BIRD 2 on the 12 AS containers, drops the forwarding
++ no-`send_redirects` sysctls (redirects would install flat-L2 shortcuts that
+bypass the fabric — AS152 carries two endhosts on the L2), creates the
+`fabric0` dummy netdev holding the AS anchor addresses (`10.<AS>.0.1/32` +
+`fd00:beef:<AS>::1/128`), lays an `eth0` drop-in for the v6 gateway
+(`::fffe/64`) and the on-link `10.<AS>.0.0/24` delivery route, installs
+`bird.conf`, and starts BIRD — a config-only change is applied with `birdc
+configure` (graceful; sessions and BFD state survive), never a restart. It
+finishes by asserting the live session count matches the config. Play 2
+(`playground:svc`) attaches the endhosts: host-scoped (`/32`, `/128`) fabric
+addresses plus routes for every `10.15x.0.0/16` and `fd00:beef::/32` via the
+home AS's mgmt IP; svc hosts additionally gain the `.81` SCION-underlay sibling
+and a table-100 return-path so fabric-sourced replies to WG attendees ride the
+fabric while mgmt-sourced SCION underlay keeps its hub path. Play 3 (`hub`,
+CT201) gives the hub a stable AS-neutral v6 (`fd00:beef:5:1::1/64`) and routes
+into the fabric via AS155, and audits the hub's NAT for a masquerade that could
+rewrite fabric-destined WG traffic (a manual check, printed — a masqueraded
+source pulls replies onto the flat L2 and halves measured RTT).
+
+`deploy_bird.yaml` is idempotent — after a partial failure just re-run it. The
+networkd drop-ins land under `/etc/systemd/network/*.network.d/` and reload via
+`networkctl reload`; the `pct`-managed `eth0.network` they extend must already
+exist (each play asserts it).
+
+### Demo
+
+```sh
+traceroute 10.155.0.1                          # from an endhost: hop-by-hop across the fabric to an AS anchor
+birdc -r show protocols                        # on an AS container: BGP sessions + BFD state, all up
+curl -s http://10.20.3.155:30480/api/v1/bgp    # linkd's view of that AS's sessions (feeds the dashboard badge)
+```
+
+Every AS anchor is `10.<AS>.0.1` (150–161); a traceroute to one from an endhost
+shows the fabric path, distinct from the SCION plane's. The dashboard derives
+its per-AS BGP badge from the linkd `/api/v1/bgp` endpoint above.
+
+BFD makes the fabric reactive to link shaping: **≥30% loss flaps BGP within
+minutes — a feature, narrate it.** Shaping a link to heavy loss in the
+dashboard tears the BGP session down, the fabric reconverges around it, and the
+badge goes red — the IP underlay visibly reacts to the same `tc` the SCION
+story rides on.
+
+### WireGuard dual-stack confs
+
+The fabric gives WG attendees a routable v6 (and v4) leg into the testbed, so
+the issued confs are now dual-stack. Regenerate the pool and redeploy the hub
+and dashboard in this order:
+
+```sh
+./tools/gen-wg-pool.sh -f                      # dual-stack pool; -f is destructive — see "Pool exhausted"
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_wghub.yaml
+ansible-playbook -i ansible/inventory.yaml ansible/playbooks/deploy_dashboard.yaml
+```
+
+`deploy_wghub.yaml` before `deploy_dashboard.yaml` for the same reason as the
+Attendee-access section: fabricd reads the pool file at startup and
+`log.Fatalf`s if it's missing, so a dashboard deploy ahead of the hub takes the
+whole dashboard down. `gen-wg-pool.sh -f` invalidates every conf already handed
+out — only regenerate between sessions (see "Pool exhausted" below).
+
 ## Happy Eyeballs v3 demo (hev3)
 
 `hev3` is the SCION-aware Happy Eyeballs v3 CLI
@@ -598,7 +676,10 @@ Play 1 installs the `scion-hev3` deb (CLI + CA) on every playground and svc
 host. Play 2, scoped to `svc-150`/`svc-153` only, copies each host's
 per-name cert/key pair from `ansible/files/hev3-ca/` to
 `/etc/hev3/{cert,key}.pem`, renders `hev3-server.service` (runs
-`hev3-server -scion`, `SCION_DAEMON_ADDRESS=127.0.0.1:30255`, `After`/
+`hev3-server -scion -scion-ip 10.<AS>.0.81` — the SCION underlay binds the
+fabric sibling `.81` so its UDP :443 can't collide with the ip-h3 :443 on the
+fabric primary `.80`; `fabric_scion_ip` is set from `endhost_as`),
+`SCION_DAEMON_ADDRESS=127.0.0.1:30255`, `After`/
 `Wants`/`Requires` the same `scion-sciond` unit the svc endhost stack
 installs), opens `443/tcp` + `443/udp` in ufw (the venue leg denies incoming
 by default — see "Service endhosts" above — so the IP race target needs an

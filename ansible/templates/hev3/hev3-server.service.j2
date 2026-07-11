@@ -10,7 +10,10 @@ Requires=scion-sciond.service
 # -listen-ip (:443), -cert/-key (/etc/hev3/{cert,key}.pem), -scion-port
 # (443). SCION_DAEMON_ADDRESS matches the svc endhost sciond's listen
 # address (ansible/templates/svc/sd.toml.j2).
-ExecStart=/usr/local/bin/hev3-server -scion
+# -scion-ip binds the SCION underlay to the fabric SIBLING address .81 so
+# the SCION UDP :443 listener can't collide with the ip-h3 :443 listener on
+# the fabric primary .80 (commit 7689e3f's collision, same-address variant).
+ExecStart=/usr/local/bin/hev3-server -scion -scion-ip {{ fabric_scion_ip }}
 Environment=SCION_DAEMON_ADDRESS=127.0.0.1:30255
 Restart=on-failure
 # Binds :443 on both the IP and SCION stacks — matches house style for svc
