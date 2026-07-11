@@ -67,6 +67,24 @@ On any AS container (staff): `sudo tcpdump -ni sciF 'not udp port 50000'`
 → BFD + fabric ICMP; drop the filter → SCION underlay floods the capture.
 On playground shells tcpdump works without root (`tcpdump -ni eth0 icmp`).
 
+## 7. Two planes on the wall (BGP path overlay)
+
+Open the ID-INT trace panel, pick 1-158 → 1-150, start a trace (AUTO). The
+map now shows BOTH planes for the pair: brass marching dash = SCION's probed
+path, **ice-blue static dash + BGP chip = BIRD's current best route** (from
+each AS's live route table — no probe traffic). Panel shows the AS path
+(`158 › 154 › 150`) and a SHOW ON MAP toggle.
+
+- Run demo 2 (300ms shape): SCION polyline moves off the shaped link in
+  ~30–60s (beacon re-advertisement); the BGP polyline does NOT move — the
+  latency-blindness is now visible, not just narrated.
+- Run demo 3 (100% loss): the BGP polyline flips to the detour (via AS151)
+  within ~10s (BFD ~2s + 5s poll) while the badge goes red.
+- If a mid-path linkd is unreachable the polyline dims and truncates and the
+  panel shows `158 › 154 › ?` — honest partial data, not an error.
+
+The overlay only renders while a trace is running. Reset per demo 4.
+
 ## Cross-checks when something looks off
 
 - `bash tools/booth-check.sh` from the dev box — sessions, shapes, health, smoke.
