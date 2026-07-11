@@ -18,7 +18,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 HUB_V4 = "10.20.3.201"
-HUB_V6 = "fd00:beef:5:1::1"
+# v6 WG next-hop: the hub holds fd00:beef:<AS>::c8/64 in EACH wg_as's
+# segment. BIRD 2.14 keeps a static dormant unless the v6 next-hop lies in a
+# connected prefix of the device (onlink does not help; v4 only works
+# because 10.20.3.201 is inside eth0's /24 — deploy-surfaced).
 WG_ASES = {152, 155, 158, 161}  # deploy_wghub return-route ASes: direct hub L2
 WG_V4 = "10.20.5.0/24"
 WG_V6 = "fd00:beef:5::/64"
@@ -136,7 +139,7 @@ def render(asnum, ifs, all_as):
     a("  ipv6;")
     a(f"  route fd00:beef:{asnum}::/48 blackhole;")
     if asnum in WG_ASES:
-        a(f"  route {WG_V6} via {HUB_V6}%eth0 onlink;  # global-scope v6 %iface nexthop stays dormant without onlink (BIRD 2.14, deploy-surfaced)")
+        a(f"  route {WG_V6} via fd00:beef:{asnum}::c8;  # hub addr in OUR /64 (see HUB_V4 comment)")
     a("}")
     a("")
     a("protocol bfd {")

@@ -246,11 +246,17 @@
         dest: /etc/systemd/network/eth0.network.d/fabric.conf
         mode: "0644"
         content: |
-          # Hub fabric attachment: stable AS-neutral v6 (CT201 has no pinned
-          # MAC, fe80 changes on recreation) + routes into the fabric via
-          # AS155. wg_ases route WG subnets back here (BIRD statics).
+          # Hub fabric attachment: one stable /128 in EACH wg_as segment —
+          # BIRD 2.14 needs the WG-return next-hop inside the AS's connected
+          # /64, and host-scoped /128s avoid connected-/64 routes here that
+          # would shortcut WG->endhost traffic around the fabric. Stable
+          # addresses because CT201 has no pinned MAC (fe80 unstable across
+          # recreation). Fabric routes go via AS155.
           [Network]
-          Address=fd00:beef:5:1::1/64
+          Address=fd00:beef:152::c8/128
+          Address=fd00:beef:155::c8/128
+          Address=fd00:beef:158::c8/128
+          Address=fd00:beef:161::c8/128
 
           {% for n in range(150, 162) %}
           [Route]

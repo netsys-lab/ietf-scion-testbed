@@ -592,7 +592,7 @@ addresses plus routes for every `10.15x.0.0/16` and `fd00:beef::/32` via the
 home AS's mgmt IP; svc hosts additionally gain the `.81` SCION-underlay sibling
 and a table-100 return-path so fabric-sourced replies to WG attendees ride the
 fabric while mgmt-sourced SCION underlay keeps its hub path. Play 3 (`hub`,
-CT201) gives the hub a stable AS-neutral v6 (`fd00:beef:5:1::1/64`) and routes
+CT201) gives the hub a stable /128 in each wg_as segment (`fd00:beef:{152,155,158,161}::c8`) and routes
 into the fabric via AS155, and audits the hub's NAT for a masquerade that could
 rewrite fabric-destined WG traffic (a manual check, printed — a masqueraded
 source pulls replies onto the flat L2 and halves measured RTT).
