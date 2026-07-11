@@ -45,6 +45,8 @@ export default function FabricMap() {
   const setBooted = useFabricStore((s) => s.setBooted);
   const screen = useFabricStore((s) => s.screen);
   const trace = useFabricStore((s) => s.frame?.trace);
+  const bgpPath = useFabricStore((s) => s.frame?.bgp_path);
+  const showBgpPath = useFabricStore((s) => s.showBgpPath);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [mids, setMids] = useState<Record<string, Mid>>({});
@@ -64,6 +66,14 @@ export default function FabricMap() {
     if (!trace?.path_links?.length) return null;
     return tracePathD(trace.path_links, Number(trace.src.split("-")[1]));
   }, [trace?.path_links?.join(","), trace?.src]);
+
+  // Same memo discipline as traceD: recompute only when the path or src
+  // changes, not on every frame-object identity change.
+  const bgpD = useMemo(() => {
+    if (!bgpPath?.path_links?.length) return null;
+    return tracePathD(bgpPath.path_links, Number(bgpPath.src.split("-")[1]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bgpPath?.path_links?.join(","), bgpPath?.src]);
 
   // Measure the length-midpoint of every trunk path after commit (mirrors the
   // mockup's getPointAtLength(len/2)); overlays hang off these. Re-runs when
@@ -442,6 +452,27 @@ export default function FabricMap() {
               );
             })()}
         </g>
+
+        {/* BGP path overlay: the IP plane's current best route for the traced
+            pair — cool ice vs the SCION trace's warm brass, static dash (a
+            route, not a flow). Drawn under the trace overlay so SCION stays
+            on top where the two planes share a trunk. */}
+        {showBgpPath && bgpPath && bgpD && (
+          <g className={"bgp-overlay" + (bgpPath.complete ? "" : " partial")} aria-hidden="true">
+            <path className="bgp-dash" d={bgpD} />
+            {(() => {
+              const pl = bgpPath.path_links!;
+              const m = mids[pl[Math.floor((pl.length - 1) / 2)]];
+              if (!m) return null;
+              return (
+                <g className="bgp-path-chip">
+                  <rect x={m.x - 17} y={m.y - 38} width={34} height={15} rx={4} />
+                  <text x={m.x} y={m.y - 27}>BGP</text>
+                </g>
+              );
+            })()}
+          </g>
+        )}
 
         {/* ID-INT trace overlay: brass path along the probed links, with a
             travelling comet while the probe is healthy. Rendered last so it

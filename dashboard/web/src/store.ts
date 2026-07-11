@@ -25,6 +25,10 @@ export interface FabricState {
    * for the booth-distance disc-radius bump — see fabric.css for the
    * font/stroke bumps that stay CSS-only) can see the current mode. */
   screen: boolean;
+  /** BGP path overlay visibility (TracePanel toggle). Lives here because
+   * TracePanel writes it and FabricMap reads it. */
+  showBgpPath: boolean;
+  setShowBgpPath: (showBgpPath: boolean) => void;
   events: TickerEvent[];
   /** Derived map for cheap O(1) component access, kept in sync with frame. */
   linksById: Record<string, LinkVM>;
@@ -122,6 +126,7 @@ export const useFabricStore = create<FabricState>((set, get) => ({
   connected: false,
   booted: false,
   screen: initialScreen(),
+  showBgpPath: true,
   events: [],
   linksById: {},
 
@@ -160,6 +165,8 @@ export const useFabricStore = create<FabricState>((set, get) => ({
   setBooted: (booted) => set({ booted }),
 
   setScreen: (screen) => set({ screen }),
+
+  setShowBgpPath: (showBgpPath) => set({ showBgpPath }),
 
   pushEvent: (event) => set((s) => ({ events: [event, ...s.events].slice(0, MAX_EVENTS) })),
 }));

@@ -152,3 +152,8 @@ input[type=range]:focus-visible { outline: 2px solid var(--brass); outline-offse
 .tracehophead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .macchip { font-family: var(--din); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
 .macchip.ok { color: var(--brass); }
+
+/* BGP path row (TracePanel): AS-path readout + map-overlay toggle. */
+.bgp-aspath { font: 500 13px var(--mono); color: var(--bgp-ice); letter-spacing: .04em; padding: 2px 0 4px; }
+.bgp-showtoggle { display: inline-flex; align-items: center; gap: 6px; font: 600 10px var(--din); color: var(--ink-2); letter-spacing: .08em; cursor: pointer; }
+.bgp-showtoggle input { accent-color: var(--bgp-ice); }

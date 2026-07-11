@@ -91,6 +91,7 @@ export interface Frame {
   ases: ASVM[];
   kpi: KPI;
   trace?: TraceVM;
+  bgp_path?: BgpPathVM;
 }
 
 // --- idint trace (path inspector) ------------------------------------------
@@ -116,6 +117,19 @@ export interface TraceVM {
   updated_at: number;
   probe_rtt_ms: number;
   hops: TraceHop[];
+}
+
+// frame.bgp_path: the current BGP best path for the traced pair, walked by
+// fabricd from every AS's BIRD route table each poll. Present only while a
+// trace session is active AND BGP route data has been polled; complete=false
+// means the walk truncated (linkd unreachable / no best route) and as_path
+// is the partial prefix.
+export interface BgpPathVM {
+  src: string;
+  dst: string;
+  as_path: number[];
+  path_links: string[] | null;
+  complete: boolean;
 }
 
 export interface PathOption {

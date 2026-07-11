@@ -18,6 +18,8 @@
                               Never a data encoding; low-chroma so it cannot
                               impersonate warning amber. */
   --link-steel:  #5A7A9E;  /* healthy link. 4.2:1 */
+  --bgp-ice:     #8FBADD;  /* BGP path overlay: cool ice vs SCION's warm brass.
+                              NOT --link-steel — it must read against steel trunks. */
   --status-good: #0CA30C;  /* recovery pulse only */
   --status-warn: #FAB219;  /* elevated */
   --status-bad:  #EC835A;  /* degraded */

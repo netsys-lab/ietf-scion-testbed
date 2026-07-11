@@ -28,6 +28,7 @@ import type { PathOption } from "../types";
 import { useFabricStore } from "../store";
 import { fetchIdintPaths, putTrace, stopTrace } from "../api";
 import { hopRows, latencyLabel, pathLabel } from "../trace";
+import { asPathText } from "../bgppath";
 import Spark from "./Spark";
 
 // Ring length: same convention as LinkPanel's sparkline rings.
@@ -45,6 +46,9 @@ export default function TracePanel() {
   const topology = useFabricStore((s) => s.topology);
   const linksById = useFabricStore((s) => s.linksById);
   const vm = useFabricStore((s) => s.frame?.trace);
+  const bgpPath = useFabricStore((s) => s.frame?.bgp_path);
+  const showBgpPath = useFabricStore((s) => s.showBgpPath);
+  const setShowBgpPath = useFabricStore((s) => s.setShowBgpPath);
   const select = useFabricStore((s) => s.select);
 
   const [src, setSrc] = useState(150);
@@ -184,6 +188,26 @@ export default function TracePanel() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {vm && bgpPath && (
+        <div className="shapingbox">
+          <div className="tracehophead">
+            <h3>BGP path</h3>
+            <label className="bgp-showtoggle">
+              <input
+                type="checkbox"
+                checked={showBgpPath}
+                onChange={(e) => setShowBgpPath(e.target.checked)}
+              />
+              SHOW ON MAP
+            </label>
+          </div>
+          <div className="bgp-aspath">{asPathText(bgpPath)}</div>
+          {!bgpPath.complete && (
+            <span className="daemon-note">route data incomplete — path truncated</span>
           )}
         </div>
       )}

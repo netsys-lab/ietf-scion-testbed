@@ -60,6 +60,7 @@ function resetStore() {
     connected: false,
     booted: false,
     screen: false,
+    showBgpPath: true,
     events: [],
     linksById: {},
   });
@@ -197,6 +198,15 @@ describe("pushEvent", () => {
     expect(events).toHaveLength(9);
     expect(events[0].text).toBe("E10");
     expect(events[8].text).toBe("E2");
+  });
+});
+
+describe("showBgpPath", () => {
+  it("showBgpPath defaults on and toggles", () => {
+    expect(useFabricStore.getState().showBgpPath).toBe(true);
+    useFabricStore.getState().setShowBgpPath(false);
+    expect(useFabricStore.getState().showBgpPath).toBe(false);
+    useFabricStore.getState().setShowBgpPath(true);
   });
 });
 

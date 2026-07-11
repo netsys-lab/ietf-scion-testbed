@@ -137,3 +137,11 @@ body.screen .link.selected .trunk { stroke-width: 9.5px; }
 .trace-comet { fill: var(--brass); }
 .trace-comet.tail { fill: var(--particle); opacity: .9; }
 g.station.trace-end .station-disc { stroke: var(--brass); }
+
+/* BGP path overlay: static dash so the marching SCION trace stays the only
+   animated path; .partial = walk truncated (route data missing mid-path). */
+.bgp-overlay { pointer-events: none; }
+.bgp-dash { fill: none; stroke: var(--bgp-ice); stroke-width: 2.5; stroke-dasharray: 3 6; opacity: .9; }
+.bgp-overlay.partial .bgp-dash { opacity: .5; }
+.bgp-path-chip rect { fill: var(--surface); stroke: var(--bgp-ice); stroke-width: 1; opacity: .92; }
+.bgp-path-chip text { fill: var(--bgp-ice); font: 600 9px var(--mono); text-anchor: middle; letter-spacing: .08em; }
