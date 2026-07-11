@@ -16,21 +16,33 @@ import (
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/wgpool"
 )
 
+// fabricAllowedIPs routes the BGP fabric through the tunnel: surgical /16s
+// (no 10.128/9 aggregate that could clash with attendee-side networks).
+const fabricAllowedIPs = "10.150.0.0/16, 10.151.0.0/16, 10.152.0.0/16, " +
+	"10.153.0.0/16, 10.154.0.0/16, 10.155.0.0/16, 10.156.0.0/16, " +
+	"10.157.0.0/16, 10.158.0.0/16, 10.159.0.0/16, 10.160.0.0/16, " +
+	"10.161.0.0/16, fd00:beef::/32"
+
+// slotV6 pairs slot N with fd00:beef:5::<N> — the v6 host field is N's
+// decimal digits (visual pairing with 10.20.5.N; tools/gen-wg-pool.sh's
+// hub-side AllowedIPs uses the same rule and MUST stay in sync).
+func slotV6(sl wgpool.Slot) string { return fmt.Sprintf("fd00:beef:5::%d", sl.N) }
+
 // renderConf renders a client .conf for slot with the given endpoint host
 // ("[v6]" bracketing is the caller's job via endpointStr).
 func renderConf(sl wgpool.Slot, serverPub, endpoint string) string {
 	return fmt.Sprintf(`[Interface]
 PrivateKey = %s
-Address = %s/32
+Address = %s/32, %s/128
 DNS = 10.20.3.216
 MTU = 1380
 
 [Peer]
 PublicKey = %s
-AllowedIPs = 10.20.3.0/24, 10.20.5.0/24
+AllowedIPs = 10.20.3.0/24, 10.20.5.0/24, %s
 Endpoint = %s
 PersistentKeepalive = 25
-`, sl.PrivateKey, sl.IP, serverPub, endpoint)
+`, sl.PrivateKey, sl.IP, slotV6(sl), serverPub, fabricAllowedIPs, endpoint)
 }
 
 func (jc JoinConfig) endpointV6Str() string {

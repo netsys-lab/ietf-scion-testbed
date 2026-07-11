@@ -104,8 +104,9 @@ func TestClaimHappyPath(t *testing.T) {
 		t.Fatalf("fc00: %v", resp["fc00_identity"])
 	}
 	conf := resp["conf"].(string)
-	for _, want := range []string{"PrivateKey = PRIV2", "Address = 10.20.5.2/32", "DNS = 10.20.3.216", "MTU = 1380",
-		"PublicKey = SPUB", "AllowedIPs = 10.20.3.0/24, 10.20.5.0/24",
+	for _, want := range []string{"PrivateKey = PRIV2", "Address = 10.20.5.2/32, fd00:beef:5::2/128",
+		"DNS = 10.20.3.216", "MTU = 1380", "PublicKey = SPUB",
+		"AllowedIPs = 10.20.3.0/24, 10.20.5.0/24, 10.150.0.0/16, 10.151.0.0/16, 10.152.0.0/16, 10.153.0.0/16, 10.154.0.0/16, 10.155.0.0/16, 10.156.0.0/16, 10.157.0.0/16, 10.158.0.0/16, 10.159.0.0/16, 10.160.0.0/16, 10.161.0.0/16, fd00:beef::/32",
 		"Endpoint = [fd99::201]:51820", "PersistentKeepalive = 25"} {
 		if !strings.Contains(conf, want) {
 			t.Fatalf("conf missing %q:\n%s", want, conf)
@@ -122,7 +123,7 @@ func TestClaimHappyPath(t *testing.T) {
 func TestRenderConfDNS(t *testing.T) {
 	sl := wgpool.Slot{N: 2, IP: "10.20.5.2", PrivateKey: "PRIV2", PublicKey: "PUB2"}
 	conf := renderConf(sl, "SPUB", "[fd99::201]:51820")
-	want := "Address = 10.20.5.2/32\nDNS = 10.20.3.216\nMTU = 1380\n"
+	want := "Address = 10.20.5.2/32, fd00:beef:5::2/128\nDNS = 10.20.3.216\nMTU = 1380\n"
 	if !strings.Contains(conf, want) {
 		t.Fatalf("conf missing DNS line between Address and MTU:\n%s", conf)
 	}

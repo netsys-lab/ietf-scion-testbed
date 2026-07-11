@@ -14,7 +14,7 @@ SERVER_PRIV=$(wg genkey); SERVER_PUB=$(printf %s "$SERVER_PRIV" | wg pubkey)
 
 {
   echo "[Interface]"
-  echo "Address = 10.20.5.1/24"
+  echo "Address = 10.20.5.1/24, fd00:beef:5::1/64"
   echo "ListenPort = 51820"
   echo "PrivateKey = $SERVER_PRIV"
   echo "MTU = 1420"
@@ -24,9 +24,10 @@ SERVER_PRIV=$(wg genkey); SERVER_PUB=$(printf %s "$SERVER_PRIV" | wg pubkey)
 } > "$OUT/wg0.conf"
 
 echo -n '{"server_public_key": "'"$SERVER_PUB"'", "listen_port": 51820, "slots": [' > "$OUT/pool.json"
+# v6 pairing: fd00:beef:5::<N> = slot N's decimal digits — must match fabricd join.go slotV6
 for n in $(seq 2 51); do
   PRIV=$(wg genkey); PUB=$(printf %s "$PRIV" | wg pubkey)
-  printf '\n\n[Peer]\nPublicKey = %s\nAllowedIPs = 10.20.5.%d/32\n' "$PUB" "$n" >> "$OUT/wg0.conf"
+  printf '\n\n[Peer]\nPublicKey = %s\nAllowedIPs = 10.20.5.%d/32, fd00:beef:5::%d/128\n' "$PUB" "$n" "$n" >> "$OUT/wg0.conf"
   [ "$n" -gt 2 ] && echo -n ', ' >> "$OUT/pool.json"
   echo -n '{"n": '"$n"', "ip": "10.20.5.'"$n"'", "private_key": "'"$PRIV"'", "public_key": "'"$PUB"'"}' >> "$OUT/pool.json"
 done
