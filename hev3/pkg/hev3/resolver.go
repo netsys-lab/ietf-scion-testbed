@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -38,8 +37,17 @@ type ResolveOptions struct {
 // Resolved is the outcome of ResolveHost: an Initial candidate set (released
 // once the §4.2 Resolution Delay gate clears) plus an Updates channel that
 // delivers later, merged candidate sets as slower answers (chiefly a
-// late-arriving SVCB) complete — draft §4.3 mid-race merge. Updates is
-// closed once every outstanding query has resolved one way or another.
+// late-arriving SVCB or the non-preferred address family) complete — draft
+// §4.3 mid-race merge. Updates is closed once every outstanding query has
+// resolved one way or another.
+//
+// A caller must keep draining Updates until it closes, or cancel ctx: the
+// internal goroutine that resolved Initial holds a query outstanding (SVCB,
+// AAAA, or A) until it completes and then blocks trying to send the merged
+// result on Updates. That send only has a ctx.Done() escape, not a
+// reader-dropped one, so an abandoned Updates channel whose ctx is never
+// cancelled delays that goroutine's cleanup until ctx ends on its own (e.g.
+// a caller-supplied deadline), not until the caller stops reading.
 type Resolved struct {
 	Initial []Candidate
 	Updates <-chan []Candidate
@@ -156,32 +164,52 @@ func (r *resolveRun) run(delay time.Duration) {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 
-	// release checks the §4.2 gate — (SVCB done or delay elapsed) AND both
-	// AAAA and A done — and, once cleared, emits Initial on first clearance
-	// or an Update whenever the merged set subsequently changes (§4.3).
+	// release checks the §4.2 gate: proceed once at least one positive
+	// address answer has been received AND EITHER (a) the preferred family
+	// (AAAA) has a final answer and SVCB service info is complete, OR (b)
+	// the Resolution Delay has elapsed — draft-ietf-happy-happyeyeballs-v3
+	// -04 §4.2. Notably A is never itself a gate requirement: it is only a
+	// possible source of the "at least one positive address answer" (path
+	// (b)), never required to be final. Once cleared, release emits Initial
+	// on first clearance or an Update whenever the merged set subsequently
+	// changes (§4.3). The Updates send escapes via ctx.Done() so a caller
+	// that cancels ctx is never blocked on it (see the Resolved doc
+	// comment for the abandon-without-cancel case, which is intentionally
+	// not covered by this escape).
 	release := func() {
-		if !aaaaFinal || !aFinal {
+		hasPositiveAddrs := (aaaaFinal && len(aaaaIPs) > 0) || (aFinal && len(aIPs) > 0)
+		if !hasPositiveAddrs {
 			return
 		}
-		if !svcbFinal && !delayElapsed {
+		if !(aaaaFinal && svcbFinal) && !delayElapsed {
 			return
 		}
-		cands := r.buildCandidates(svc, aaaaIPs, aIPs)
+		cands := r.buildCandidates(svc, aaaaIPs, aIPs, aaaaFinal, aFinal)
 		if !sent {
 			sent = true
 			r.emitNewCandidates(nil, cands)
 			prev = cands
-			r.initial <- cands
+			r.initial <- cands // buffered cap 1; never blocks
 			return
 		}
-		if !reflect.DeepEqual(prev, cands) {
-			r.emitNewCandidates(prev, cands)
-			prev = cands
-			r.updates <- cands
+		if reflect.DeepEqual(prev, cands) {
+			return
+		}
+		r.emitNewCandidates(prev, cands)
+		prev = cands
+		select {
+		case r.updates <- cands:
+		case <-r.ctx.Done():
 		}
 	}
 
-	for !(sent && svcbFinal) {
+	// The loop runs until every query (SVCB, AAAA, A) has settled, not
+	// merely until Initial has been sent: under the §4.2 gate above,
+	// Initial can release before A (or, via the delay path, before AAAA)
+	// is final, and the still-outstanding query's eventual answer must
+	// still reach Updates as a merge (§4.3) rather than being silently
+	// dropped by an early exit.
+	for !(svcbFinal && aaaaFinal && aFinal) {
 		select {
 		case res := <-svcbCh:
 			svc, svcbFinal = res.svc, true
@@ -195,6 +223,8 @@ func (r *resolveRun) run(delay time.Duration) {
 		case <-timer.C:
 			delayElapsed = true
 			release()
+		case <-r.ctx.Done():
+			return
 		}
 	}
 }
@@ -207,12 +237,18 @@ func (r *resolveRun) run(delay time.Duration) {
 // proceeds without SCION/hint candidates.
 func (r *resolveRun) resolveSVCB() (*dns.SVCB, error) {
 	name := r.host
+	// visited and the self-alias check below key on dns.CanonicalName
+	// (lowercase + Fqdn), not the raw literal name: DNS names are
+	// case-insensitive (RFC 4343), so an AliasMode chain that revisits an
+	// earlier name in different letter case is still a loop and must be
+	// caught, not requeried as if it were a distinct name.
 	visited := map[string]bool{}
 	for step := 0; step < maxAliasChase; step++ {
-		if visited[name] {
+		key := dns.CanonicalName(name)
+		if visited[key] {
 			return nil, fmt.Errorf("hev3: resolve: SVCB alias loop at %s", name)
 		}
-		visited[name] = true
+		visited[key] = true
 
 		msg, err := r.exchange(name, dns.TypeSVCB)
 		if err != nil {
@@ -224,7 +260,7 @@ func (r *resolveRun) resolveSVCB() (*dns.SVCB, error) {
 		}
 		if rr.Priority == 0 { // AliasMode
 			target := dns.Fqdn(rr.Target)
-			if target == name {
+			if dns.CanonicalName(target) == key {
 				return nil, fmt.Errorf("hev3: resolve: SVCB alias to self at %s", name)
 			}
 			name = target
@@ -282,8 +318,13 @@ func (r *resolveRun) exchange(name string, qtype uint16) (*dns.Msg, error) {
 // Candidates. ALPN/port/priority come from svc (nil ⇒ caller's default port,
 // empty ALPN, priority 0) and apply uniformly to every Candidate it covers.
 // ipv4hint/ipv6hint only contribute Candidates for a family with zero real
-// answers (RFC 9460 §7.3: hints are a fallback, not a primary answer).
-func (r *resolveRun) buildCandidates(svc *dns.SVCB, aaaaIPs, aIPs []net.IP) []Candidate {
+// answers (RFC 9460 §7.3: hints are a fallback, not a primary answer) AND
+// whose query has actually completed (aaaaFinal/aFinal): since the §4.2
+// gate can now release before one family is final (it is simply not yet
+// known, not negatively answered), hints must not be used as a stand-in for
+// "haven't heard back yet" — only for a family confirmed to have no real
+// answer.
+func (r *resolveRun) buildCandidates(svc *dns.SVCB, aaaaIPs, aIPs []net.IP, aaaaFinal, aFinal bool) []Candidate {
 	port := r.port
 	var alpn []string
 	var priority uint16
@@ -324,7 +365,7 @@ func (r *resolveRun) buildCandidates(svc *dns.SVCB, aaaaIPs, aIPs []net.IP) []Ca
 	for _, ip := range aaaaIPs {
 		out = append(out, ipCandidate(FamilyIPv6, "v6:", ip, port, alpn, priority))
 	}
-	if len(aaaaIPs) == 0 {
+	if aaaaFinal && len(aaaaIPs) == 0 {
 		for _, ip := range hint6 {
 			out = append(out, ipCandidate(FamilyIPv6, "v6hint:", ip, port, alpn, priority))
 		}
@@ -333,7 +374,7 @@ func (r *resolveRun) buildCandidates(svc *dns.SVCB, aaaaIPs, aIPs []net.IP) []Ca
 	for _, ip := range aIPs {
 		out = append(out, ipCandidate(FamilyIPv4, "v4:", ip, port, alpn, priority))
 	}
-	if len(aIPs) == 0 {
+	if aFinal && len(aIPs) == 0 {
 		for _, ip := range hint4 {
 			out = append(out, ipCandidate(FamilyIPv4, "v4hint:", ip, port, alpn, priority))
 		}
@@ -353,11 +394,29 @@ func ipCandidate(fam Family, labelPrefix string, ip net.IP, port uint16, alpn []
 	}
 }
 
-// scionIA derives the "ISD-ASN" Candidate.IA from a SCIONAddr's canonical
-// "ISD-ASN,host" presentation form.
+// maxBGPAS is the largest AS number in the classic 32-bit BGP AS-number
+// space (scionproto/scion pkg/addr.MaxBGPAS). SCION's canonical ISD-ASN
+// presentation format prints AS numbers at or below it in decimal, and
+// larger ("SCION-only") AS numbers as three colon-separated 16-bit hex
+// groups, e.g. "71-2:0:4a".
+const maxBGPAS = (1 << 32) - 1
+
+// scionIA derives the "ISD-ASN" Candidate.IA from a SCIONAddr, formatting
+// the AS number per the maxBGPAS rule above. This is computed from
+// addr.ISD/addr.ASN directly rather than via addr.String(): SCIONAddr
+// remembers whether its AS was written in hex-group form in the zone file,
+// but SVCBScion's wire pack/unpack (used for every real DNS answer, not
+// just an in-process shortcut) carries only the numeric ASN — the
+// hex-vs-decimal preference bit does not survive a real query, so
+// addr.String() prints a large hex-range ASN like 0x2_0000_004a as the
+// plain decimal "8589934666" once the answer has round-tripped over the
+// wire. Recomputing the presentation form here keeps it correct regardless
+// of how the answer arrived.
 func scionIA(addr dns.SCIONAddr) string {
-	ia, _, _ := strings.Cut(addr.String(), ",")
-	return ia
+	if addr.ASN <= maxBGPAS {
+		return fmt.Sprintf("%d-%d", addr.ISD, addr.ASN)
+	}
+	return fmt.Sprintf("%d-%x:%x:%x", addr.ISD, (addr.ASN>>32)&0xffff, (addr.ASN>>16)&0xffff, addr.ASN&0xffff)
 }
 
 // emitNewCandidates records a "candidate" Timeline event for every Candidate

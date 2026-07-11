@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -115,8 +116,29 @@ func TestResolveHost_SVCBWithScionAndRealAnswers(t *testing.T) {
 		t.Fatalf("ResolveHost: %v", err)
 	}
 
-	if len(res.Initial) != 3 {
-		t.Fatalf("Initial = %v, want 3 candidates", labels(res.Initial))
+	if len(res.Initial) == 0 {
+		t.Fatalf("Initial = %v, want at least one candidate", labels(res.Initial))
+	}
+
+	// SVCB, AAAA and A are all answered promptly with no injected delay, so
+	// which pair clears the §4.2 gate first (AAAA+SVCB vs. also having A)
+	// is a genuine race — the gate no longer waits on A once AAAA and SVCB
+	// are both final (see the dedicated gate tests). Whatever didn't make
+	// Initial must arrive via exactly one merged Update.
+	updates, closed := drainUpdates(res.Updates, time.Second)
+	if !closed {
+		t.Fatal("Updates did not close")
+	}
+	if len(updates) > 1 {
+		t.Fatalf("got %d updates, want at most 1 (the fully-merged set)", len(updates))
+	}
+	final := res.Initial
+	if len(updates) == 1 {
+		final = updates[0]
+	}
+
+	if len(final) != 3 {
+		t.Fatalf("final candidate set = %v, want 3 candidates", labels(final))
 	}
 
 	want := map[string]Candidate{
@@ -124,7 +146,7 @@ func TestResolveHost_SVCBWithScionAndRealAnswers(t *testing.T) {
 		"v6:2001:db8::215":        {Family: FamilyIPv6, Host: "2001:db8::215", Port: 8443, ALPN: []string{"h3"}, Priority: 1, Label: "v6:2001:db8::215"},
 		"v4:10.20.3.215":          {Family: FamilyIPv4, Host: "10.20.3.215", Port: 8443, ALPN: []string{"h3"}, Priority: 1, Label: "v4:10.20.3.215"},
 	}
-	for _, c := range res.Initial {
+	for _, c := range final {
 		w, ok := want[c.Label]
 		if !ok {
 			t.Errorf("unexpected candidate %+v", c)
@@ -139,14 +161,6 @@ func TestResolveHost_SVCBWithScionAndRealAnswers(t *testing.T) {
 		if c.ViaScitra {
 			t.Errorf("candidate %s: ViaScitra = true, want false", c.Label)
 		}
-	}
-
-	updates, closed := drainUpdates(res.Updates, time.Second)
-	if !closed {
-		t.Fatal("Updates did not close")
-	}
-	if len(updates) != 0 {
-		t.Fatalf("Updates = %v, want none (everything already merged into Initial)", updates)
 	}
 }
 
@@ -220,10 +234,27 @@ func TestResolveHost_NoSVCB(t *testing.T) {
 		t.Fatalf("ResolveHost: %v", err)
 	}
 
-	if len(res.Initial) != 2 {
-		t.Fatalf("Initial = %v, want 2 candidates", labels(res.Initial))
+	// With no SVCB record, SVCB and A each independently race AAAA to
+	// clear the §4.2 gate (path (a): AAAA+SVCB final; path (b): the 10ms
+	// delay). Which of AAAA/A lands in Initial vs. arrives right after via
+	// one merged Update is no longer guaranteed — only that both end up in
+	// the final candidate set.
+	updates, closed := drainUpdates(res.Updates, time.Second)
+	if !closed {
+		t.Fatal("Updates did not close")
 	}
-	for _, c := range res.Initial {
+	if len(updates) > 1 {
+		t.Fatalf("got %d updates, want at most 1 (the fully-merged set)", len(updates))
+	}
+	final := res.Initial
+	if len(updates) == 1 {
+		final = updates[0]
+	}
+
+	if len(final) != 2 {
+		t.Fatalf("final candidate set = %v, want 2 candidates", labels(final))
+	}
+	for _, c := range final {
 		if len(c.ALPN) != 0 {
 			t.Errorf("candidate %s: ALPN = %v, want empty (no SVCB)", c.Label, c.ALPN)
 		}
@@ -233,10 +264,6 @@ func TestResolveHost_NoSVCB(t *testing.T) {
 		if c.Family == FamilySCION {
 			t.Errorf("unexpected SCION candidate with no SVCB record: %+v", c)
 		}
-	}
-
-	if _, closed := drainUpdates(res.Updates, time.Second); !closed {
-		t.Fatal("Updates did not close")
 	}
 }
 
@@ -309,5 +336,232 @@ func TestResolveHost_SVCBTimeoutNonFatal(t *testing.T) {
 	// closes; give it generous headroom.
 	if _, closed := drainUpdates(res.Updates, 3*time.Second); !closed {
 		t.Fatal("Updates did not close after the SVCB query timed out")
+	}
+}
+
+// (f) §4.2 gate path (a): SVCB and AAAA both answer promptly; A is held back
+// well past the default 50ms Resolution Delay. Per draft-ietf-happy-
+// happyeyeballs-v3-04 §4.2, release does not wait on A once there is a
+// positive address answer, AAAA is final, and SVCB is final — Initial must
+// release almost immediately, carrying the SCION+v6 candidates, with the A
+// candidate arriving later via Updates.
+func TestResolveHost_ReleasesWithoutAWhenSVCBAndAAAAComplete(t *testing.T) {
+	f := newFakeDNS(t)
+	f.set("early.scion.", dns.TypeSVCB, mustRR(t,
+		`early.scion. 300 IN SVCB 1 . alpn=h3 scion=1-150\,10.20.3.215`))
+	f.set("early.scion.", dns.TypeAAAA, mustRR(t, `early.scion. 300 IN AAAA 2001:db8::215`))
+	f.set("early.scion.", dns.TypeA, mustRR(t, `early.scion. 300 IN A 10.20.3.215`))
+	f.setDelay("early.scion.", dns.TypeA, 500*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	res, err := ResolveHost(ctx, "early.scion", 443, ResolveOptions{Resolver: f.addr})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ResolveHost: %v", err)
+	}
+
+	if elapsed >= 100*time.Millisecond {
+		t.Fatalf("Initial released after %v, want well before 100ms (A must not gate release once AAAA+SVCB are final)", elapsed)
+	}
+	if got := labels(res.Initial); len(got) != 2 {
+		t.Fatalf("Initial = %v, want exactly the SCION+v6 candidates", got)
+	}
+	var sawSCION, sawV6 bool
+	for _, c := range res.Initial {
+		switch c.Family {
+		case FamilySCION:
+			sawSCION = true
+		case FamilyIPv6:
+			sawV6 = true
+		case FamilyIPv4:
+			t.Fatalf("Initial contains an A candidate before the delayed A answer arrived: %+v", c)
+		}
+	}
+	if !sawSCION || !sawV6 {
+		t.Fatalf("Initial = %v, want a SCION and a v6 candidate", labels(res.Initial))
+	}
+
+	updates, closed := drainUpdates(res.Updates, 2*time.Second)
+	if !closed {
+		t.Fatal("Updates did not close")
+	}
+	if len(updates) != 1 {
+		t.Fatalf("got %d updates, want exactly 1 (the A-merged set)", len(updates))
+	}
+	final := updates[0]
+	if len(final) != 3 {
+		t.Fatalf("merged update = %v, want 3 candidates", labels(final))
+	}
+	var gotA bool
+	for _, c := range final {
+		if c.Family == FamilyIPv4 {
+			gotA = true
+			if c.Host != "10.20.3.215" {
+				t.Errorf("A candidate = %+v, want Host=10.20.3.215", c)
+			}
+		}
+	}
+	if !gotA {
+		t.Fatalf("merged update has no A candidate: %v", labels(final))
+	}
+}
+
+// (g) §4.2 gate path (b): only A answers positively and promptly; AAAA (no
+// record, and slow) never becomes the required "AAAA final" for gate path
+// (a) within the Resolution Delay. Initial must still release at ~50ms via
+// the delay path, carrying the A candidate — a positive answer for ANY
+// family plus an elapsed Resolution Delay is sufficient; A is never itself
+// a release requirement, but it is a sufficient trigger.
+func TestResolveHost_ResolutionDelayReleasesWithAOnly(t *testing.T) {
+	f := newFakeDNS(t)
+	f.set("aonly.scion.", dns.TypeA, mustRR(t, `aonly.scion. 300 IN A 10.20.3.9`))
+	f.setDelay("aonly.scion.", dns.TypeAAAA, 500*time.Millisecond) // no AAAA record; answers negative, late
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	res, err := ResolveHost(ctx, "aonly.scion", 8080, ResolveOptions{Resolver: f.addr})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ResolveHost: %v", err)
+	}
+
+	if elapsed < 30*time.Millisecond || elapsed > 200*time.Millisecond {
+		t.Fatalf("Initial released after %v, want ~50ms (Resolution Delay path, AAAA still outstanding)", elapsed)
+	}
+	if got := labels(res.Initial); len(got) != 1 {
+		t.Fatalf("Initial = %v, want exactly the A candidate", got)
+	}
+	if res.Initial[0].Family != FamilyIPv4 || res.Initial[0].Host != "10.20.3.9" {
+		t.Fatalf("Initial candidate = %+v, want the A answer 10.20.3.9", res.Initial[0])
+	}
+
+	updates, closed := drainUpdates(res.Updates, 2*time.Second)
+	if !closed {
+		t.Fatal("Updates did not close")
+	}
+	if len(updates) != 0 {
+		t.Fatalf("got %d updates, want none (the late AAAA answer is negative, so the candidate set doesn't change): %v", len(updates), updates)
+	}
+}
+
+// (h) A caller that reads Initial but abandons Updates without ever
+// cancelling ctx would (per the ResolveHost doc comment) delay run()'s
+// cleanup until ctx ends; a caller that DOES cancel ctx must see that
+// escape trigger promptly instead of blocking on the send forever. This
+// pins the ctx.Done() escape on the internal Updates send (resolver.go).
+func TestResolveHost_ContextCancelUnblocksAbandonedUpdatesSend(t *testing.T) {
+	f := newFakeDNS(t)
+	f.set("leak.scion.", dns.TypeSVCB, mustRR(t,
+		`leak.scion. 300 IN SVCB 1 . alpn=h3 scion=1-150\,10.20.3.215`))
+	f.setDelay("leak.scion.", dns.TypeSVCB, 300*time.Millisecond) // arrives after Initial, forcing an Update send
+	f.set("leak.scion.", dns.TypeAAAA, mustRR(t, `leak.scion. 300 IN AAAA 2001:db8::215`))
+	f.set("leak.scion.", dns.TypeA, mustRR(t, `leak.scion. 300 IN A 10.20.3.215`))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	res, err := ResolveHost(ctx, "leak.scion", 443, ResolveOptions{Resolver: f.addr})
+	if err != nil {
+		cancel()
+		t.Fatalf("ResolveHost: %v", err)
+	}
+	if len(res.Initial) == 0 {
+		cancel()
+		t.Fatal("Initial unexpectedly empty")
+	}
+
+	// Deliberately never read from res.Updates — only cancel ctx. This must
+	// unblock run()'s pending Updates send (the delayed SVCB answer is still
+	// 250ms+ away) well before that answer would otherwise arrive.
+	cancel()
+
+	select {
+	case _, ok := <-res.Updates:
+		if ok {
+			t.Fatal("Updates delivered a value after abandonment+cancel; want it to close with no send observed")
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Updates did not close promptly after ctx cancellation (no ctx.Done() escape on the Updates send)")
+	}
+}
+
+// (i) End-to-end hex-ASN scenario using the exact deployed zone form
+// (config/coredns/scion.zone's "games" record): the SCION candidate's IA
+// and Host must round-trip untouched through scionIA/SCIONAddr parsing.
+func TestResolveHost_HexASNScionParam(t *testing.T) {
+	f := newFakeDNS(t)
+	f.set("games.scion.", dns.TypeSVCB, mustRR(t,
+		`games.scion. 300 IN SVCB 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3`))
+	f.set("games.scion.", dns.TypeAAAA, mustRR(t, `games.scion. 300 IN AAAA 2001:db8::44`))
+	f.set("games.scion.", dns.TypeA, mustRR(t, `games.scion. 300 IN A 10.44.25.9`))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := ResolveHost(ctx, "games.scion", 443, ResolveOptions{Resolver: f.addr})
+	if err != nil {
+		t.Fatalf("ResolveHost: %v", err)
+	}
+
+	final := res.Initial
+	updates, closed := drainUpdates(res.Updates, time.Second)
+	if !closed {
+		t.Fatal("Updates did not close")
+	}
+	if len(updates) > 0 {
+		final = updates[len(updates)-1]
+	}
+
+	var scion *Candidate
+	for i := range final {
+		if final[i].Family == FamilySCION {
+			scion = &final[i]
+		}
+	}
+	if scion == nil {
+		t.Fatalf("no SCION candidate in final set: %v", labels(final))
+	}
+	if scion.IA != "71-2:0:4a" {
+		t.Errorf("IA = %q, want 71-2:0:4a", scion.IA)
+	}
+	if scion.Host != "10.44.25.3" {
+		t.Errorf("Host = %q, want 10.44.25.3", scion.Host)
+	}
+}
+
+// (j) Alias chase visited-set/self-alias comparison must be case-
+// insensitive (RFC 9460 names are compared canonically): a ServiceMode-0
+// alias whose Target differs from the queried name only in case is a
+// self-alias and must be rejected immediately, without re-querying the
+// case-variant name.
+func TestResolveSVCB_AliasChaseCaseInsensitiveSelfAlias(t *testing.T) {
+	f := newFakeDNS(t)
+	// Deliberately no record registered for "CASE.scion." — if the case
+	// variant were (incorrectly) treated as a distinct name, the chase
+	// would requery it, find nothing, and silently return (nil, nil)
+	// instead of catching the self-alias.
+	f.set("case.scion.", dns.TypeSVCB, mustRR(t, `case.scion. 300 IN SVCB 0 CASE.scion.`))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	tl := &Timeline{}
+	r := &resolveRun{ctx: ctx, server: f.addr, host: dns.Fqdn("case.scion"), port: 443, tl: tl}
+
+	_, err := r.resolveSVCB()
+	if err == nil {
+		t.Fatal("resolveSVCB: want a self-alias error for a case-variant self-alias, got nil")
+	}
+	if !strings.Contains(err.Error(), "alias to self") {
+		t.Fatalf("resolveSVCB error = %v, want an alias-to-self error", err)
+	}
+
+	queries := 0
+	for _, ev := range tl.Events() {
+		if ev.Kind == "query" {
+			queries++
+		}
+	}
+	if queries != 1 {
+		t.Fatalf("issued %d SVCB queries, want exactly 1 (case-variant self-alias must be caught before requerying)", queries)
 	}
 }
