@@ -1,4 +1,8 @@
 scion. {
+    # mgmt-IP bind: wildcard :53 collides with systemd-resolved's TCP stub
+    # listeners (127.0.0.53/54) on Ubuntu 24.04, and DNS must not face the
+    # venue leg anyway.
+    bind 10.20.3.216
     root /etc/coredns
     file scion.zone scion.
     scitra
@@ -7,6 +11,7 @@ scion. {
     errors
 }
 . {
+    bind 10.20.3.216
     forward . 9.9.9.9 149.112.112.112 2620:fe::fe 2620:fe::9 {
         policy round_robin
     }

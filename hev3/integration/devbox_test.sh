@@ -97,6 +97,7 @@ sed -i \
     -e "s|^scion\. {|scion.:${DNS_PORT} {|" \
     -e "s|^\. {|.:${DNS_PORT} {|" \
     -e "s|root /etc/coredns|root ${SCRATCH}|" \
+    -e "s|bind 10.20.3.216|bind 127.0.0.1|" \
     "$SCRATCH/Corefile"
 grep -q "^scion\.:${DNS_PORT} {" "$SCRATCH/Corefile" || fail "Corefile scion. server block rewrite did not apply"
 grep -q "^\.:${DNS_PORT} {" "$SCRATCH/Corefile" || fail "Corefile . server block rewrite did not apply"
