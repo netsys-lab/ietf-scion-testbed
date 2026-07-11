@@ -138,6 +138,38 @@ func TestSort_PreferredFamilyCountAboveOne(t *testing.T) {
 	}
 }
 
+// §5.2 regression: the family interleave outranks Priority *within* a group.
+// A high-priority-number SCION candidate still precedes a low-number IPv4 one
+// because SCION is the preferred family (nativeSCION), not because of Priority.
+func TestSort_FamilyInterleaveOverridesPriorityWithinGroup(t *testing.T) {
+	v4 := Candidate{Family: FamilyIPv4, Host: "203.0.113.1", Priority: 1, Label: "v4"}
+	scion := Candidate{Family: FamilySCION, IA: "1-150", Priority: 9, Label: "scion", Path: &SCIONPath{Fingerprint: "p"}}
+
+	got := Sort([]Candidate{v4, scion}, true, 1)
+	want := []string{"scion", "v4"}
+	if g := labels(got); !reflect.DeepEqual(g, want) {
+		t.Fatalf("got %v, want %v", g, want)
+	}
+}
+
+// §5.1+§5.2 regression, pinning committed behavior: candidates interleave by
+// family *within* each ALPN group, and the groups are concatenated by rank
+// (best member Priority). Two groups, mixed families, fed scrambled.
+func TestSort_MultiGroupMultiFamilyOrder(t *testing.T) {
+	// Group {h3}: rank 1 (via scionA). Interleave (SCION,IPv6): scionA, v6A.
+	scionA := Candidate{Family: FamilySCION, IA: "1-150", Priority: 1, ALPN: []string{"h3"}, Label: "scionA", Path: &SCIONPath{Fingerprint: "a"}}
+	v6A := Candidate{Family: FamilyIPv6, Host: "2001:db8::1", Priority: 3, ALPN: []string{"h3"}, Label: "v6A"}
+	// Group {} (default ALPN): rank 2. Interleave (SCION,IPv4): scionB, v4B.
+	scionB := Candidate{Family: FamilySCION, IA: "1-151", Priority: 2, Label: "scionB", Path: &SCIONPath{Fingerprint: "b"}}
+	v4B := Candidate{Family: FamilyIPv4, Host: "203.0.113.2", Priority: 2, Label: "v4B"}
+
+	got := Sort([]Candidate{v4B, v6A, scionB, scionA}, true, 1)
+	want := []string{"scionA", "v6A", "scionB", "v4B"}
+	if g := labels(got); !reflect.DeepEqual(g, want) {
+		t.Fatalf("got %v, want %v", g, want)
+	}
+}
+
 // Empty and single-candidate inputs must not panic.
 func TestSort_EmptyAndSingle(t *testing.T) {
 	if got := Sort(nil, true, 1); len(got) != 0 {
