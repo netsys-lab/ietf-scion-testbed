@@ -1,0 +1,92 @@
+---
+- name: Deploy CoreDNS (scion. TLD resolver + Quad9 forwarder) on svc-152
+  hosts: svc-152
+  become: true
+  tasks:
+    - name: Create /etc/coredns
+      ansible.builtin.file:
+        path: /etc/coredns
+        state: directory
+        mode: "0755"
+
+    - name: Copy coredns binary
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../.build/coredns/bin/coredns"
+        dest: /usr/local/bin/coredns
+        mode: "0755"
+
+    - name: Copy Corefile + scion.zone
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../config/coredns/{{ item }}"
+        dest: "/etc/coredns/{{ item }}"
+        mode: "0644"
+      loop:
+        - Corefile
+        - scion.zone
+
+    - name: Render coredns unit
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/coredns/coredns.service.j2"
+        dest: /etc/systemd/system/coredns.service
+        mode: "0644"
+
+    - name: Enable + restart coredns
+      ansible.builtin.systemd:
+        name: coredns
+        enabled: true
+        state: restarted
+        daemon_reload: true
+
+    - name: Verify scion. zone answers (SVCB web.scion non-empty)
+      ansible.builtin.command: dig @{{ ansible_host }} SVCB web.scion +short
+      register: svcb_check
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      retries: 5
+      delay: 2
+      until: svcb_check.stdout | trim | length > 0
+
+    - name: Verify forward path resolves external names (Quad9)
+      ansible.builtin.command: dig @{{ ansible_host }} A one.one.one.one +short
+      register: forward_check
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      retries: 5
+      delay: 2
+      until: forward_check.stdout | trim | length > 0
+
+- name: Roll out systemd-resolved -> CoreDNS on playground + svc endhosts
+  hosts: playground:svc
+  become: true
+  tasks:
+    - block:
+        - name: Ensure /etc/systemd/resolved.conf.d exists
+          ansible.builtin.file:
+            path: /etc/systemd/resolved.conf.d
+            state: directory
+            mode: "0755"
+
+        - name: Install scion-dns resolved drop-in (route all queries to CoreDNS)
+          ansible.builtin.copy:
+            dest: /etc/systemd/resolved.conf.d/scion-dns.conf
+            mode: "0644"
+            content: |
+              [Resolve]
+              DNS=10.20.3.216
+              Domains=~.
+
+        - name: Restart systemd-resolved
+          ansible.builtin.systemd:
+            name: systemd-resolved
+            state: restarted
+
+        - name: Verify local resolution via CoreDNS (web.scion)
+          ansible.builtin.command: resolvectl query web.scion
+          register: resolvectl_check
+          changed_when: false
+          retries: 5
+          delay: 2
+          until: resolvectl_check.rc == 0
+      when: coredns_resolver_rollout | default(true) | bool

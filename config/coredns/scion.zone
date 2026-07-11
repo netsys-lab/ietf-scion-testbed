@@ -1,0 +1,13 @@
+$ORIGIN scion.
+@ 3600 IN SOA scitra.netsys.ovgu.de. lschulz.ovgu.de. 2026071001 7200 3600 1209600 3600
+@ IN NS scitra.netsys.ovgu.de.
+; dual-homed (IP race legs): SVCB only — NO scion= TXT (scitra would hijack AAAA)
+web        IN A    0.0.0.0   ; placeholder, rewritten by coredns-zone-sync (venue IP of svc-150)
+web        IN SVCB 1 . alpn=h3,h2 port=443 scion=1-150\,10.20.3.215
+web2       IN A    0.0.0.0   ; venue IP of svc-153
+web2       IN SVCB 1 . alpn=h3,h2 port=443 scion=1-153\,10.20.3.217
+; SCION-only names: SVCB + TXT (scitra serves fc00 AAAA to plain clients)
+games      IN SVCB 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3
+games      IN TXT  "scion=71-2:0:4a,10.44.25.3"
+matrix.netsys.ovgu   IN TXT "scion=71-2:0:4a,141.44.17.123"
+element.netsys.ovgu  IN CNAME matrix.netsys.ovgu.scion.
