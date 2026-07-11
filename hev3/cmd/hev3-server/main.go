@@ -23,6 +23,10 @@ import (
 )
 
 func main() {
+	// quic-go warns on every SCION dial that it cannot set the receive
+	// buffer (snet conns are not *net.UDPConn — inherent, not fixable by
+	// sysctls). Pure log noise for a demo CLI; the knob is quic-go's own.
+	os.Setenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING", "true")
 	os.Exit(run(os.Args[1:], os.Stderr))
 }
 
