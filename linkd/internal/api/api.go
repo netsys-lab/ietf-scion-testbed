@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 
+	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/bgpstatus"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/shape"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/topo"
 )
@@ -18,9 +19,10 @@ type ManagedIface struct {
 
 // Options carries the optional metadata-sync collaborators.
 type Options struct {
-	Baseline map[string]shape.Params // ifid -> story profile
-	OnChange func()                  // called after successful Apply/Clear
-	Status   func() (metadataOK, reloadOK bool)
+	Baseline    map[string]shape.Params // ifid -> story profile
+	OnChange    func()                  // called after successful Apply/Clear
+	Status      func() (metadataOK, reloadOK bool)
+	BGPSessions func() ([]bgpstatus.Session, error)
 }
 
 type linkJSON struct {
@@ -34,21 +36,23 @@ type linkJSON struct {
 }
 
 type server struct {
-	ifaces   map[string]ManagedIface
-	order    []string
-	shaper   shape.Shaper
-	baseline map[string]shape.Params
-	onChange func()
-	status   func() (bool, bool)
+	ifaces      map[string]ManagedIface
+	order       []string
+	shaper      shape.Shaper
+	baseline    map[string]shape.Params
+	onChange    func()
+	status      func() (bool, bool)
+	bgpSessions func() ([]bgpstatus.Session, error)
 }
 
 func New(ifaces []ManagedIface, s shape.Shaper, opts Options) http.Handler {
 	sv := &server{
-		ifaces:   map[string]ManagedIface{},
-		shaper:   s,
-		baseline: opts.Baseline,
-		onChange: opts.OnChange,
-		status:   opts.Status,
+		ifaces:      map[string]ManagedIface{},
+		shaper:      s,
+		baseline:    opts.Baseline,
+		onChange:    opts.OnChange,
+		status:      opts.Status,
+		bgpSessions: opts.BGPSessions,
 	}
 	for _, i := range ifaces {
 		sv.ifaces[i.IfID] = i
@@ -59,6 +63,7 @@ func New(ifaces []ManagedIface, s shape.Shaper, opts Options) http.Handler {
 	mux.HandleFunc("PUT /api/v1/links/{ifid}", sv.put)
 	mux.HandleFunc("DELETE /api/v1/links/{ifid}", sv.del)
 	mux.HandleFunc("GET /healthz", sv.health)
+	mux.HandleFunc("GET /api/v1/bgp", sv.bgp)
 	return mux
 }
 
@@ -169,6 +174,24 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 		body["reload_ok"] = rl
 	}
 	writeJSON(w, http.StatusOK, body)
+}
+
+// bgp serves BIRD session state. BGP is an optional add-on: BIRD absent or
+// birdc failing yields 503 without affecting the shaping API.
+func (s *server) bgp(w http.ResponseWriter, r *http.Request) {
+	if s.bgpSessions == nil {
+		writeErr(w, http.StatusServiceUnavailable, "bgp unavailable: not configured")
+		return
+	}
+	ss, err := s.bgpSessions()
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "bgp unavailable: %v", err)
+		return
+	}
+	if ss == nil {
+		ss = []bgpstatus.Session{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": ss})
 }
 
 // approxEq compares tc-derived values with kernel-rounding tolerance: netem

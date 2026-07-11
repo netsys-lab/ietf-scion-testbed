@@ -2,11 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"strings"
 	"testing"
 
+	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/bgpstatus"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/shape"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/topo"
 )
@@ -168,6 +171,36 @@ func TestPutCallsOnChange(t *testing.T) {
 	}
 	if changed != 1 {
 		t.Fatalf("OnChange calls = %d, want 1", changed)
+	}
+}
+
+func TestBGPEndpoint(t *testing.T) {
+	ss := []bgpstatus.Session{{IfID: "65377", State: "Established", BFD: "Up", Since: 1770000000}}
+	h := New(nil, &fakeShaper{state: map[string]shape.Params{}}, Options{BGPSessions: func() ([]bgpstatus.Session, error) { return ss, nil }})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/bgp", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d", rec.Code)
+	}
+	var body struct {
+		Sessions []bgpstatus.Session `json:"sessions"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil || len(body.Sessions) != 1 || body.Sessions[0].IfID != "65377" {
+		t.Fatalf("body: %+v err %v", body, err)
+	}
+}
+
+func TestBGPEndpointUnavailable(t *testing.T) {
+	for name, opt := range map[string]Options{
+		"nil-fn": {},
+		"err-fn": {BGPSessions: func() ([]bgpstatus.Session, error) { return nil, errors.New("birdc: not found") }},
+	} {
+		h := New(nil, &fakeShaper{state: map[string]shape.Params{}}, opt)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/bgp", nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s: status %d, want 503", name, rec.Code)
+		}
 	}
 }
 

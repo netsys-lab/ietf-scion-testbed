@@ -11,6 +11,7 @@ import (
 
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/api"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/baseline"
+	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/bgpstatus"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/config"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/shape"
 	"github.com/netsys-lab/ietf-scion-testbed/linkd/internal/staticinfo"
@@ -48,6 +49,12 @@ func main() {
 	if len(managed) == 0 {
 		log.Fatal("no shapeable interfaces found")
 	}
+
+	devByIfid := make(map[string]string, len(managed))
+	for _, m := range managed {
+		devByIfid[m.IfID] = m.Dev
+	}
+	bgpCol := bgpstatus.New(devByIfid)
 
 	// --- beacon metadata sync (all optional: missing files degrade gracefully) ---
 	var (
@@ -144,5 +151,5 @@ func main() {
 
 	log.Printf("scion-linkd listening on %s, %d interfaces", cfg.Listen, len(managed))
 	log.Fatal(http.ListenAndServe(cfg.Listen, api.New(managed, shaper,
-		api.Options{Baseline: blm, OnChange: onChange, Status: status})))
+		api.Options{Baseline: blm, OnChange: onChange, Status: status, BGPSessions: bgpCol.Sessions})))
 }
