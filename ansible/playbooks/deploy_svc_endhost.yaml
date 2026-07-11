@@ -5,9 +5,15 @@
   tasks:
     - name: Install scitra runtime deps + curl (debug) + ufw + fail2ban
       ansible.builtin.apt:
-        name: [libncurses6, curl, ufw, fail2ban]
+        name: [libncurses6, curl, ufw, fail2ban, traceroute, tcpdump, mtr-tiny, iperf3]
         state: present
         update_cache: true
+
+    - name: tcpdump usable without root
+      ansible.builtin.shell: |
+        getcap /usr/bin/tcpdump | grep -q cap_net_raw && echo HAVE || setcap cap_net_raw,cap_net_admin+eip /usr/bin/tcpdump
+      register: tcpdump_caps
+      changed_when: "'HAVE' not in tcpdump_caps.stdout"
 
     - name: Enable + start fail2ban (default sshd jail — brute-force protection)
       ansible.builtin.systemd:
