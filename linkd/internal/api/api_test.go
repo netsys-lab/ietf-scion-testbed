@@ -176,7 +176,8 @@ func TestPutCallsOnChange(t *testing.T) {
 
 func TestBGPEndpoint(t *testing.T) {
 	ss := []bgpstatus.Session{{IfID: "65377", State: "Established", BFD: "Up", Since: 1770000000}}
-	h := New(nil, &fakeShaper{state: map[string]shape.Params{}}, Options{BGPSessions: func() ([]bgpstatus.Session, error) { return ss, nil }})
+	snap := bgpstatus.Snapshot{Sessions: ss, Routes: []bgpstatus.Route{{PrefixAS: 150, IfID: "65377"}}}
+	h := New(nil, &fakeShaper{state: map[string]shape.Params{}}, Options{BGP: func() (bgpstatus.Snapshot, error) { return snap, nil }})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/bgp", nil))
 	if rec.Code != 200 {
@@ -184,16 +185,33 @@ func TestBGPEndpoint(t *testing.T) {
 	}
 	var body struct {
 		Sessions []bgpstatus.Session `json:"sessions"`
+		Routes   []bgpstatus.Route   `json:"routes"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil || len(body.Sessions) != 1 || body.Sessions[0].IfID != "65377" {
 		t.Fatalf("body: %+v err %v", body, err)
+	}
+	if len(body.Routes) != 1 || body.Routes[0].PrefixAS != 150 || body.Routes[0].IfID != "65377" {
+		t.Fatalf("routes: %+v", body.Routes)
+	}
+}
+
+func TestBGPEndpointEmptyNormalizesToArrays(t *testing.T) {
+	h := New(nil, &fakeShaper{state: map[string]shape.Params{}}, Options{BGP: func() (bgpstatus.Snapshot, error) { return bgpstatus.Snapshot{}, nil }})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/bgp", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"sessions":[]`) || !strings.Contains(body, `"routes":[]`) {
+		t.Fatalf("want [] not null for nil slices, got %s", body)
 	}
 }
 
 func TestBGPEndpointUnavailable(t *testing.T) {
 	for name, opt := range map[string]Options{
 		"nil-fn": {},
-		"err-fn": {BGPSessions: func() ([]bgpstatus.Session, error) { return nil, errors.New("birdc: not found") }},
+		"err-fn": {BGP: func() (bgpstatus.Snapshot, error) { return bgpstatus.Snapshot{}, errors.New("birdc: not found") }},
 	} {
 		h := New(nil, &fakeShaper{state: map[string]shape.Params{}}, opt)
 		rec := httptest.NewRecorder()

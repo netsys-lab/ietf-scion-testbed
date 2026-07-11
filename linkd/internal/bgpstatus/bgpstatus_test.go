@@ -22,7 +22,50 @@ bfd1:
  fd00:fade:2::152          sci2       Down       2026-07-11 14:25:00    0.500    2.000
 `
 
-func fakeRun(proto, bfd []byte, err error) func(string, ...string) ([]byte, error) {
+const routeOut = `BIRD 2.14 ready.
+Access restricted
+Table master4:
+10.156.0.0/16        unicast [bgp_if48610 14:40:28.269] * (100) [AS156i]
+	via fd00:fade:13::159 on sci13
+10.153.0.0/16        unicast [bgp_if59691 15:24:57.010] * (100) [AS153i]
+	via fd00:fade:f::154 on sciF
+10.20.5.0/24         unicast [originate4 14:40:24.050] * (200)
+	via 10.20.3.201 on eth0
+10.158.0.0/16        blackhole [originate4 14:40:24.050] * (200)
+10.155.0.0/16        unicast [bgp_if48164 14:40:25.460] * (100) [AS155i]
+	via fd00:fade:11::155 on sci11
+
+Table master6:
+fd00:beef:153::/48   unicast [bgp_if59691 15:24:57.036] * (100) [AS153i]
+	via fd00:fade:f::154 on sciF
+fd00:beef:158::/48   blackhole [originate6 14:40:24.050] * (200)
+`
+
+func TestParseRoutes(t *testing.T) {
+	rs := parseRoutes([]byte(routeOut))
+	want := []Route{{156, "48610"}, {153, "59691"}, {155, "48164"}}
+	if len(rs) != len(want) {
+		t.Fatalf("want %d routes, got %d: %+v", len(want), len(rs), rs)
+	}
+	for i, r := range rs {
+		if r != want[i] {
+			t.Fatalf("route %d: got %+v want %+v", i, r, want[i])
+		}
+	}
+}
+
+func TestRouteJSONKeys(t *testing.T) {
+	b, err := json.Marshal(Route{PrefixAS: 150, IfID: "28417"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"prefix_as":150,"ifid":"28417"}`
+	if string(b) != want {
+		t.Fatalf("wire format drifted:\n got %s\nwant %s", b, want)
+	}
+}
+
+func fakeRun(proto, bfd, routes []byte, err error) func(string, ...string) ([]byte, error) {
 	return func(cmd string, args ...string) ([]byte, error) {
 		if err != nil {
 			return nil, err
@@ -30,6 +73,9 @@ func fakeRun(proto, bfd []byte, err error) func(string, ...string) ([]byte, erro
 		for _, a := range args {
 			if a == "bfd" {
 				return bfd, nil
+			}
+			if a == "route" {
+				return routes, nil
 			}
 		}
 		return proto, nil
@@ -43,11 +89,12 @@ func newTest(run func(string, ...string) ([]byte, error)) *Collector {
 }
 
 func TestSessionsParse(t *testing.T) {
-	c := newTest(fakeRun([]byte(protoOut), []byte(bfdOut), nil))
-	ss, err := c.Sessions()
+	c := newTest(fakeRun([]byte(protoOut), []byte(bfdOut), []byte(routeOut), nil))
+	snap, err := c.Snapshot()
 	if err != nil {
 		t.Fatal(err)
 	}
+	ss := snap.Sessions
 	if len(ss) != 2 {
 		t.Fatalf("want 2 sessions, got %d: %+v", len(ss), ss)
 	}
@@ -63,11 +110,14 @@ func TestSessionsParse(t *testing.T) {
 	if down.IfID != "18982" || down.State != "Active" || down.BFD != "Down" {
 		t.Fatalf("session 1: %+v", down)
 	}
+	if len(snap.Routes) != 3 {
+		t.Fatalf("want 3 routes, got %d: %+v", len(snap.Routes), snap.Routes)
+	}
 }
 
 func TestSessionsBirdcError(t *testing.T) {
-	c := newTest(fakeRun(nil, nil, errors.New("exec: birdc: not found")))
-	if _, err := c.Sessions(); err == nil {
+	c := newTest(fakeRun(nil, nil, nil, errors.New("exec: birdc: not found")))
+	if _, err := c.Snapshot(); err == nil {
 		t.Fatal("want error when birdc fails")
 	}
 }
@@ -80,17 +130,20 @@ func TestSessionsCached(t *testing.T) {
 			if a == "bfd" {
 				return []byte(bfdOut), nil
 			}
+			if a == "route" {
+				return []byte(routeOut), nil
+			}
 		}
 		return []byte(protoOut), nil
 	})
-	if _, err := c.Sessions(); err != nil {
+	if _, err := c.Snapshot(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Sessions(); err != nil {
+	if _, err := c.Snapshot(); err != nil {
 		t.Fatal(err)
 	}
-	if calls != 2 { // one protocols + one bfd; second Sessions() hits the cache
-		t.Fatalf("want 2 birdc calls, got %d", calls)
+	if calls != 3 { // protocols + bfd + route; second Snapshot() hits the cache
+		t.Fatalf("want 3 birdc calls, got %d", calls)
 	}
 }
 

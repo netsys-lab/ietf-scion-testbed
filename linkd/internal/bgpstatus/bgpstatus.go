@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,13 +20,27 @@ type Session struct {
 	Since int64  `json:"since_unix"`
 }
 
+// Route is one fabric-prefix best route: the local BGP session (ifid) that
+// currently carries traffic toward prefix_as's 10.<n>.0.0/16.
+type Route struct {
+	PrefixAS int    `json:"prefix_as"`
+	IfID     string `json:"ifid"`
+}
+
+// Snapshot is the full /api/v1/bgp payload: session states plus per-prefix
+// best-route egress. Both parsed from birdc in one cached refresh.
+type Snapshot struct {
+	Sessions []Session `json:"sessions"`
+	Routes   []Route   `json:"routes"`
+}
+
 type Collector struct {
 	run       func(cmd string, args ...string) ([]byte, error)
 	ifidByDev map[string]string // "sci1" -> "65377"
 	ttl       time.Duration
 
 	mu        sync.Mutex
-	cached    []Session
+	cached    Snapshot
 	fetchedAt time.Time
 }
 
@@ -43,29 +58,34 @@ func runBirdc(cmd string, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, cmd, args...).Output()
 }
 
-// Sessions returns the current BGP sessions, cached for ttl so dashboard
-// polling cannot stampede BIRD.
-func (c *Collector) Sessions() ([]Session, error) {
+// Snapshot returns the current BGP sessions and fabric-prefix best routes,
+// cached for ttl so dashboard polling cannot stampede BIRD.
+func (c *Collector) Snapshot() (Snapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.cached != nil && time.Since(c.fetchedAt) < c.ttl {
+	if !c.fetchedAt.IsZero() && time.Since(c.fetchedAt) < c.ttl {
 		return c.cached, nil
 	}
 	proto, err := c.run("birdc", "-r", "show", "protocols")
 	if err != nil {
-		return nil, fmt.Errorf("birdc show protocols: %w", err)
+		return Snapshot{}, fmt.Errorf("birdc show protocols: %w", err)
 	}
 	bfd, err := c.run("birdc", "-r", "show", "bfd", "sessions")
 	if err != nil {
-		return nil, fmt.Errorf("birdc show bfd sessions: %w", err)
+		return Snapshot{}, fmt.Errorf("birdc show bfd sessions: %w", err)
+	}
+	routes, err := c.run("birdc", "-r", "show", "route", "primary")
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("birdc show route primary: %w", err)
 	}
 	ss := parseProtocols(proto)
 	bfdStates := parseBFD(bfd, c.ifidByDev)
 	for i := range ss {
 		ss[i].BFD = bfdStates[ss[i].IfID]
 	}
-	c.cached, c.fetchedAt = ss, time.Now()
-	return ss, nil
+	c.cached = Snapshot{Sessions: ss, Routes: parseRoutes(routes)}
+	c.fetchedAt = time.Now()
+	return c.cached, nil
 }
 
 func parseProtocols(out []byte) []Session {
@@ -87,6 +107,38 @@ func parseProtocols(out []byte) []Session {
 		ss = append(ss, s)
 	}
 	return ss
+}
+
+// parseRoutes extracts each fabric v4 prefix's best-route egress session from
+// `birdc -r show route primary`. Route lines carry the learning protocol's
+// name (gen_bird.py's bgp_if<ifid>) inline — e.g.
+// `10.156.0.0/16  unicast [bgp_if48610 14:40:28.269] * (100) [AS156i]` — so
+// the ifid comes straight off the route line; no next-hop/device parsing.
+// Non-BGP bests (the local AS's own blackhole/originate, the WG anycast /24)
+// don't match and are simply absent: absence means "no BGP best route", and
+// fabricd's walker truncates there.
+func parseRoutes(out []byte) []Route {
+	var rs []Route
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 || f[1] != "unicast" || !strings.HasPrefix(f[2], "[bgp_if") {
+			continue
+		}
+		rest, ok := strings.CutPrefix(f[0], "10.")
+		if !ok {
+			continue
+		}
+		asStr, ok := strings.CutSuffix(rest, ".0.0/16")
+		if !ok {
+			continue
+		}
+		n, err := strconv.Atoi(asStr)
+		if err != nil {
+			continue
+		}
+		rs = append(rs, Route{PrefixAS: n, IfID: strings.TrimPrefix(f[2], "[bgp_if")})
+	}
+	return rs
 }
 
 func parseBFD(out []byte, ifidByDev map[string]string) map[string]string {

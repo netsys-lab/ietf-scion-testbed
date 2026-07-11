@@ -19,10 +19,10 @@ type ManagedIface struct {
 
 // Options carries the optional metadata-sync collaborators.
 type Options struct {
-	Baseline    map[string]shape.Params // ifid -> story profile
-	OnChange    func()                  // called after successful Apply/Clear
-	Status      func() (metadataOK, reloadOK bool)
-	BGPSessions func() ([]bgpstatus.Session, error)
+	Baseline map[string]shape.Params // ifid -> story profile
+	OnChange func()                  // called after successful Apply/Clear
+	Status   func() (metadataOK, reloadOK bool)
+	BGP      func() (bgpstatus.Snapshot, error)
 }
 
 type linkJSON struct {
@@ -36,23 +36,23 @@ type linkJSON struct {
 }
 
 type server struct {
-	ifaces      map[string]ManagedIface
-	order       []string
-	shaper      shape.Shaper
-	baseline    map[string]shape.Params
-	onChange    func()
-	status      func() (bool, bool)
-	bgpSessions func() ([]bgpstatus.Session, error)
+	ifaces   map[string]ManagedIface
+	order    []string
+	shaper   shape.Shaper
+	baseline map[string]shape.Params
+	onChange func()
+	status   func() (bool, bool)
+	bgpSnap  func() (bgpstatus.Snapshot, error)
 }
 
 func New(ifaces []ManagedIface, s shape.Shaper, opts Options) http.Handler {
 	sv := &server{
-		ifaces:      map[string]ManagedIface{},
-		shaper:      s,
-		baseline:    opts.Baseline,
-		onChange:    opts.OnChange,
-		status:      opts.Status,
-		bgpSessions: opts.BGPSessions,
+		ifaces:   map[string]ManagedIface{},
+		shaper:   s,
+		baseline: opts.Baseline,
+		onChange: opts.OnChange,
+		status:   opts.Status,
+		bgpSnap:  opts.BGP,
 	}
 	for _, i := range ifaces {
 		sv.ifaces[i.IfID] = i
@@ -176,22 +176,26 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, body)
 }
 
-// bgp serves BIRD session state. BGP is an optional add-on: BIRD absent or
-// birdc failing yields 503 without affecting the shaping API.
+// bgp serves BIRD session state + fabric-prefix best routes. BGP is an
+// optional add-on: BIRD absent or birdc failing yields 503 without affecting
+// the shaping API.
 func (s *server) bgp(w http.ResponseWriter, r *http.Request) {
-	if s.bgpSessions == nil {
+	if s.bgpSnap == nil {
 		writeErr(w, http.StatusServiceUnavailable, "bgp unavailable: not configured")
 		return
 	}
-	ss, err := s.bgpSessions()
+	snap, err := s.bgpSnap()
 	if err != nil {
 		writeErr(w, http.StatusServiceUnavailable, "bgp unavailable: %v", err)
 		return
 	}
-	if ss == nil {
-		ss = []bgpstatus.Session{}
+	if snap.Sessions == nil {
+		snap.Sessions = []bgpstatus.Session{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": ss})
+	if snap.Routes == nil {
+		snap.Routes = []bgpstatus.Route{}
+	}
+	writeJSON(w, http.StatusOK, snap)
 }
 
 // approxEq compares tc-derived values with kernel-rounding tolerance: netem

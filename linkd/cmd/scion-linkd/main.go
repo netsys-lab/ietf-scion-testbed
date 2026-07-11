@@ -151,5 +151,5 @@ func main() {
 
 	log.Printf("scion-linkd listening on %s, %d interfaces", cfg.Listen, len(managed))
 	log.Fatal(http.ListenAndServe(cfg.Listen, api.New(managed, shaper,
-		api.Options{Baseline: blm, OnChange: onChange, Status: status, BGPSessions: bgpCol.Sessions})))
+		api.Options{Baseline: blm, OnChange: onChange, Status: status, BGP: bgpCol.Snapshot})))
 }
