@@ -3,7 +3,7 @@
   hosts: ases
   become: true
   vars:
-    linkd_deb: "{{ playbook_dir }}/../../linkd/dist/scion-linkd_0.2.0_amd64.deb"
+    linkd_deb: "{{ playbook_dir }}/../../linkd/dist/scion-linkd_0.3.0_amd64.deb"
     asnum: "{{ ansible_host.split('.')[-1] }}"
   tasks:
     - name: Copy scion-linkd package
