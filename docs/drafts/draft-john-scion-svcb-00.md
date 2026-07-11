@@ -210,6 +210,88 @@ TXT convention. During transition, zones SHOULD publish both the
 published for the same name they MUST list the same set of SCION
 addresses.
 
+# The "scion-policy" SvcParamKey {#scion-policy}
+
+In SCION the client selects the end-to-end path. Absent other
+information it does so with generic heuristics, while the service
+operator often knows the service's actual traffic profile: a game
+server is best reached over the lowest-latency path, a video origin
+over a high-capacity one. The "scion-policy" SvcParamKey (number
+65281, Private Use until IANA assignment) lets a service advertise
+that knowledge as an advisory hint, in the same spirit as "alpn": it
+influences how a client establishes its connection and MAY be ignored
+entirely.
+
+## Wire Format
+
+The SvcParamValue is a sequence of policy items, each encoded as a
+1-octet item type, a 1-octet value length, and that many octets of
+value:
+
+| Item             | Type | Length | Value                |
+|------------------|------|--------|----------------------|
+| prefer-latency   | 0x00 | 0      | (empty)              |
+| prefer-bandwidth | 0x01 | 0      | (empty)              |
+| prefer-hops      | 0x02 | 0      | (empty)              |
+| max-latency      | 0x40 | 4      | uint32, microseconds |
+| min-bandwidth    | 0x41 | 4      | uint32, Kbit/s       |
+
+Recipients MUST skip unrecognized item types using the length octet.
+An item whose length overruns the SvcParamValue, a defined item with
+a length other than the one given above, and an empty SvcParamValue
+each render the RR malformed; it MUST be entirely ignored.
+
+The order of prefer items is the preference order. Senders MUST NOT
+emit the same preference metric or the same threshold type twice;
+recipients that nevertheless receive duplicates use the first
+occurrence.
+
+The units match SCION path-metadata conventions (latency in
+microseconds, bandwidth in Kbit/s), so advertised values compare
+directly against beaconed path properties.
+
+## Presentation Format {#policy-presentation}
+
+The presentation value is a comma-separated list of items in wire
+order. A bare token names a preference metric: "latency" (0x00), "bw"
+(0x01) or "hops" (0x02). A key=value pair expresses a threshold:
+"maxlat" with a decimal value carrying a REQUIRED "us", "ms" or "s"
+suffix, and "minbw" with a decimal value carrying a REQUIRED "K", "M"
+or "G" suffix (bits per second). No item contains a comma, so unlike
+"scion" no escaping is needed.
+
+~~~
+gameserver.example. 300 IN SVCB 1 . alpn=h3 (
+    scion=71-2:0:4a\,10.44.25.3 scion-policy=latency,maxlat=50ms )
+~~~
+
+Implementations converting presentation to wire form emit items in
+the order written. Converting wire to presentation form, threshold
+values are rendered with the largest exact unit (50000 microseconds
+as "50ms", 25000 Kbit/s as "25M"); round-tripping is therefore
+value-exact but not necessarily token-identical.
+
+## Semantics
+
+The parameter is advisory: a client MAY ignore it entirely, and it
+never expands or restricts reachability. It is only defined for
+ServiceMode records that also carry the "scion" SvcParamKey;
+recipients MUST ignore it in AliasMode records and in records without
+"scion".
+
+A client that honors the parameter SHOULD order candidate SCION paths
+by the first preferred metric, breaking ties with subsequent metrics,
+and SHOULD exclude paths that violate a threshold item. If every
+available path violates the thresholds the client MUST ignore the
+thresholds: a policy can never make a destination less reachable than
+it would be without the parameter. How a client obtains metric values
+for candidate paths (control-plane metadata, its own measurements) is
+out of scope for this document.
+
+If multiple SVCB/HTTPS records for the same name carry
+"scion-policy", the consistency guidance of {{scion-svcparam}}
+applies unchanged.
+
 # Use in Happy Eyeballs Version 3 {#hev3}
 
 This section extends the algorithm of
@@ -264,6 +346,13 @@ path-aware machinery this parameter exists to enable. Operators and
 applications MAY configure IP-first ordering; the mechanism is
 identical.
 
+A client that honors "scion-policy" ({{scion-policy}}) applies it
+when ordering SCION candidates: the preference metrics replace the
+default latency-first ordering within the SCION address family, and
+threshold items filter the path set (subject to the fail-open rule of
+that section) before candidates are interleaved with IPv6 and IPv4.
+The interleaving itself is unchanged.
+
 ## Racing and Success
 
 Connection attempts are launched and staggered exactly per Section 6
@@ -310,16 +399,18 @@ unchanged to SCION candidates.
 
 # IANA Considerations
 
-IANA is requested to add the following entry to the "Service
+IANA is requested to add the following entries to the "Service
 Parameter Keys (SvcParamKeys)" registry created by {{RFC9460}}:
 
-| Number | Name  | Meaning                            | Reference       |
-|--------|-------|------------------------------------|-----------------|
-| TBD1   | scion | SCION addresses for this endpoint  | (this document) |
+| Number | Name         | Meaning                           | Reference       |
+|--------|--------------|-----------------------------------|-----------------|
+| TBD1   | scion        | SCION addresses for this endpoint | (this document) |
+| TBD2   | scion-policy | SCION path-selection hint         | (this document) |
 
-Until a permanent codepoint is assigned, implementations of this
+Until permanent codepoints are assigned, implementations of this
 specification use the Private Use codepoint 65280 with the
-presentation name "scion".
+presentation name "scion", and the Private Use codepoint 65281 with
+the presentation name "scion-policy".
 
 --- back
 
@@ -335,10 +426,10 @@ $ORIGIN scion.
 
 web       IN AAAA 2001:db8:660::215
 web       IN A    198.51.100.215
-web       IN SVCB 1 . alpn=h3,h2 port=443 scion=1-150\,10.20.3.215
+web       IN SVCB 1 . alpn=h3,h2 port=443 scion=1-150\,10.20.3.215 scion-policy=bw,latency
 web       IN TXT  "scion=1-150,10.20.3.215"
 
-games     IN SVCB 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3
+games     IN SVCB 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3 scion-policy=latency
 games     IN TXT  "scion=71-2:0:4a,10.44.25.3"
 ~~~
 
@@ -372,6 +463,17 @@ Rendering wire values follows the canonical-ASN rule of
 {{presentation-format}}: at the threshold, the ASN ffffffff
 (2^32 - 1) renders as "4294967295" while 000100000000 (2^32) renders
 as "1:0:0".
+
+Vectors for the "scion-policy" SvcParamValue (concatenated
+type|length|value items; whitespace illustrative):
+
+~~~
+Presentation: scion-policy=bw,latency
+Wire:         0100 0000
+
+Presentation: scion-policy=latency,maxlat=50ms,minbw=25M
+Wire:         0000 4004 0000c350 4104 000061a8
+~~~
 
 # Acknowledgments
 {:numbered="false"}
