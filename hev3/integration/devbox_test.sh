@@ -102,17 +102,17 @@ sed -i \
 grep -q "^scion\.:${DNS_PORT} {" "$SCRATCH/Corefile" || fail "Corefile scion. server block rewrite did not apply"
 grep -q "^\.:${DNS_PORT} {" "$SCRATCH/Corefile" || fail "Corefile . server block rewrite did not apply"
 
-# web's placeholder A -> 127.0.0.1 (local hev3-server host), and its SVCB
-# port=443 -> the local hev3-server's actual listen port. Anchored on
-# "web" + whitespace so web2's lines are untouched (sed pattern "web" alone
-# would also match "web2").
+# web's fabric A -> 127.0.0.1 (local hev3-server host); drop the AAAA (the
+# local server binds v4 loopback only — a ::1 AAAA would only add a noisy
+# refused leg); SVCB port=443 -> the local hev3-server's actual listen port.
 sed -i -E \
-    -e "/^web[[:space:]]/ s/0\.0\.0\.0/127.0.0.1/" \
+    -e "/^web[[:space:]]/ s/10\.150\.0\.80/127.0.0.1/" \
+    -e "/^web[[:space:]]+IN[[:space:]]+AAAA/d" \
     -e "/^web[[:space:]]/ s/port=443/port=${SERVER_PORT}/" \
     "$SCRATCH/scion.zone"
 grep -qE '^web[[:space:]]+IN A[[:space:]]+127\.0\.0\.1' "$SCRATCH/scion.zone" || fail "scion.zone web A rewrite did not apply"
 grep -qE "^web[[:space:]].*port=${SERVER_PORT}" "$SCRATCH/scion.zone" || fail "scion.zone web SVCB port rewrite did not apply"
-grep -qE '^web2[[:space:]]+IN A[[:space:]]+0\.0\.0\.0' "$SCRATCH/scion.zone" || fail "scion.zone web2 A line unexpectedly touched"
+grep -qE '^web2[[:space:]]+IN A[[:space:]]+10\.153\.0\.80' "$SCRATCH/scion.zone" || fail "scion.zone web2 A line unexpectedly touched"
 
 step "start coredns"
 "$COREDNS_BIN" -conf "$SCRATCH/Corefile" >"$SCRATCH/coredns.log" 2>&1 &

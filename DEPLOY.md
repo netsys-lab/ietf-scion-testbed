@@ -539,45 +539,26 @@ service up ahead of a demo without touching a fleet that's mid-session).
 
 ### Zone / TXT rule
 
-`config/coredns/scion.zone` draws a hard line the zone editor (and
-`coredns-zone-sync.sh` below) must never cross: **dual-homed names — `web`
-and `web2`, the ones with a real venue A/AAAA answer alongside their SCION
-SVCB — must never also carry a `scion=` TXT record.** The vendored `scitra`
-plugin synthesizes an AAAA answer from a `scion=` TXT independently of
+`config/coredns/scion.zone` draws a hard line the zone editor must never
+cross: **dual-homed names — `web` and `web2`, the ones with a real fabric
+A/AAAA answer alongside their SCION SVCB — must never also carry a `scion=`
+TXT record.** The vendored `scitra` plugin synthesizes an AAAA answer from a
+`scion=` TXT independently of
 whatever the `file` plugin has for that name; on a name that already has a
-real venue AAAA, that synthesis *hijacks* the answer instead of
+real fabric AAAA, that synthesis *hijacks* the answer instead of
 supplementing it, silently breaking the IP leg of the hev3 race. TXT is
 reserved for SCION-only names (`games`, `matrix.netsys.ovgu` in the shipped
-zone) that have no venue address to protect.
+zone) that have no fabric address to protect.
 
-### Zone sync (svc-150/153 venue IPs -> svc-152's zone)
+### Zone sync
 
-`web`/`web2`'s A/AAAA point at svc-150/153's **venue** leg (`eth1`, DHCP/
-SLAAC), which changes on rebuild, lease renewal, or a venue move.
-`proxmox/coredns-zone-sync.sh` re-derives both addresses and rewrites only
-the managed A/AAAA lines in svc-152's live zone file (bumping the SOA
-serial), the same idempotent shape as `tools/update-wg-endpoint.sh`. Install
-the timer on the Proxmox host so it runs hands-free after every boot/venue
-change:
-
-```sh
-cp proxmox/coredns-zone-sync.service proxmox/coredns-zone-sync.timer /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now coredns-zone-sync.timer
-```
-
-Run it once by hand first, **without** `AUTO=1`, so a real problem (svc-152
-not deployed yet, svc-150/153 not booted, no SOA in the zone) fails loudly
-instead of soft-skipping silently the way the timer does:
-
-```sh
-bash proxmox/coredns-zone-sync.sh
-```
-
-The timer itself runs with `Environment=AUTO=1` (see
-`proxmox/coredns-zone-sync.service`) precisely so a boot-time or periodic
-run never fails the unit on a transient "not up yet" — only the manual
-first run is meant to catch a real misconfiguration.
+Zone sync: RETIRED (2026-07-11, BGP-fabric batch). web/web2 now carry static
+fabric addresses (10.150.0.80 / 10.153.0.80 + fd00:beef ULAs) — no
+venue-dependent records remain, so the sync timer's only remaining power was
+to roll the zone back to stale venue IPs. If venue-dependent names ever
+return, revive proxmox/coredns-zone-sync.* from git history. On the host:
+systemctl disable --now coredns-zone-sync.timer && rm -f
+/etc/systemd/system/coredns-zone-sync.{service,timer}.
 
 ## Happy Eyeballs v3 demo (hev3)
 
@@ -636,8 +617,8 @@ hev3 https://web.scion/
 
 prints a race table (SCION / IPv6 / IPv4 candidates, start time, outcome,
 winner) followed by the response body — `web.scion` resolves to svc-150
-(`1-150,10.20.3.215`) over SCION and to svc-150's venue address over IP.
-Confirm the SVCB record directly:
+(`1-150,10.150.0.81`) over SCION and to svc-150's fabric address
+(`10.150.0.80`) over IP. Confirm the SVCB record directly:
 
 ```sh
 dig SVCB web.scion @10.20.3.216
