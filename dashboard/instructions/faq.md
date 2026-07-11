@@ -26,6 +26,16 @@ the shared interface); the map's BGP badge turns red when a "link failure"
 (100% loss) tears the BGP session down and the fabric reroutes — SCION, by
 contrast, fails over per-flow in about one round trip.
 
+**curl says "unable to get local issuer certificate" for `web.scion`.**
+The demo servers use a throwaway testbed CA, not a public one. On the
+playground shells the CA is preinstalled in the system trust store, so plain
+`curl https://web.scion/` just works. From your own laptop (WireGuard), use
+`hev3` (it ships the CA and trusts it automatically) or grab the CA from
+the booth / repo (`ansible/files/hev3-ca/ca.pem`) and pass
+`curl --cacert ca.pem https://web.scion/` — or accept `-k` for a quick
+look. Never trust this CA outside the testbed; its private key is public by
+design.
+
 **Can I just download prebuilt SCION binaries?** No — the official
 scionproto release binaries (including `v0.15.0`) are built
 `CGO_ENABLED=0`, and `v0.15.0` reverted to the mattn/go-sqlite3 driver,

@@ -23,6 +23,28 @@
       changed_when: false
       failed_when: hev3_help.rc != 2
 
+    # Attendees reach for plain curl before hev3, and curl only consults the
+    # system trust store — without this, `curl https://web.scion` fails with
+    # error 60 (the hev3 CLI trusts /etc/hev3/ca.pem on its own and is
+    # unaffected). update-ca-certificates only picks up .crt files under
+    # /usr/local/share/ca-certificates; PEM content is fine.
+    - name: Install testbed CA into the system trust store
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/hev3-ca/ca.pem"
+        dest: /usr/local/share/ca-certificates/scion-hev3-ca.crt
+        owner: root
+        group: root
+        mode: "0644"
+      register: hev3_ca_trust
+
+    - name: Refresh system trust store
+      ansible.builtin.command: update-ca-certificates
+      when: hev3_ca_trust.changed
+
+    - name: Verify curl trusts web.scion without flags (system store; DNS + fabric already required here)
+      ansible.builtin.command: curl -s --max-time 5 https://web.scion/whoami
+      changed_when: false
+
 - name: Deploy hev3-server (Happy Eyeballs v3 demo target) on svc-150 + svc-153
   hosts: svc-150,svc-153
   become: true

@@ -35,6 +35,7 @@ setting up your own laptop (see `laptop-linux.md`).
 
    ```
    hev3 https://web.scion/         # race SCION vs IPv6 vs IPv4 to one server
+   curl https://web.scion/         # plain HTTPS over the BGP plane (testbed CA preinstalled)
    traceroute as153.scion          # per-AS anchor hops (as150 … as161)
    mtr as150.scion                 # live per-hop latency
    tcpdump -ni eth0 icmp           # watch your own packets (no root needed)
