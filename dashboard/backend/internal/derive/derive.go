@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"time"
 
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/topo"
@@ -26,6 +27,35 @@ type Shaping struct {
 	JitterMs *float64 `json:"jitter_ms,omitempty"`
 	LossPct  *float64 `json:"loss_pct,omitempty"`
 	RateMbit *float64 `json:"rate_mbit,omitempty"`
+}
+
+// BGPSide is one AS's linkd view of its BGP session on a link.
+type BGPSide struct {
+	State     string // BIRD Info column; "Established" when up
+	SinceUnix int64  // last state change; 0 = unknown
+}
+
+// BGPLink pairs both endpoints; a nil side means that AS reported nothing
+// (linkd unreachable, BIRD absent → 503, or session missing).
+type BGPLink struct{ A, B *BGPSide }
+
+const bgpFlapWindowSec = 60
+
+// bgpBadge collapses a link's two session views to the dashboard badge.
+// With `bfd on` a BFD failure tears the session down, so "Established but
+// recently bounced" (since < 60s) is the honest degradation signal.
+func bgpBadge(b *BGPLink, nowUnix int64) string {
+	if b == nil || b.A == nil || b.B == nil {
+		return "unknown"
+	}
+	if b.A.State != "Established" || b.B.State != "Established" {
+		return "down"
+	}
+	if (b.A.SinceUnix > 0 && nowUnix-b.A.SinceUnix < bgpFlapWindowSec) ||
+		(b.B.SinceUnix > 0 && nowUnix-b.B.SinceUnix < bgpFlapWindowSec) {
+		return "degraded"
+	}
+	return "up"
 }
 
 // LinkVM is the derived view of one inter-AS link. RttMsA/RttMsB are the two
@@ -43,6 +73,10 @@ type LinkVM struct {
 	Up         bool     `json:"up"`
 	Stale      bool     `json:"stale"`
 	Shaping    *Shaping `json:"shaping,omitempty"`
+	// Bgp is the tri-state BGP session badge (up|degraded|down|unknown),
+	// omitted until the first PollBGP has set a snapshot so pre-rollout
+	// dashboards show no badge.
+	Bgp string `json:"bgp,omitempty"`
 	// BaselineDelayMs / BaselineRateMbit are the link's declared story shape
 	// (one-way delay and rate tier), the nominal state the RTT band and the
 	// shaping sliders are measured against. Omitted when linkd reports no
@@ -169,6 +203,7 @@ type Deriver struct {
 	state          map[string]*linkState
 	shaping        map[string]*Shaping
 	baselineShaping map[string]*Shaping // linkID -> declared story (baseline) shape from linkd
+	bgp             map[string]*BGPLink // linkID -> per-link BGP session snapshot; nil until first poll
 
 	// baselineMin is the running-minimum RTT ever observed per rttKey(...)
 	// side, surviving store ring rollover (see baseline). It can be seeded
@@ -218,6 +253,14 @@ func (d *Deriver) SetBaselineShaping(m map[string]*Shaping) {
 		m = make(map[string]*Shaping)
 	}
 	d.baselineShaping = m
+}
+
+// SetBGP replaces the per-link BGP session snapshot (nil until the first
+// poll — LinkVM.Bgp stays omitted so pre-rollout dashboards show no badge).
+func (d *Deriver) SetBGP(m map[string]*BGPLink) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.bgp = m
 }
 
 // Frame computes the view models and KPIs for the current store contents,
@@ -331,6 +374,11 @@ func (d *Deriver) deriveLink(l topo.Link) LinkVM {
 
 	band := d.commit(l.ID, raw)
 
+	var bgp string
+	if d.bgp != nil {
+		bgp = bgpBadge(d.bgp[l.ID], time.Now().Unix())
+	}
+
 	return LinkVM{
 		ID:         l.ID,
 		Band:       band,
@@ -342,6 +390,7 @@ func (d *Deriver) deriveLink(l topo.Link) LinkVM {
 		Up:               !down,
 		Stale:            stale,
 		Shaping:          d.shaping[l.ID],
+		Bgp:              bgp,
 		BaselineDelayMs:  blDelay,
 		BaselineRateMbit: blRate,
 	}

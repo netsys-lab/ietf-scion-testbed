@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"time"
 
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/api"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
@@ -62,6 +63,23 @@ func (c *Controller) Apply(ctx context.Context, link topo.Link, direction string
 		results = append(results, linkdclient.Result{AS: ep.AS, OK: true})
 	}
 	return results
+}
+
+// PollBGP synthesizes session state so the badge and failure demo are
+// rehearsable off-fleet: 100% mock loss reads as a torn-down session.
+func (c *Controller) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
+	now := time.Now().Unix()
+	shaped := c.gen.CurrentShaping()
+	out := make(map[string]*derive.BGPLink, len(c.g.Links))
+	for _, l := range c.g.Links {
+		state := "Established"
+		if p := shaped[l.ID]; p != nil && p.LossPct != nil && *p.LossPct >= 100 {
+			state = "Idle"
+		}
+		side := func() *derive.BGPSide { return &derive.BGPSide{State: state, SinceUnix: now - 3600} }
+		out[l.ID] = &derive.BGPLink{A: side(), B: side()}
+	}
+	return out
 }
 
 // AllHealth reports every AS in the graph as reachable: there is no real

@@ -40,6 +40,7 @@ const writeWait = 2 * time.Second
 // it an interface lets tests inject a fake linkd without a real HTTP backend.
 type Controller interface {
 	Poll(ctx context.Context) (shaping, baseline map[string]*derive.Shaping)
+	PollBGP(ctx context.Context) map[string]*derive.BGPLink
 	Apply(ctx context.Context, link topo.Link, direction string, p derive.Shaping, clear bool) []linkdclient.Result
 	AllHealth(ctx context.Context) map[int]bool
 }
@@ -408,6 +409,7 @@ func RunBroadcast(ctx context.Context, h http.Handler, frameInterval, pollInterv
 					shaping, baseline := s.lc.Poll(ctx)
 					s.d.SetShaping(shaping)
 					s.d.SetBaselineShaping(baseline)
+					s.d.SetBGP(s.lc.PollBGP(ctx))
 				}()
 			}
 		}

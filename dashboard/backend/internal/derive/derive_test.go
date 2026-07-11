@@ -515,3 +515,25 @@ func TestDeclaredBaselineBandsAndExposes(t *testing.T) {
 		t.Fatalf("shaped-worse band = %q, want degraded", f.Links[0].Band)
 	}
 }
+
+func TestBgpBadge(t *testing.T) {
+	now := int64(1_770_000_000)
+	est := func(since int64) *BGPSide { return &BGPSide{State: "Established", SinceUnix: since} }
+	cases := []struct {
+		name string
+		b    *BGPLink
+		want string
+	}{
+		{"nil-link", nil, "unknown"},
+		{"half-known", &BGPLink{A: est(now - 3600)}, "unknown"},
+		{"one-side-down", &BGPLink{A: est(now - 3600), B: &BGPSide{State: "Active"}}, "down"},
+		{"recent-bounce", &BGPLink{A: est(now - 10), B: est(now - 3600)}, "degraded"},
+		{"stable", &BGPLink{A: est(now - 3600), B: est(now - 3600)}, "up"},
+		{"zero-since-stable", &BGPLink{A: est(0), B: est(0)}, "up"},
+	}
+	for _, c := range cases {
+		if got := bgpBadge(c.b, now); got != c.want {
+			t.Errorf("%s: got %q want %q", c.name, got, c.want)
+		}
+	}
+}

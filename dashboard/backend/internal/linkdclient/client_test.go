@@ -2,6 +2,7 @@ package linkdclient
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -293,5 +294,33 @@ func TestAllHealth(t *testing.T) {
 	}
 	if got[151] {
 		t.Fatalf("want AS151 unhealthy, got %+v", got)
+	}
+}
+
+func TestPollBGP(t *testing.T) {
+	// Two-AS graph, one link; AS A serves a session, AS B returns 503.
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/bgp" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `{"sessions":[{"ifid":"6049","state":"Established","bfd":"Up","since_unix":1770000000}]}`)
+	}))
+	defer up.Close()
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"bgp unavailable"}`, http.StatusServiceUnavailable)
+	}))
+	defer down.Close()
+
+	g := testGraph(up.URL, down.URL) // A=AS150 ifid 6049, B=AS151
+	c := New(g, testClient())
+
+	got := c.PollBGP(context.Background())
+	bl := got[g.Links[0].ID]
+	if bl == nil || bl.A == nil || bl.A.State != "Established" || bl.A.SinceUnix != 1770000000 {
+		t.Fatalf("A side: %+v", bl)
+	}
+	if bl.B != nil {
+		t.Fatalf("B side must be nil (503), got %+v", bl.B)
 	}
 }

@@ -25,6 +25,7 @@ type fakeController struct {
 	results []linkdclient.Result
 	health  map[int]bool
 	shaping map[string]*derive.Shaping
+	bgp     map[string]*derive.BGPLink
 
 	lastDirection string
 	lastClear     bool
@@ -34,6 +35,10 @@ type fakeController struct {
 
 func (f *fakeController) Poll(ctx context.Context) (shaping, baseline map[string]*derive.Shaping) {
 	return f.shaping, f.baseline
+}
+
+func (f *fakeController) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
+	return f.bgp
 }
 
 func (f *fakeController) Apply(ctx context.Context, link topo.Link, direction string, p derive.Shaping, clear bool) []linkdclient.Result {

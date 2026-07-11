@@ -166,6 +166,91 @@ func (c *Client) fetchLinks(ctx context.Context, as int) ([]linkEntry, error) {
 	return list, nil
 }
 
+type bgpSessionJSON struct {
+	IfID  string `json:"ifid"`
+	State string `json:"state"`
+	Since int64  `json:"since_unix"`
+}
+
+// PollBGP fans out GET /api/v1/bgp to every AS's linkd and joins the
+// per-endpoint sessions onto links. An AS that errors (linkd down, BIRD
+// absent → 503) leaves its side nil, which derive renders as "unknown".
+func (c *Client) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
+	type side struct {
+		linkID string
+		isA    bool
+	}
+	idx := make(map[string]side, 2*len(c.g.Links))
+	out := make(map[string]*derive.BGPLink, len(c.g.Links))
+	for _, l := range c.g.Links {
+		idx[asIfKey(l.A.AS, l.A.IfID)] = side{l.ID, true}
+		idx[asIfKey(l.B.AS, l.B.IfID)] = side{l.ID, false}
+		out[l.ID] = &derive.BGPLink{}
+	}
+
+	type fetched struct {
+		as       int
+		sessions []bgpSessionJSON
+		ok       bool
+	}
+	res := make([]fetched, len(c.g.ASes))
+	var wg sync.WaitGroup
+	for i, as := range c.g.ASes {
+		wg.Add(1)
+		go func(i int, as topo.AS) {
+			defer wg.Done()
+			ss, err := c.fetchBGP(ctx, as.Num)
+			res[i] = fetched{as: as.Num, sessions: ss, ok: err == nil}
+		}(i, as)
+	}
+	wg.Wait()
+
+	for _, r := range res {
+		if !r.ok {
+			continue
+		}
+		for _, s := range r.sessions {
+			sd, ok := idx[asIfKey(r.as, s.IfID)]
+			if !ok {
+				continue
+			}
+			bs := &derive.BGPSide{State: s.State, SinceUnix: s.Since}
+			if sd.isA {
+				out[sd.linkID].A = bs
+			} else {
+				out[sd.linkID].B = bs
+			}
+		}
+	}
+	return out
+}
+
+func (c *Client) fetchBGP(ctx context.Context, as int) ([]bgpSessionJSON, error) {
+	base, ok := c.baseURL(as)
+	if !ok {
+		return nil, fmt.Errorf("AS%d: not in graph", as)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/bgp", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("AS%d: GET /api/v1/bgp: status %d", as, resp.StatusCode)
+	}
+	var body struct {
+		Sessions []bgpSessionJSON `json:"sessions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("AS%d: decode /api/v1/bgp: %w", as, err)
+	}
+	return body.Sessions, nil
+}
+
 // Apply sends PUT (or DELETE when clear) to the linkd(s) owning the
 // direction's egress interface(s): "a_to_b" targets link.A only, "b_to_a"
 // targets link.B only, "both" targets both (A first, then B). p is ignored

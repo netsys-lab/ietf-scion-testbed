@@ -93,3 +93,36 @@ func TestControllerAllHealthAllTrue(t *testing.T) {
 		}
 	}
 }
+
+// TestControllerPollBGP checks that shaping a link to 100% loss makes PollBGP
+// report a non-Established session on that link (both sides), while every
+// other link stays Established — the off-fleet failure-demo synthesis.
+func TestControllerPollBGP(t *testing.T) {
+	g := testGraph()
+	st := store.New(60)
+	gen := New(g, st, 1)
+	c := NewController(g, gen)
+	ctx := context.Background()
+
+	dead := g.Links[0].ID // "150-151"
+	c.Apply(ctx, g.Links[0], "both", derive.Shaping{LossPct: f64(100)}, false)
+
+	got := c.PollBGP(ctx)
+	if len(got) != len(g.Links) {
+		t.Fatalf("want %d links, got %d", len(g.Links), len(got))
+	}
+	bl := got[dead]
+	if bl == nil || bl.A == nil || bl.B == nil {
+		t.Fatalf("want both sides present for %s, got %+v", dead, bl)
+	}
+	if bl.A.State == "Established" || bl.B.State == "Established" {
+		t.Fatalf("want non-Established both sides on 100%%-loss link, got %+v / %+v", bl.A, bl.B)
+	}
+	for _, l := range g.Links[1:] {
+		other := got[l.ID]
+		if other == nil || other.A == nil || other.B == nil ||
+			other.A.State != "Established" || other.B.State != "Established" {
+			t.Fatalf("want %s Established both sides, got %+v", l.ID, other)
+		}
+	}
+}
