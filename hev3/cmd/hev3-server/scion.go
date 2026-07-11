@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
@@ -20,11 +21,33 @@ import (
 // hand its QUIC listener to an http3.Server. The request's remote address is the
 // snet UDPAddr string, so the peer's ISD-AS shows in the "reached over" payload.
 type scionServer struct {
-	h3     *http3.Server
-	ln     *quic.Listener
-	tr     *quic.Transport
-	conn   *snet.Conn
-	sciond daemon.Connector
+	h3      *http3.Server
+	ln      *quic.Listener
+	tr      *quic.Transport
+	conn    *snet.Conn
+	sciond  daemon.Connector
+	localIP netip.Addr // underlay IP the SCION listener is bound to; see localAddr
+}
+
+// LocalIP is the underlay IP the SCION listener bound (dispatcher-less SCION:
+// the SCION port must stay fixed per the zone's SVCB record, so the ip-h3
+// listener(s) must avoid this address on that same port; see ipH3Addrs).
+func (s *scionServer) LocalIP() netip.Addr { return s.localIP }
+
+// localAddr extracts the bound underlay IP from an snet.Conn's LocalAddr, i.e.
+// the concrete address newSCIONServer actually bound the SCION socket to
+// (rather than re-deriving it from the pre-bind addrutil.DefaultLocalIP
+// lookup, which is a hint, not a guarantee).
+func localAddr(conn *snet.Conn) (netip.Addr, error) {
+	ua, ok := conn.LocalAddr().(*snet.UDPAddr)
+	if !ok || ua.Host == nil {
+		return netip.Addr{}, fmt.Errorf("unexpected SCION local addr type %T", conn.LocalAddr())
+	}
+	ip, ok := netip.AddrFromSlice(ua.Host.IP)
+	if !ok {
+		return netip.Addr{}, fmt.Errorf("unexpected SCION local IP %v", ua.Host.IP)
+	}
+	return ip.Unmap(), nil
 }
 
 // newSCIONServer sets up the SCION QUIC HTTP/3 listener on the given underlay
@@ -58,6 +81,12 @@ func newSCIONServer(ctx context.Context, handler http.Handler, cert tls.Certific
 		_ = sciond.Close()
 		return nil, fmt.Errorf("opening SCION socket: %w", err)
 	}
+	boundIP, err := localAddr(conn)
+	if err != nil {
+		_ = conn.Close()
+		_ = sciond.Close()
+		return nil, fmt.Errorf("resolving bound local addr: %w", err)
+	}
 
 	tr := &quic.Transport{Conn: conn}
 	tlsConf := &tls.Config{
@@ -73,7 +102,7 @@ func newSCIONServer(ctx context.Context, handler http.Handler, cert tls.Certific
 	}
 
 	h3 := &http3.Server{Handler: handler}
-	return &scionServer{h3: h3, ln: ln, tr: tr, conn: conn, sciond: sciond}, nil
+	return &scionServer{h3: h3, ln: ln, tr: tr, conn: conn, sciond: sciond, localIP: boundIP}, nil
 }
 
 func (s *scionServer) serve() error { return s.h3.ServeListener(s.ln) }

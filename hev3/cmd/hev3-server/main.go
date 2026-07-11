@@ -13,13 +13,13 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
 )
 
 func main() {
@@ -61,57 +61,41 @@ func run(args []string, stderr *os.File) int {
 	}
 	handler := newHandler(hostname)
 
-	servers := []*server{
-		newTCPServer(*listenIP, cert, handler),
-		newH3IPServer(*listenIP, cert, handler),
-	}
-
+	// SCION (when enabled) is set up first: its bound underlay IP is the one
+	// address the ip-h3 listener(s) below must avoid, since dispatcher-less
+	// SCION pins the underlay UDP port to the fixed SCION port (the zone's
+	// SVCB port=443 applies to the SCION leg) and a wildcard ip-h3 bind on
+	// that same port would collide with it.
+	var servers []*server
+	var scionIP netip.Addr
 	if *useSCION {
 		sc, err := newSCIONServer(context.Background(), withTransport(transportSCION, handler), cert, resolveDaemon(*daemonAddr), *scionPort)
 		if err != nil {
 			fmt.Fprintf(stderr, "hev3-server: setting up SCION listener: %v\n", err)
 			return 1
 		}
+		scionIP = sc.LocalIP()
+		fmt.Fprintf(stderr, "hev3-server: scion-h3 listening on underlay udp %s port %d\n", scionIP, *scionPort)
 		servers = append(servers, &server{name: "scion-h3", serve: sc.serve, shutdown: sc.shutdown})
 	}
 
+	tcpSrv, err := newTCPServer(*listenIP, cert, handler)
+	if err != nil {
+		fmt.Fprintf(stderr, "hev3-server: setting up ip-tcp listener: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stderr, "hev3-server: %s listening\n", tcpSrv.name)
+	servers = append(servers, tcpSrv)
+
+	h3Srv, detail, err := newH3IPServers(*listenIP, cert, handler, scionIP)
+	if err != nil {
+		fmt.Fprintf(stderr, "hev3-server: setting up ip-h3 listener(s): %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stderr, "hev3-server: %s listening%s\n", h3Srv.name, detail)
+	servers = append(servers, h3Srv)
+
 	return serveAll(servers, stderr)
-}
-
-// newTCPServer builds the IP TCP+TLS listener serving h2 and http/1.1. The
-// request handler is tagged "ip"; transportTag refines it per-request from the
-// negotiated ALPN.
-func newTCPServer(addr string, cert tls.Certificate, handler http.Handler) *server {
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: withTransport(transportIP, handler),
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			NextProtos:   []string{"h2", "http/1.1"},
-		},
-	}
-	return &server{
-		name:     "ip-tcp",
-		serve:    func() error { return srv.ListenAndServeTLS("", "") },
-		shutdown: srv.Shutdown,
-	}
-}
-
-// newH3IPServer builds the IP UDP HTTP/3 listener.
-func newH3IPServer(addr string, cert tls.Certificate, handler http.Handler) *server {
-	srv := &http3.Server{
-		Addr:    addr,
-		Handler: withTransport(transportIPH3, handler),
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			NextProtos:   []string{"h3"},
-		},
-	}
-	return &server{
-		name:     "ip-h3",
-		serve:    srv.ListenAndServe,
-		shutdown: func(ctx context.Context) error { return srv.Shutdown(ctx) },
-	}
 }
 
 func resolveDaemon(flagVal string) string {
@@ -124,9 +108,13 @@ func resolveDaemon(flagVal string) string {
 	return "127.0.0.1:30255"
 }
 
-// serveAll starts every listener, waits for SIGINT/SIGTERM or a fatal serve
-// error, then shuts them all down gracefully. It returns 0 on a clean signalled
-// shutdown, 1 if a listener failed to start/serve.
+// serveAll runs the accept/serve loop for every listener (each already
+// synchronously bound by its constructor, and logged by the caller at that
+// point — not here, since that log must be truthful about the bind, and the
+// serve loop below can still fail asynchronously for unrelated reasons).
+// It waits for SIGINT/SIGTERM or a fatal serve error, then shuts every
+// listener down gracefully. Returns 0 on a clean signalled shutdown, 1 if a
+// listener failed to serve.
 func serveAll(servers []*server, stderr *os.File) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -134,7 +122,6 @@ func serveAll(servers []*server, stderr *os.File) int {
 	errCh := make(chan error, len(servers))
 	for _, s := range servers {
 		s := s
-		fmt.Fprintf(stderr, "hev3-server: %s listening\n", s.name)
 		go func() {
 			err := s.serve()
 			if err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, quic.ErrServerClosed) {
