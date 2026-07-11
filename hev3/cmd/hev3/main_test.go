@@ -19,15 +19,21 @@ func TestBuildRaceRows_SuppressesNeverStartedSCIONProtoParent(t *testing.T) {
 	const p1 = proto + "#p1"
 	const p2 = proto + "#p2"
 	const unrelated = "v4:9.9.9.9"
+	const ipPrefix = "v4:104.16.44.9"
+	const ipPrefixStarted = "v4:104.16.44.99"
 
 	events := []hev3.Event{
 		{At: 0, Kind: "candidate", Label: proto},
 		{At: 1 * time.Millisecond, Kind: "candidate", Label: unrelated},
-		{At: 2 * time.Millisecond, Kind: "attempt", Label: p1},
-		{At: 3 * time.Millisecond, Kind: "attempt", Label: p2},
+		{At: 2 * time.Millisecond, Kind: "candidate", Label: ipPrefix},
+		{At: 3 * time.Millisecond, Kind: "candidate", Label: ipPrefixStarted},
+		{At: 4 * time.Millisecond, Kind: "attempt", Label: p1},
+		{At: 5 * time.Millisecond, Kind: "attempt", Label: p2},
+		{At: 6 * time.Millisecond, Kind: "attempt", Label: ipPrefixStarted},
 		{At: 10 * time.Millisecond, Kind: "success", Label: p1},
 		{At: 10 * time.Millisecond, Kind: "winner", Label: p1},
 		{At: 12 * time.Millisecond, Kind: "cancel", Label: p2},
+		{At: 20 * time.Millisecond, Kind: "cancel", Label: ipPrefixStarted},
 	}
 
 	rows := buildRaceRows(events)
@@ -58,7 +64,24 @@ func TestBuildRaceRows_SuppressesNeverStartedSCIONProtoParent(t *testing.T) {
 		t.Errorf("buildRaceRows: unrelated row %q = %+v, want untouched never-started", unrelated, r)
 	}
 
-	if len(rows) != 3 {
-		t.Errorf("buildRaceRows: got %d rows %+v, want exactly 3 (proto parent suppressed)", len(rows), rows)
+	// Test case: never-started candidate v4:104.16.44.9 alongside started
+	// sibling v4:104.16.44.99. Before the fix, v4:104.16.44.9 would be
+	// falsely suppressed as a "prefix" of the started sibling. The tightened
+	// suppression rule (matching only #p expansion children) must preserve it.
+	r, ok = byLabel[ipPrefix]
+	if !ok {
+		t.Fatalf("buildRaceRows: never-started candidate %q with IP-like prefix must survive, got rows %+v", ipPrefix, rows)
+	}
+	if r.started || r.outcome != "" {
+		t.Errorf("buildRaceRows: %q = %+v, want untouched never-started", ipPrefix, r)
+	}
+	if r, ok := byLabel[ipPrefixStarted]; !ok {
+		t.Errorf("buildRaceRows: expected started row %q, got rows %+v", ipPrefixStarted, rows)
+	} else if !r.started || r.outcome != "cancelled" {
+		t.Errorf("buildRaceRows: %q = %+v, want started/cancelled", ipPrefixStarted, r)
+	}
+
+	if len(rows) != 5 {
+		t.Errorf("buildRaceRows: got %d rows %+v, want exactly 5 (proto parent suppressed, IP-prefix sibling preserved)", len(rows), rows)
 	}
 }

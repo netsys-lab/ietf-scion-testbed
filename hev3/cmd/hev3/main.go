@@ -149,7 +149,7 @@ func buildRaceRows(events []hev3.Event) []raceRow {
 func suppressExpandedProtoRows(rows []raceRow) []raceRow {
 	hasStartedChild := func(label string) bool {
 		for _, r := range rows {
-			if r.started && len(r.label) > len(label) && strings.HasPrefix(r.label, label) {
+			if r.started && strings.HasPrefix(r.label, label+"#p") {
 				return true
 			}
 		}
