@@ -62,6 +62,11 @@
       register: eth0net
       failed_when: not eth0net.stat.exists
 
+    - name: eth0.network.d drop-in dir (copy cannot mkdir)
+      ansible.builtin.file:
+        path: /etc/systemd/network/eth0.network.d
+        state: directory
+        mode: "0755"
     - name: eth0 fabric drop-in (v6 gateway + on-link delivery)
       ansible.builtin.copy:
         dest: /etc/systemd/network/eth0.network.d/fabric.conf
@@ -133,6 +138,11 @@
       register: eth0net
       failed_when: not eth0net.stat.exists
 
+    - name: eth0.network.d drop-in dir (copy cannot mkdir)
+      ansible.builtin.file:
+        path: /etc/systemd/network/eth0.network.d
+        state: directory
+        mode: "0755"
     - name: eth0 fabric drop-in (host-scoped addresses + routes via home AS)
       ansible.builtin.copy:
         dest: /etc/systemd/network/eth0.network.d/fabric.conf
@@ -205,6 +215,11 @@
       register: eth0net
       failed_when: not eth0net.stat.exists
 
+    - name: eth0.network.d drop-in dir (copy cannot mkdir)
+      ansible.builtin.file:
+        path: /etc/systemd/network/eth0.network.d
+        state: directory
+        mode: "0755"
     - name: eth0 fabric drop-in (stable v6 + fabric routes via AS155)
       ansible.builtin.copy:
         dest: /etc/systemd/network/eth0.network.d/fabric.conf
