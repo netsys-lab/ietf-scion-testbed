@@ -6,7 +6,8 @@ scion. {
     root /etc/coredns
     file scion.zone scion.
     scitra
-    cache
+    # no cache: authoritative local zone; cache held zone-sync venue-IP
+    # updates stale for the full record TTL (deploy-surfaced)
     log
     errors
 }

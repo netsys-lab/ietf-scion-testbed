@@ -1,4 +1,5 @@
 $ORIGIN scion.
+$TTL 300
 @ 3600 IN SOA scitra.netsys.ovgu.de. lschulz.ovgu.de. 2026071001 7200 3600 1209600 3600
 @ IN NS scitra.netsys.ovgu.de.
 ; dual-homed (IP race legs): SVCB only — NO scion= TXT (scitra would hijack AAAA)
