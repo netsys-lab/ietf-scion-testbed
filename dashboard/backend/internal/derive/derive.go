@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/bgppath"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/topo"
 )
@@ -146,6 +147,10 @@ type Frame struct {
 	// attached by the api layer when a trace is active; nil (omitted)
 	// otherwise. See internal/idint.
 	Trace *TraceVM `json:"trace,omitempty"`
+	// BGPPath is the current BGP best path for the active trace's src/dst
+	// pair, attached by the api layer alongside Trace; nil (omitted) when no
+	// trace is running or no BGP route data has been polled yet.
+	BGPPath *bgppath.VM `json:"bgp_path,omitempty"`
 }
 
 // Band names, ordered by increasing severity for the RTT/loss classification.

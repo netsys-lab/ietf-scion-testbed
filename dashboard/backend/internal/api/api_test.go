@@ -38,8 +38,8 @@ func (f *fakeController) Poll(ctx context.Context) (shaping, baseline map[string
 	return f.shaping, f.baseline
 }
 
-func (f *fakeController) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
-	return f.bgp
+func (f *fakeController) PollBGP(ctx context.Context) (map[string]*derive.BGPLink, map[int]map[int]string) {
+	return f.bgp, nil
 }
 
 func (f *fakeController) Apply(ctx context.Context, link topo.Link, direction string, p derive.Shaping, clear bool) []linkdclient.Result {

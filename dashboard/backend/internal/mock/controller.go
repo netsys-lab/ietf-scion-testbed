@@ -66,8 +66,10 @@ func (c *Controller) Apply(ctx context.Context, link topo.Link, direction string
 }
 
 // PollBGP synthesizes session state so the badge and failure demo are
-// rehearsable off-fleet: 100% mock loss reads as a torn-down session.
-func (c *Controller) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
+// rehearsable off-fleet: 100% mock loss reads as a torn-down session. It also
+// synthesizes a best-route table per AS (see bgpRoutes) so the BGP path
+// overlay has something to walk without a live BGP fleet.
+func (c *Controller) PollBGP(ctx context.Context) (map[string]*derive.BGPLink, map[int]map[int]string) {
 	now := time.Now().Unix()
 	shaped := c.gen.CurrentShaping()
 	out := make(map[string]*derive.BGPLink, len(c.g.Links))
@@ -78,6 +80,51 @@ func (c *Controller) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
 		}
 		side := func() *derive.BGPSide { return &derive.BGPSide{State: state, SinceUnix: now - 3600} }
 		out[l.ID] = &derive.BGPLink{A: side(), B: side()}
+	}
+	return out, c.bgpRoutes()
+}
+
+// bgpRoutes synthesizes per-AS best-route tables as shortest hop-count (BFS)
+// over links not currently at 100% mock loss, so the overlay reroutes in the
+// failure demo the way live BFD does. Links are walked in graph order, which
+// is stable, so tie-breaks are deterministic across polls.
+func (c *Controller) bgpRoutes() map[int]map[int]string {
+	type edge struct {
+		peer int
+		ifid string
+	}
+	shaped := c.gen.CurrentShaping()
+	adj := map[int][]edge{}
+	for _, l := range c.g.Links {
+		if p := shaped[l.ID]; p != nil && p.LossPct != nil && *p.LossPct >= 100 {
+			continue
+		}
+		adj[l.A.AS] = append(adj[l.A.AS], edge{l.B.AS, l.A.IfID})
+		adj[l.B.AS] = append(adj[l.B.AS], edge{l.A.AS, l.B.IfID})
+	}
+	out := make(map[int]map[int]string, len(c.g.ASes))
+	for _, as := range c.g.ASes {
+		src := as.Num
+		first := map[int]string{}
+		seen := map[int]bool{src: true}
+		queue := []int{src}
+		for len(queue) > 0 {
+			cur := queue[0]
+			queue = queue[1:]
+			for _, e := range adj[cur] {
+				if seen[e.peer] {
+					continue
+				}
+				seen[e.peer] = true
+				if cur == src {
+					first[e.peer] = e.ifid
+				} else {
+					first[e.peer] = first[cur]
+				}
+				queue = append(queue, e.peer)
+			}
+		}
+		out[src] = first
 	}
 	return out
 }

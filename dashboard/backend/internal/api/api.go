@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/bgppath"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/idint"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/linkdclient"
@@ -40,7 +41,7 @@ const writeWait = 2 * time.Second
 // it an interface lets tests inject a fake linkd without a real HTTP backend.
 type Controller interface {
 	Poll(ctx context.Context) (shaping, baseline map[string]*derive.Shaping)
-	PollBGP(ctx context.Context) map[string]*derive.BGPLink
+	PollBGP(ctx context.Context) (map[string]*derive.BGPLink, map[int]map[int]string)
 	Apply(ctx context.Context, link topo.Link, direction string, p derive.Shaping, clear bool) []linkdclient.Result
 	AllHealth(ctx context.Context) map[int]bool
 }
@@ -136,6 +137,12 @@ type server struct {
 	// pollInFlight guards against overlapping Controller.Poll calls piling
 	// up behind a slow HTTP round trip and starving frame broadcasting.
 	pollInFlight atomic.Bool
+
+	// bgpIdx resolves (AS, egress ifid) -> link + peer for the BGP path
+	// walker; bgpRoutes is the latest polled per-AS best-route snapshot (nil
+	// until the first poll, so pre-rollout frames omit bgp_path entirely).
+	bgpIdx    bgppath.Index
+	bgpRoutes atomic.Pointer[map[int]map[int]string]
 }
 
 // New builds the dashboard HTTP handler. static, when non-nil, is served at /
@@ -174,6 +181,7 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 	for _, l := range g.Links {
 		s.linksByID[l.ID] = l
 	}
+	s.bgpIdx = bgppath.NewIndex(g)
 
 	s.mux.HandleFunc("GET /api/topology", s.handleTopology)
 	s.mux.HandleFunc("GET /api/history", s.handleHistory)
@@ -358,10 +366,7 @@ func (s *server) handleLive(w http.ResponseWriter, r *http.Request) {
 	if frame == nil {
 		// No broadcast tick has run yet (RunBroadcast not started, or this
 		// connect raced the very first tick); fall back to a direct call.
-		f := s.d.Frame(time.Now().UnixMilli())
-		if s.tr != nil {
-			f.Trace = s.tr.VM()
-		}
+		f := s.buildFrame(time.Now().UnixMilli())
 		frame = &f
 	}
 	snap := snapshotMsg{Type: "snapshot", Topology: s.g, Frame: *frame}
@@ -406,10 +411,7 @@ func RunBroadcast(ctx context.Context, h http.Handler, frameInterval, pollInterv
 		case <-ctx.Done():
 			return
 		case <-frameTick.C:
-			f := s.d.Frame(time.Now().UnixMilli())
-			if s.tr != nil {
-				f.Trace = s.tr.VM()
-			}
+			f := s.buildFrame(time.Now().UnixMilli())
 			s.lastFrame.Store(&f)
 			msg := frameMsg{Type: "frame", Frame: f}
 			data, err := json.Marshal(msg)
@@ -424,11 +426,45 @@ func RunBroadcast(ctx context.Context, h http.Handler, frameInterval, pollInterv
 					shaping, baseline := s.lc.Poll(ctx)
 					s.d.SetShaping(shaping)
 					s.d.SetBaselineShaping(baseline)
-					s.d.SetBGP(s.lc.PollBGP(ctx))
+					badge, routes := s.lc.PollBGP(ctx)
+					s.d.SetBGP(badge)
+					s.bgpRoutes.Store(&routes)
 				}()
 			}
 		}
 	}
+}
+
+// buildFrame derives one frame and attaches the trace + BGP path overlays.
+// Both the broadcast tick and the connect-time fallback in handleLive go
+// through here so the two can never drift.
+func (s *server) buildFrame(now int64) derive.Frame {
+	f := s.d.Frame(now)
+	if s.tr != nil {
+		f.Trace = s.tr.VM()
+	}
+	if rp := s.bgpRoutes.Load(); rp != nil {
+		attachBGPPath(&f, s.bgpIdx, *rp)
+	}
+	return f
+}
+
+// attachBGPPath walks the polled BGP route tables for the active trace's
+// pair and attaches the result; no active trace or nil routes (pre-first-
+// poll) leaves the frame untouched.
+func attachBGPPath(f *derive.Frame, idx bgppath.Index, routes map[int]map[int]string) {
+	if f.Trace == nil || routes == nil {
+		return
+	}
+	vm := bgppath.Walk(idx, routes, iaNum(f.Trace.Src), iaNum(f.Trace.Dst))
+	vm.Src, vm.Dst = f.Trace.Src, f.Trace.Dst
+	f.BGPPath = &vm
+}
+
+// iaNum extracts the AS number from an IA string ("1-158" -> 158).
+func iaNum(ia string) int {
+	n, _ := strconv.Atoi(ia[strings.LastIndexByte(ia, '-')+1:])
+	return n
 }
 
 // --- static (SPA) ---------------------------------------------------------

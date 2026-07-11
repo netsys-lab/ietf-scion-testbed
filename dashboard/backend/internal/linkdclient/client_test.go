@@ -304,7 +304,7 @@ func TestPollBGP(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprint(w, `{"sessions":[{"ifid":"6049","state":"Established","bfd":"Up","since_unix":1770000000}]}`)
+		fmt.Fprint(w, `{"sessions":[{"ifid":"6049","state":"Established","bfd":"Up","since_unix":1770000000}],"routes":[{"prefix_as":150,"ifid":"6049"}]}`)
 	}))
 	defer up.Close()
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -315,12 +315,21 @@ func TestPollBGP(t *testing.T) {
 	g := testGraph(up.URL, down.URL) // A=AS150 ifid 6049, B=AS151
 	c := New(g, testClient())
 
-	got := c.PollBGP(context.Background())
+	got, routes := c.PollBGP(context.Background())
 	bl := got[g.Links[0].ID]
 	if bl == nil || bl.A == nil || bl.A.State != "Established" || bl.A.SinceUnix != 1770000000 {
 		t.Fatalf("A side: %+v", bl)
 	}
 	if bl.B != nil {
 		t.Fatalf("B side must be nil (503), got %+v", bl.B)
+	}
+
+	// AS150 (up) must have its routes decoded; AS151 (503) must be absent
+	// entirely from the routes map, not present with an empty value.
+	if r, ok := routes[150]; !ok || len(r) != 1 || r[150] != "6049" {
+		t.Fatalf("routes[150] = %+v (ok=%v), want {150:\"6049\"}", r, ok)
+	}
+	if _, ok := routes[151]; ok {
+		t.Fatalf("routes[151] must be absent (erroring AS), got %+v", routes[151])
 	}
 }

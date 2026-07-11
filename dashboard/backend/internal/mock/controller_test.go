@@ -6,6 +6,7 @@ import (
 
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/derive"
 	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/store"
+	"github.com/netsys-lab/ietf-scion-testbed/dashboard/backend/internal/topo"
 )
 
 // TestControllerApplyBoth checks that Apply with direction=both against a
@@ -107,7 +108,7 @@ func TestControllerPollBGP(t *testing.T) {
 	dead := g.Links[0].ID // "150-151"
 	c.Apply(ctx, g.Links[0], "both", derive.Shaping{LossPct: f64(100)}, false)
 
-	got := c.PollBGP(ctx)
+	got, _ := c.PollBGP(ctx)
 	if len(got) != len(g.Links) {
 		t.Fatalf("want %d links, got %d", len(g.Links), len(got))
 	}
@@ -124,5 +125,65 @@ func TestControllerPollBGP(t *testing.T) {
 			other.A.State != "Established" || other.B.State != "Established" {
 			t.Fatalf("want %s Established both sides, got %+v", l.ID, other)
 		}
+	}
+}
+
+// triangleGraph is a 3-AS fully-meshed fixture (links A-B, B-C, A-C), used by
+// the routes-reroute test: testGraph() (this file's tree of 150-151,
+// 150-154, 151-155) has no detour path for any single link, so a loss-forced
+// link there simply strands its far side rather than exercising the
+// BFS-synth reroute.
+func triangleGraph() topo.Graph {
+	return topo.Graph{
+		ASes: []topo.AS{
+			{IA: "1-150", Num: 150, Core: true, MgmtIP: "10.20.3.150"},
+			{IA: "1-151", Num: 151, Core: true, MgmtIP: "10.20.3.151"},
+			{IA: "1-152", Num: 152, Core: true, MgmtIP: "10.20.3.152"},
+		},
+		Links: []topo.Link{
+			{
+				ID: "150-151", Type: "core", Subnet: "link 1",
+				A: topo.Endpoint{IA: "1-150", AS: 150, IfID: "1"},
+				B: topo.Endpoint{IA: "1-151", AS: 151, IfID: "1"},
+			},
+			{
+				ID: "151-152", Type: "core", Subnet: "link 2",
+				A: topo.Endpoint{IA: "1-151", AS: 151, IfID: "2"},
+				B: topo.Endpoint{IA: "1-152", AS: 152, IfID: "1"},
+			},
+			{
+				ID: "150-152", Type: "core", Subnet: "link 3",
+				A: topo.Endpoint{IA: "1-150", AS: 150, IfID: "2"},
+				B: topo.Endpoint{IA: "1-152", AS: 152, IfID: "2"},
+			},
+		},
+	}
+}
+
+// TestPollBGPRoutesRerouteOnLoss checks that PollBGP's synthesized routes
+// reroute around a link forced to 100% mock loss, mirroring what live BFD
+// convergence would do — the failure-demo overlay must not keep pointing the
+// BGP path overlay at a dead link.
+func TestPollBGPRoutesRerouteOnLoss(t *testing.T) {
+	g := triangleGraph()
+	st := store.New(60)
+	gen := New(g, st, 1)
+	c := NewController(g, gen)
+	ctx := context.Background()
+
+	_, routes := c.PollBGP(ctx)
+	if len(routes) == 0 {
+		t.Fatal("no synthesized routes")
+	}
+
+	// Pick any link L in the graph; force 100% loss.
+	l := c.g.Links[0]
+	loss := 100.0
+	c.gen.SetShaping(l.ID, &derive.Shaping{LossPct: &loss})
+	_, routes = c.PollBGP(ctx)
+	// A's first hop toward B must no longer be the dead link's ifid (unless
+	// the dead link was the ONLY path — not true on this triangle graph).
+	if got := routes[l.A.AS][l.B.AS]; got == l.A.IfID {
+		t.Fatalf("route still uses dead link: %s", got)
 	}
 }

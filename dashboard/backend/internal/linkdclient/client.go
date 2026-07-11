@@ -172,10 +172,23 @@ type bgpSessionJSON struct {
 	Since int64  `json:"since_unix"`
 }
 
-// PollBGP fans out GET /api/v1/bgp to every AS's linkd and joins the
-// per-endpoint sessions onto links. An AS that errors (linkd down, BIRD
-// absent → 503) leaves its side nil, which derive renders as "unknown".
-func (c *Client) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
+// bgpRouteJSON is one entry of a linkd's /api/v1/bgp "routes" array: the
+// egress ifid this AS uses as its current best route toward PrefixAS.
+type bgpRouteJSON struct {
+	PrefixAS int    `json:"prefix_as"`
+	IfID     string `json:"ifid"`
+}
+
+// PollBGP fans out GET /api/v1/bgp to every AS's linkd. It joins the
+// per-endpoint sessions onto links (an AS that errors — linkd down, BIRD
+// absent → 503 — leaves its side nil, which derive renders as "unknown") and
+// separately returns each reachable AS's best-route table as polled:
+// map[queriedAS]map[destinationAS]egressIfid. An AS that errors is absent
+// from the routes map entirely (not present with an empty map), and an old
+// linkd (pre-0.3.2) that omits the "routes" key decodes to an empty map for
+// that AS, so bgppath.Walk simply truncates there — safe during a rolling
+// linkd upgrade.
+func (c *Client) PollBGP(ctx context.Context) (map[string]*derive.BGPLink, map[int]map[int]string) {
 	type side struct {
 		linkID string
 		isA    bool
@@ -191,6 +204,7 @@ func (c *Client) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
 	type fetched struct {
 		as       int
 		sessions []bgpSessionJSON
+		routes   []bgpRouteJSON
 		ok       bool
 	}
 	res := make([]fetched, len(c.g.ASes))
@@ -199,12 +213,13 @@ func (c *Client) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
 		wg.Add(1)
 		go func(i int, as topo.AS) {
 			defer wg.Done()
-			ss, err := c.fetchBGP(ctx, as.Num)
-			res[i] = fetched{as: as.Num, sessions: ss, ok: err == nil}
+			ss, rr, err := c.fetchBGP(ctx, as.Num)
+			res[i] = fetched{as: as.Num, sessions: ss, routes: rr, ok: err == nil}
 		}(i, as)
 	}
 	wg.Wait()
 
+	routesOut := make(map[int]map[int]string, len(res))
 	for _, r := range res {
 		if !r.ok {
 			continue
@@ -221,34 +236,41 @@ func (c *Client) PollBGP(ctx context.Context) map[string]*derive.BGPLink {
 				out[sd.linkID].B = bs
 			}
 		}
+
+		m := make(map[int]string, len(r.routes))
+		for _, rt := range r.routes {
+			m[rt.PrefixAS] = rt.IfID
+		}
+		routesOut[r.as] = m
 	}
-	return out
+	return out, routesOut
 }
 
-func (c *Client) fetchBGP(ctx context.Context, as int) ([]bgpSessionJSON, error) {
+func (c *Client) fetchBGP(ctx context.Context, as int) ([]bgpSessionJSON, []bgpRouteJSON, error) {
 	base, ok := c.baseURL(as)
 	if !ok {
-		return nil, fmt.Errorf("AS%d: not in graph", as)
+		return nil, nil, fmt.Errorf("AS%d: not in graph", as)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/bgp", nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("AS%d: GET /api/v1/bgp: status %d", as, resp.StatusCode)
+		return nil, nil, fmt.Errorf("AS%d: GET /api/v1/bgp: status %d", as, resp.StatusCode)
 	}
 	var body struct {
 		Sessions []bgpSessionJSON `json:"sessions"`
+		Routes   []bgpRouteJSON   `json:"routes"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("AS%d: decode /api/v1/bgp: %w", as, err)
+		return nil, nil, fmt.Errorf("AS%d: decode /api/v1/bgp: %w", as, err)
 	}
-	return body.Sessions, nil
+	return body.Sessions, body.Routes, nil
 }
 
 // Apply sends PUT (or DELETE when clear) to the linkd(s) owning the
