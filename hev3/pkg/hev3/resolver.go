@@ -156,6 +156,7 @@ func (r *resolveRun) run(delay time.Duration) {
 		svc                          *dns.SVCB
 		aaaaIPs, aIPs                []net.IP
 		svcbFinal, aaaaFinal, aFinal bool
+		svcbPositive                 bool
 		delayElapsed                 bool
 		sent                         bool
 		prev                         []Candidate
@@ -170,19 +171,38 @@ func (r *resolveRun) run(delay time.Duration) {
 	// the Resolution Delay has elapsed — draft-ietf-happy-happyeyeballs-v3
 	// -04 §4.2. Notably A is never itself a gate requirement: it is only a
 	// possible source of the "at least one positive address answer" (path
-	// (b)), never required to be final. Once cleared, release emits Initial
-	// on first clearance or an Update whenever the merged set subsequently
-	// changes (§4.3). The Updates send escapes via ctx.Done() so a caller
-	// that cancels ctx is never blocked on it (see the Resolved doc
-	// comment for the abandon-without-cancel case, which is intentionally
-	// not covered by this escape).
+	// (b)), never required to be final. A final SVCB that produced any
+	// candidate (a scion= address or an ipv4hint/ipv6hint) counts as a
+	// positive answer too, so a SCION-only name (scion.zone's "games"
+	// pattern: SVCB scion= with no A/AAAA records at all) can clear path
+	// (b) at the Resolution Delay instead of waiting on two families that
+	// will never go positive. Once cleared, release emits Initial on first
+	// clearance or an Update whenever the merged set subsequently changes
+	// (§4.3). The Updates send escapes via ctx.Done() so a caller that
+	// cancels ctx is never blocked on it (see the Resolved doc comment for
+	// the abandon-without-cancel case, which is intentionally not covered
+	// by this escape).
+	//
+	// Independent of the above: once every query (SVCB incl. alias chase,
+	// AAAA, A) is final, release unconditionally, even with zero positive
+	// answers (all-negative/NXDOMAIN, or a SCION-only name whose SVCB
+	// finished after AAAA/A). The gate exists to permit early release while
+	// something is still outstanding; once nothing is left to wait for,
+	// withholding Initial only serves to hang the caller until its own ctx
+	// deadline and silently drop any candidates found so far (notably SCION
+	// candidates, which never gate on their own). An empty candidate set is
+	// itself a valid, immediate answer — the caller decides what to do with
+	// it.
 	release := func() {
-		hasPositiveAddrs := (aaaaFinal && len(aaaaIPs) > 0) || (aFinal && len(aIPs) > 0)
-		if !hasPositiveAddrs {
-			return
-		}
-		if !(aaaaFinal && svcbFinal) && !delayElapsed {
-			return
+		allFinal := svcbFinal && aaaaFinal && aFinal
+		if !allFinal {
+			hasPositiveAddrs := (aaaaFinal && len(aaaaIPs) > 0) || (aFinal && len(aIPs) > 0) || svcbPositive
+			if !hasPositiveAddrs {
+				return
+			}
+			if !(aaaaFinal && svcbFinal) && !delayElapsed {
+				return
+			}
 		}
 		cands := r.buildCandidates(svc, aaaaIPs, aIPs, aaaaFinal, aFinal)
 		if !sent {
@@ -213,6 +233,7 @@ func (r *resolveRun) run(delay time.Duration) {
 		select {
 		case res := <-svcbCh:
 			svc, svcbFinal = res.svc, true
+			svcbPositive = svcHasCandidateSource(svc)
 			release()
 		case res := <-aaaaCh:
 			aaaaIPs, aaaaFinal = res.ips, true
@@ -314,6 +335,40 @@ func (r *resolveRun) exchange(name string, qtype uint16) (*dns.Msg, error) {
 	return resp, err
 }
 
+// svcHasCandidateSource reports whether a final SVCB record (ServiceMode;
+// nil for "no SVCB record") would itself contribute at least one Candidate
+// via buildCandidates — a scion= address, or an ipv4hint/ipv6hint. Used by
+// the §4.2 gate to treat a completed, candidate-bearing SVCB answer as a
+// "positive answer" in its own right (path (b)'s delay release), so a
+// SCION-only name isn't stuck waiting on AAAA/A families that will never go
+// positive. Deliberately does not require aaaaFinal/aFinal the way
+// buildCandidates' hint emission does: the gate only needs to know a
+// candidate source exists, not resolve the final hint-vs-real-answer
+// suppression (buildCandidates still applies that rule when actually
+// emitting Candidates).
+func svcHasCandidateSource(svc *dns.SVCB) bool {
+	if svc == nil {
+		return false
+	}
+	for _, v := range svc.Value {
+		switch kv := v.(type) {
+		case *dns.SVCBScion:
+			if len(kv.Addrs) > 0 {
+				return true
+			}
+		case *dns.SVCBIPv4Hint:
+			if len(kv.Hint) > 0 {
+				return true
+			}
+		case *dns.SVCBIPv6Hint:
+			if len(kv.Hint) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // buildCandidates turns the current SVCB record and AAAA/A answers into
 // Candidates. ALPN/port/priority come from svc (nil ⇒ caller's default port,
 // empty ALPN, priority 0) and apply uniformly to every Candidate it covers.
@@ -351,14 +406,21 @@ func (r *resolveRun) buildCandidates(svc *dns.SVCB, aaaaIPs, aIPs []net.IP, aaaa
 
 	var out []Candidate
 	for _, addr := range scionAddrs {
+		ia := scionIA(addr)
 		out = append(out, Candidate{
 			Family:   FamilySCION,
 			Host:     addr.Host.String(),
 			Port:     port,
-			IA:       scionIA(addr),
+			IA:       ia,
 			ALPN:     alpn,
 			Priority: priority,
-			Label:    "scion:" + addr.String(),
+			// Label uses the same canonical scionIA form as IA, not
+			// addr.String(): the latter renders a wire-round-tripped
+			// hex-range ASN in decimal (SVCBScion's wire pack/unpack loses
+			// the hex-presentation bit — see scionIA's doc comment), which
+			// would make Label disagree with IA for the exact deployed
+			// zone's "games" record.
+			Label: "scion:" + ia + "," + addr.Host.String(),
 		})
 	}
 

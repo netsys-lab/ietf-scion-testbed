@@ -527,6 +527,122 @@ func TestResolveHost_HexASNScionParam(t *testing.T) {
 	if scion.Host != "10.44.25.3" {
 		t.Errorf("Host = %q, want 10.44.25.3", scion.Host)
 	}
+	if scion.Label != "scion:71-2:0:4a,10.44.25.3" {
+		t.Errorf("Label = %q, want scion:71-2:0:4a,10.44.25.3 (same canonical form as IA, not addr.String()'s decimal-ASN rendering)", scion.Label)
+	}
+}
+
+// (k) SCION-only name (no A/AAAA records at all — NODATA for both, matching
+// the deployed zone's "games" pattern: SVCB scion= with no address RRs):
+// ResolveHost must still release promptly instead of hanging, because
+// hasPositiveAddrs required at least one positive AAAA/A answer and neither
+// family is ever positive here. A final SVCB that produced a SCION candidate
+// must itself count as a positive answer for the delay-path gate, and once
+// every query (SVCB/AAAA/A) is final there is nothing left to wait for
+// regardless.
+func TestResolveHost_SCIONOnlyNoAddresses(t *testing.T) {
+	f := newFakeDNS(t)
+	f.set("games.scion.", dns.TypeSVCB, mustRR(t,
+		`games.scion. 300 IN SVCB 1 . alpn=h3 scion=1-150\,10.20.3.215`))
+	// Deliberately no AAAA/A records registered: both are NODATA.
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	start := time.Now()
+	res, err := ResolveHost(ctx, "games.scion", 443, ResolveOptions{Resolver: f.addr})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ResolveHost: %v, want nil error (SCION-only names must resolve, not hang to ctx deadline)", err)
+	}
+	if elapsed >= 500*time.Millisecond {
+		t.Fatalf("ResolveHost took %v, want a prompt return (<500ms) for a SCION-only name with a 2s ctx", elapsed)
+	}
+
+	final := res.Initial
+	updates, closed := drainUpdates(res.Updates, time.Second)
+	if !closed {
+		t.Fatal("Updates did not close")
+	}
+	if len(updates) > 0 {
+		final = updates[len(updates)-1]
+	}
+
+	if len(final) != 1 {
+		t.Fatalf("final candidate set = %v, want exactly the SCION candidate", labels(final))
+	}
+	if final[0].Family != FamilySCION || final[0].IA != "1-150" || final[0].Host != "10.20.3.215" {
+		t.Fatalf("candidate = %+v, want the SCION candidate 1-150,10.20.3.215", final[0])
+	}
+}
+
+// (l) Every query (SVCB, AAAA, A) resolves negative — no SVCB record, no
+// AAAA/A records (the NXDOMAIN/no-records case): ResolveHost must return
+// promptly with an empty candidate set and a nil error once all three
+// queries are final. An empty Initial is a valid outcome; the caller (not
+// the resolver) decides what to do with no candidates.
+func TestResolveHost_AllNegativeReturnsEmptyPromptly(t *testing.T) {
+	f := newFakeDNS(t) // no records registered for this name at all
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	start := time.Now()
+	res, err := ResolveHost(ctx, "nowhere.scion", 443, ResolveOptions{Resolver: f.addr})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ResolveHost: %v, want nil error even though every query answered negative", err)
+	}
+	if elapsed >= 500*time.Millisecond {
+		t.Fatalf("ResolveHost took %v, want a prompt return (<500ms) once all queries are final-negative", elapsed)
+	}
+	if len(res.Initial) != 0 {
+		t.Fatalf("Initial = %v, want empty (no SVCB/AAAA/A records at all)", labels(res.Initial))
+	}
+
+	updates, closed := drainUpdates(res.Updates, time.Second)
+	if !closed {
+		t.Fatal("Updates did not close")
+	}
+	if len(updates) != 0 {
+		t.Fatalf("got %d updates, want none", len(updates))
+	}
+}
+
+// (m) SCION-only name whose AAAA answer is negative but held back well past
+// the default 50ms Resolution Delay (A answers promptly negative): the SCION
+// candidate from the completed SVCB must release at ~delay via the §4.2
+// delay path, not block until AAAA's slow final answer.
+func TestResolveHost_SCIONOnlyReleasesAtDelayWithSlowAAAA(t *testing.T) {
+	f := newFakeDNS(t)
+	f.set("slowv6.scion.", dns.TypeSVCB, mustRR(t,
+		`slowv6.scion. 300 IN SVCB 1 . alpn=h3 scion=1-150\,10.20.3.215`))
+	f.setDelay("slowv6.scion.", dns.TypeAAAA, 500*time.Millisecond) // no AAAA record; negative, late
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	res, err := ResolveHost(ctx, "slowv6.scion", 443, ResolveOptions{Resolver: f.addr})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("ResolveHost: %v", err)
+	}
+
+	if elapsed < 30*time.Millisecond || elapsed > 200*time.Millisecond {
+		t.Fatalf("Initial released after %v, want ~50ms (delay path; AAAA still outstanding)", elapsed)
+	}
+	if got := labels(res.Initial); len(got) != 1 {
+		t.Fatalf("Initial = %v, want exactly the SCION candidate", got)
+	}
+	if res.Initial[0].Family != FamilySCION || res.Initial[0].IA != "1-150" || res.Initial[0].Host != "10.20.3.215" {
+		t.Fatalf("Initial candidate = %+v, want the SCION candidate 1-150,10.20.3.215", res.Initial[0])
+	}
+
+	updates, closed := drainUpdates(res.Updates, 2*time.Second)
+	if !closed {
+		t.Fatal("Updates did not close")
+	}
+	if len(updates) != 0 {
+		t.Fatalf("got %d updates, want none (the late AAAA answer is negative, so the candidate set doesn't change): %v", len(updates), updates)
+	}
 }
 
 // (j) Alias chase visited-set/self-alias comparison must be case-
