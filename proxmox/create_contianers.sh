@@ -31,7 +31,7 @@ COMMON="--swap 512 --ssh-public-keys $SCRIPT_DIR/public_keys --rootfs local-lvm:
 AS_OPTS="--cores 2 --memory 1024 --cpuunits 1000 --startup order=1,up=1 $COMMON"
 DASH_OPTS="--cores 2 --memory 1024 --cpuunits 300 --startup order=3,up=3 $COMMON"
 HUB_OPTS="--cores 2 --memory 1024 --cpuunits 200 --startup order=2,up=1 $COMMON"
-PLAY_OPTS="--cores 1 --memory 1024 --cpuunits 50 --startup order=4,up=1 $COMMON"
+PLAY_OPTS="--cores 1 --memory 1024 --cpuunits 50 --startup order=4,up=1 --nameserver 10.20.3.216 $COMMON"
 
 # CT100 (Kea DHCP server) is NOT used on the reconstructed ietf-proxmox node:
 # containers have static IPs and the HOST holds 10.20.3.1 on the mgmt bridge.
@@ -152,26 +152,26 @@ pct create 213 $TEMPLATE $PLAY_OPTS --description "play-161" \
 # reachable from the network by regular-IP clients, not only over SCION. The
 # venue net is globally routable, so this leg is firewalled by ufw (deny
 # incoming; only mgmt/eth0 trusted) — see deploy_svc_endhost.yaml.
-pct create 214 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
+pct create 214 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 --nameserver 10.20.3.216 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
     --unprivileged 0 --features nesting=1 --onboot 1 --startup order=2,up=1 --description "svc-151" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.214/24,gw=10.20.3.1 \
     --net1 name=eth1,bridge=vmbr0,ip=dhcp,ip6=auto
 
 # --- svc-150/152/153: same shape as svc-151, on the remaining core ASes ---
-pct create 215 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
+pct create 215 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 --nameserver 10.20.3.216 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
     --unprivileged 0 --features nesting=1 --onboot 1 --startup order=2,up=1 --description "svc-150" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.215/24,gw=10.20.3.1 \
     --net1 name=eth1,bridge=vmbr0,ip=dhcp,ip6=auto
 
-pct create 216 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
+pct create 216 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 --nameserver 10.20.3.216 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
     --unprivileged 0 --features nesting=1 --onboot 1 --startup order=2,up=1 --description "svc-152" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.216/24,gw=10.20.3.1 \
     --net1 name=eth1,bridge=vmbr0,ip=dhcp,ip6=auto
 
-pct create 217 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 \
+pct create 217 $TEMPLATE --cores 1 --memory 2048 --swap 512 --cpuunits 50 --nameserver 10.20.3.216 \
     --rootfs local-lvm:4 --ssh-public-keys $SCRIPT_DIR/public_keys \
     --unprivileged 0 --features nesting=1 --onboot 1 --startup order=2,up=1 --description "svc-153" \
     --net0 name=eth0,bridge=mgmt,ip=10.20.3.217/24,gw=10.20.3.1 \
