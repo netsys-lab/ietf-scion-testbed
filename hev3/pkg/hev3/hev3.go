@@ -35,6 +35,7 @@ type Options struct {
 	CAFile          string        // PEM root CA file; "" ⇒ defaultCAFile if it exists, else the system pool
 	AttemptDelay    time.Duration // Race stagger; 0 ⇒ Race's default (250ms)
 	ResolutionDelay time.Duration // ResolveHost §4.2 gate; 0 ⇒ ResolveHost's default (50ms)
+	DaemonAddr      string        // sciond address passed through to DialerOptions; "" ⇒ DialerOptions' own default
 }
 
 // Result is the outcome of a successful Fetch.
@@ -72,30 +73,16 @@ func Fetch(ctx context.Context, rawURL string, o Options) (*Result, error) {
 		return nil, err
 	}
 
-	// §CLI contract: --no-scion/--no-ip apply post-resolve, before SCION
-	// path expansion — they filter the resolved candidate *families*, not
-	// individual expanded per-path sub-candidates.
-	cands = filterCandidates(cands, o.NoSCION, o.NoIP)
-	if len(cands) == 0 {
-		return nil, fmt.Errorf("hev3: fetch: no candidates for %s", host)
-	}
-
 	tlsConfig, err := buildTLSConfig(o, host)
 	if err != nil {
 		return nil, err
 	}
-	dOpts := DialerOptions{TLS: tlsConfig, K: o.K, Timeline: tl}
+	dOpts := DialerOptions{TLS: tlsConfig, K: o.K, Timeline: tl, DaemonAddr: o.DaemonAddr}
 
-	expanded := ExpandSCION(ctx, cands, dOpts)
-	if len(expanded) == 0 {
-		return nil, fmt.Errorf("hev3: fetch: no candidates for %s", host)
+	sorted, err := raceReady(ctx, cands, resolved.Updates, host, o, dOpts)
+	if err != nil {
+		return nil, err
 	}
-
-	// ExpandSCION does not expose whether it found a live sciond directly;
-	// derive nativeSCION from whether any candidate carries a pinned path
-	// (native per-path expansion is the only source of Path != nil — a
-	// scitra leg clears Path and flips to FamilyIPv6 instead).
-	sorted := Sort(expanded, hasNativeSCIONPath(expanded), 1)
 
 	dial := NewDialer(dOpts)
 	est, err := Race(ctx, sorted, dial, RaceOptions{AttemptDelay: o.AttemptDelay, Timeline: tl})
@@ -143,13 +130,15 @@ func parseTarget(rawURL string) (*url.URL, string, uint16, error) {
 	return u, host, port, nil
 }
 
-// mergeResolved implements the pragmatic §4.3 merge Race (a fixed-slice API)
-// requires:
+// mergeResolved returns the first candidate batch worth trying: the pragmatic
+// §4.3 merge Race (a fixed-slice API) requires:
 //
 //   - Initial non-empty: race Initial plus whatever Updates has already
-//     delivered (drained non-blocking) — later Updates are not awaited and
-//     do not restart a running race (full live-merge is out of scope; see
-//     the design doc).
+//     delivered (drained non-blocking) — later Updates are not awaited here
+//     and do not restart a running race (full live-merge is out of scope;
+//     see the design doc). raceReady is what keeps reading Updates beyond
+//     this point, if this first batch turns out not to be raceable once
+//     filtered and expanded.
 //   - Initial empty: block for the first non-empty Updates batch, Updates
 //     closing, or ctx.Done(), whichever comes first.
 //   - Updates closes having delivered nothing (all-negative resolve, or a
@@ -231,6 +220,111 @@ func hasNativeSCIONPath(cands []Candidate) bool {
 		}
 	}
 	return false
+}
+
+// raceReady turns a resolved candidate batch into the sorted, raceable set
+// Race needs, applying filterCandidates + ExpandSCION + Sort — and, if that
+// first batch turns out empty post-expansion, keeps retrying on updates
+// (ctx-bounded) instead of failing immediately.
+//
+// This is the fix for a real race: ResolveHost's §4.2 gate may legitimately
+// release Initial containing ONLY SCION proto-candidates (SVCB positive and
+// AAAA final, A still outstanding — resolver.go's release doc comment: "A is
+// never itself a gate requirement"). On a host with no SCION daemon and no
+// fc00 scitra route, ExpandSCION then drops those candidates entirely, and
+// deciding "no candidates" at that point — before expansion even ran, as the
+// old code did — is wrong: the A candidate is typically only milliseconds
+// away on updates. The empty check must happen POST-expansion-and-filter,
+// and an empty result must not be fatal while updates remains open.
+//
+// The non-empty first-shot fast path adds no latency: a batch that already
+// yields a non-empty raceable set after filter+expand returns immediately,
+// without ever touching updates.
+func raceReady(ctx context.Context, first []Candidate, updates <-chan []Candidate, host string, o Options, dOpts DialerOptions) ([]Candidate, error) {
+	cache := map[string][]Candidate{}
+
+	if sorted := expandAndSort(ctx, first, o, dOpts, cache); len(sorted) > 0 {
+		return sorted, nil
+	}
+
+	for {
+		select {
+		case more, ok := <-updates:
+			if !ok {
+				return nil, fmt.Errorf("hev3: fetch: no candidates for %s", host)
+			}
+			if len(more) == 0 {
+				// An empty-but-not-closed update is not expected from the
+				// current resolver, but loop rather than treat it as fatal
+				// (mirrors mergeResolved's own guard).
+				continue
+			}
+			if sorted := expandAndSort(ctx, more, o, dOpts, cache); len(sorted) > 0 {
+				return sorted, nil
+			}
+			// This batch also expands to nothing (e.g. it is still
+			// SCION-only, or every candidate got filtered) — keep waiting
+			// for updates rather than giving up.
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+// expandAndSort applies the CLI's --no-scion/--no-ip family filter (§CLI
+// contract: applies post-resolve, before SCION path expansion — it filters
+// resolved candidate *families*, not individual expanded per-path
+// sub-candidates), then ExpandSCION (via expandCached) and Sort.
+//
+// ExpandSCION does not expose whether it found a live sciond directly;
+// nativeSCION for Sort is derived from whether any candidate carries a
+// pinned path (native per-path expansion is the only source of Path != nil —
+// a scitra leg clears Path and flips to FamilyIPv6 instead).
+func expandAndSort(ctx context.Context, batch []Candidate, o Options, dOpts DialerOptions, cache map[string][]Candidate) []Candidate {
+	filtered := filterCandidates(batch, o.NoSCION, o.NoIP)
+	if len(filtered) == 0 {
+		return nil
+	}
+	expanded := expandCached(ctx, filtered, dOpts, cache)
+	if len(expanded) == 0 {
+		return nil
+	}
+	return Sort(expanded, hasNativeSCIONPath(expanded), 1)
+}
+
+// expandCached runs ExpandSCION over cands, but for any SCION proto-
+// candidate (FamilySCION, Path nil, not ViaScitra) already present in cache
+// — because an earlier batch in this same raceReady loop already ran it
+// through ExpandSCION — reuses the cached result instead of calling
+// ExpandSCION again.
+//
+// Without this, a SCION proto-candidate that ResolveHost keeps re-sending
+// across batches (its Label is stable; resolveRun.buildCandidates rebuilds
+// the full set fresh on every release, so the same dropped candidate
+// reappears in every subsequent merged batch) would get handed to
+// ExpandSCION again on every retried batch — and, since ExpandSCION emits a
+// Timeline "fail" note each time it drops a candidate (see dial_scion.go's
+// note calls), that would duplicate the drop-note once per retry instead of
+// recording it once.
+func expandCached(ctx context.Context, cands []Candidate, dOpts DialerOptions, cache map[string][]Candidate) []Candidate {
+	var toExpand, out []Candidate
+	for _, c := range cands {
+		if c.Family == FamilySCION && c.Path == nil && !c.ViaScitra {
+			if cached, ok := cache[c.Label]; ok {
+				out = append(out, cached...)
+				continue
+			}
+			toExpand = append(toExpand, c)
+			continue
+		}
+		out = append(out, c)
+	}
+	for _, c := range toExpand {
+		res := ExpandSCION(ctx, []Candidate{c}, dOpts)
+		cache[c.Label] = res
+		out = append(out, res...)
+	}
+	return out
 }
 
 // buildTLSConfig builds the single tls.Config shared by every race leg:

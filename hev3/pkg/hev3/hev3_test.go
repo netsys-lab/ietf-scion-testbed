@@ -77,6 +77,98 @@ func TestFetch_EndToEndIPOnly(t *testing.T) {
 	}
 }
 
+// closedPort returns a "127.0.0.1:port" that is guaranteed to refuse
+// connections: a listener is opened and immediately closed, so nothing is
+// bound there when the caller dials it (the standard Go pattern for
+// deterministically getting an address that won't accept a connection).
+func closedPort(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := l.Addr().String()
+	if err := l.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	return addr
+}
+
+// TestFetch_SCIONOnlyInitialWithLateAStillFetches is the regression test for
+// the race documented in .superpowers/sdd/task-13-report.md's "Concerns"
+// section: `web`'s real SVCB record carries a scion= candidate but no AAAA
+// record, exactly like this test's zone. ResolveHost's §4.2 gate can then
+// release Initial as soon as SVCB+AAAA are both final (see resolver.go's
+// release doc comment: "A is never itself a gate requirement"), containing
+// ONLY the SCION candidate, while the A answer is still in flight. On a host
+// with no SCION daemon (DaemonAddr pointed at a closed port) and no fc00
+// scitra route (setRoute(t, false)), ExpandSCION drops that lone candidate.
+// Pre-fix, Fetch decided "no candidates" right there. Post-fix, Fetch must
+// keep waiting on Updates and succeed once the delayed A answer arrives.
+func TestFetch_SCIONOnlyInitialWithLateAStillFetches(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "late-a-wins")
+	}))
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+
+	tcp := srv.Listener.Addr().(*net.TCPAddr)
+
+	f := newFakeDNS(t)
+	// SVCB carries a scion= candidate and no AAAA record at all (matches the
+	// deployed zone's "web" shape). A is delayed well past ResolutionDelay,
+	// so Initial releases via §4.2 gate path (a) — SVCB+AAAA final — with
+	// only the SCION candidate; A only shows up on a later Update. No
+	// alpn=h3: that would also apply to the A candidate the SVCB record
+	// covers (buildCandidates applies ALPN uniformly), forcing an HTTP/3-QUIC
+	// dial against a plain TLS+h2 httptest server.
+	f.set("sciononly.test.", dns.TypeSVCB, mustRR(t,
+		`sciononly.test. 300 IN SVCB 1 . scion=1-150\,10.20.3.215`))
+	f.set("sciononly.test.", dns.TypeA, mustRR(t, fmt.Sprintf("sciononly.test. 300 IN A %s", tcp.IP.String())))
+	f.setDelay("sciononly.test.", dns.TypeA, 150*time.Millisecond)
+
+	setRoute(t, false) // no fc00 scitra route
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rawURL := fmt.Sprintf("https://sciononly.test:%d/", tcp.Port)
+	start := time.Now()
+	res, err := Fetch(ctx, rawURL, Options{
+		Resolver:        f.addr,
+		Insecure:        true,
+		ResolutionDelay: 30 * time.Millisecond,
+		DaemonAddr:      closedPort(t), // no SCION daemon
+	})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("Fetch: %v, want it to fall through to the late A candidate instead of erroring", err)
+	}
+
+	if elapsed < 150*time.Millisecond || elapsed > time.Second {
+		t.Fatalf("Fetch took %v, want it bounded by the ~150ms delayed A answer, not ctx's 5s timeout", elapsed)
+	}
+	if !strings.Contains(string(res.Body), "late-a-wins") {
+		t.Fatalf("Result.Body = %q, want it to contain the served response", res.Body)
+	}
+	if res.Winner.Family != FamilyIPv4 {
+		t.Fatalf("Winner.Family = %v, want FamilyIPv4 (the SCION candidate must have been dropped, not raced)", res.Winner.Family)
+	}
+
+	// The dropped SCION candidate must be Timeline-noted exactly once, not
+	// once per retried batch (expandCached's dedupe).
+	var scionFails int
+	for _, ev := range res.Timeline {
+		if ev.Kind == "fail" && strings.HasPrefix(ev.Label, "scion:") {
+			scionFails++
+		}
+	}
+	if scionFails != 1 {
+		t.Fatalf("got %d Timeline 'fail' notes for the SCION candidate, want exactly 1 (deduped across retried batches): %+v", scionFails, res.Timeline)
+	}
+}
+
 // TestFetch_RejectsNonHTTPSScheme pins the "h3/h2 only" contract.
 func TestFetch_RejectsNonHTTPSScheme(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

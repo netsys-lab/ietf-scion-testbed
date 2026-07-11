@@ -146,42 +146,11 @@ A_OUT="$(dig @127.0.0.1 -p "$DNS_PORT" A web.scion +short)"
 [ "$A_OUT" = "127.0.0.1" ] || fail "A web.scion = '$A_OUT', want 127.0.0.1"
 echo "A web.scion -> $A_OUT"
 
-# run_hev3_retrying works around a known, timing-dependent gap in
-# pkg/hev3's resolve/merge contract that this exact devbox scenario
-# triggers: `web`'s SVCB carries a scion= candidate but no AAAA record, so
-# ResolveHost's §4.2 gate can release Initial as soon as SVCB+AAAA are both
-# final (a documented early-release path that deliberately does not wait on
-# A - see resolver.go's `release` doc comment) — occasionally before the A
-# answer (the only surviving candidate once ExpandSCION drops SCION on a
-# daemon-/scitra-less devbox) has arrived. mergeResolved then races
-# Initial as-is without waiting for the later Update carrying A (see its
-# doc comment: "later Updates are not awaited"), so Fetch can transiently
-# see zero candidates post-expansion ("no candidates for web.scion"). This
-# reproduces on a bare `hev3-server`+coredns pair (no test-script
-# involvement) at roughly a 1-in-5 rate; a handful of retries makes the
-# false-negative probability negligible (0.2^5 < 0.04%) without masking a
-# real pipeline break, which fails every attempt, not one in five. Flagged
-# as a concern in the task report — belongs on the controller's fix list.
-run_hev3_retrying() {
-    local out="$1" err="$2"
-    shift 2
-    local attempt
-    for attempt in 1 2 3 4 5; do
-        if "$HEV3_BIN" "$@" >"$out" 2>"$err"; then
-            return 0
-        fi
-        if ! grep -q "no candidates for" "$err"; then
-            return 1 # a different failure: don't retry, surface it immediately
-        fi
-        sleep 0.2
-    done
-    return 1
-}
-
 step "hev3 fetch https://web.scion/ (--json)"
 JSON_OUT="$SCRATCH/hev3.json"
-if ! run_hev3_retrying "$JSON_OUT" "$SCRATCH/hev3.err" \
-    --resolver "127.0.0.1:${DNS_PORT}" --ca "$CA_DIR/ca.pem" --json --timeout 10s "https://web.scion/"; then
+if ! "$HEV3_BIN" \
+    --resolver "127.0.0.1:${DNS_PORT}" --ca "$CA_DIR/ca.pem" --json --timeout 10s "https://web.scion/" \
+    >"$JSON_OUT" 2>"$SCRATCH/hev3.err"; then
     cat "$SCRATCH/hev3.err" >&2
     fail "hev3 fetch of https://web.scion/ exited non-zero"
 fi
@@ -235,8 +204,9 @@ fi
 
 step "hev3 fetch https://web.scion/whoami (human output)"
 WHOAMI_OUT="$SCRATCH/hev3-whoami.txt"
-if ! run_hev3_retrying "$WHOAMI_OUT" "$SCRATCH/hev3-whoami.err" \
-    --resolver "127.0.0.1:${DNS_PORT}" --ca "$CA_DIR/ca.pem" --timeout 10s "https://web.scion/whoami"; then
+if ! "$HEV3_BIN" \
+    --resolver "127.0.0.1:${DNS_PORT}" --ca "$CA_DIR/ca.pem" --timeout 10s "https://web.scion/whoami" \
+    >"$WHOAMI_OUT" 2>"$SCRATCH/hev3-whoami.err"; then
     cat "$SCRATCH/hev3-whoami.err" >&2
     fail "hev3 fetch of https://web.scion/whoami exited non-zero"
 fi
