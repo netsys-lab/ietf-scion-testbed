@@ -143,7 +143,7 @@ address is carried as an IPv4-mapped IPv6 address (::ffff:a.b.c.d).
 A SvcParamValue whose length is zero or is not a multiple of 24 octets
 renders the RR malformed and it MUST be entirely ignored.
 
-## Presentation Format
+## Presentation Format {#presentation-format}
 
 The presentation value is a comma-separated list ({{RFC9460}},
 Appendix A.1) of SCION addresses in their canonical text form. Because
@@ -160,6 +160,12 @@ Zone-file implementations MUST accept both the decimal and hexadecimal
 ASN text forms and MUST emit the form that was parsed, without
 normalization, when round-tripping presentation data. Comparison of
 ASNs for equality is performed on the wire-format value.
+
+When converting a wire-format value to presentation form -- for
+example when printing a record received on the wire -- no parsed text
+form exists to preserve. In that case an implementation MUST render
+ASNs of 2^32 and above in the hexadecimal group form and smaller ASNs
+in decimal, matching SCION's canonical ASN text convention.
 
 ## Semantics
 
@@ -335,6 +341,37 @@ web       IN TXT  "scion=1-150,10.20.3.215"
 games     IN SVCB 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3
 games     IN TXT  "scion=71-2:0:4a,10.44.25.3"
 ~~~
+
+# Test Vectors {#test-vectors}
+
+Each vector gives the presentation form of one SCION address and the
+exact 24-octet wire encoding of a "scion" SvcParamValue carrying it,
+shown as ISD (2 octets) | ASN (6 octets) | host (16 octets); the
+whitespace is illustrative only. The reference implementation executes
+these vectors as its test suite.
+
+~~~
+Presentation: 1-150,10.20.3.215
+Wire:         0001 000000000096 00000000000000000000ffff0a1403d7
+
+Presentation: 1-ff00:0:110,2001:db8::1
+Wire:         0001 ff0000000110 20010db8000000000000000000000001
+
+Presentation: 71-2:0:4a,10.44.25.3
+Wire:         0047 00020000004a 00000000000000000000ffff0a2c1903
+~~~
+
+A value carrying both of the first two addresses is the 48-octet
+concatenation of their encodings, with the presentation form:
+
+~~~
+scion=1-150\,10.20.3.215,1-ff00:0:110\,2001:db8::1
+~~~
+
+Rendering wire values follows the canonical-ASN rule of
+{{presentation-format}}: at the threshold, the ASN ffffffff
+(2^32 - 1) renders as "4294967295" while 000100000000 (2^32) renders
+as "1:0:0".
 
 # Acknowledgments
 {:numbered="false"}
