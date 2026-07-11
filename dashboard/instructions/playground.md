@@ -29,10 +29,26 @@ setting up your own laptop (see `laptop-linux.md`).
    ping looks different depending on which AS you're in and which AS you're
    pinging into — see `faq.md` for the full explanation and worked example.
 
-4. **Session lifetime.** Your shell is sandboxed and resets when you
+4. **Two internets, one wire.** The same inter-AS links also run a plain
+   BGP/IP network (BIRD, IPv4+IPv6) — so you can compare today's routing
+   with SCION side by side:
+
+   ```
+   hev3 https://web.scion/         # race SCION vs IPv6 vs IPv4 to one server
+   traceroute as153.scion          # per-AS anchor hops (as150 … as161)
+   mtr as150.scion                 # live per-hop latency
+   tcpdump -ni eth0 icmp           # watch your own packets (no root needed)
+   ```
+
+   Now shape a link from the dashboard: both planes slow down (same wire!),
+   but SCION *reroutes* (`hev3 --no-ip -k 3 https://web.scion/` — path #p2
+   takes over) while `traceroute` keeps showing the same degraded hops —
+   BGP is blind to latency and only reacts when the link actually dies.
+
+5. **Session lifetime.** Your shell is sandboxed and resets when you
    disconnect — nothing you do there persists or affects other attendees.
    Reconnect any time by clicking the card again.
 
-5. **Want your own endhost instead?** The "Join with your laptop"
+6. **Want your own endhost instead?** The "Join with your laptop"
    section on this page walks you through claiming a WireGuard conf and
    running real SCION tools locally — same testbed, your own machine.

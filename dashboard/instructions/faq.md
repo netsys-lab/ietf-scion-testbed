@@ -15,6 +15,17 @@ the packets you actually send. Link "shaping" controls on the dashboard
 interfaces, so a shaped link changes real RTT you can measure from your
 own `ping`.
 
+**What's the "BGP" badge / the `as150.scion` names?** The same inter-AS
+links also carry a plain BGP/IP network (BIRD on every AS, IPv4+IPv6), so
+you can compare today's Internet routing with SCION on identical
+infrastructure. Each AS has an anchor address (`as150.scion` …
+`as161.scion`) — `traceroute as153.scion` shows the BGP path as per-AS
+hops, and `hev3 https://web.scion/` races SCION against IPv6/IPv4 to the
+same server. Link shaping applies to both planes at once (one `tc` qdisc on
+the shared interface); the map's BGP badge turns red when a "link failure"
+(100% loss) tears the BGP session down and the fabric reroutes — SCION, by
+contrast, fails over per-flow in about one round trip.
+
 **Can I just download prebuilt SCION binaries?** No — the official
 scionproto release binaries (including `v0.15.0`) are built
 `CGO_ENABLED=0`, and `v0.15.0` reverted to the mattn/go-sqlite3 driver,

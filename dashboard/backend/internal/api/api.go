@@ -179,6 +179,7 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 	s.mux.HandleFunc("GET /api/history", s.handleHistory)
 	s.mux.HandleFunc("PUT /api/links/{id}/shaping", s.handleShaping)
 	s.mux.HandleFunc("POST /api/links/{id}/reset", s.handleReset)
+	s.mux.HandleFunc("POST /api/reset-all", s.handleResetAll)
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("GET /api/live", s.handleLive)
 	s.mux.HandleFunc("GET /api/join/meta", s.handleJoinMeta)
@@ -246,6 +247,20 @@ func (s *server) handleShaping(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleReset(w http.ResponseWriter, r *http.Request) {
 	s.applyShaping(w, r, true)
+}
+
+// handleResetAll clears shaping on every link, both directions — the booth
+// "make everything nominal again" control after demos.
+func (s *server) handleResetAll(w http.ResponseWriter, r *http.Request) {
+	results := []linkdclient.Result{}
+	for _, l := range s.g.Links {
+		results = append(results, s.lc.Apply(r.Context(), l, "both", derive.Shaping{}, true)...)
+	}
+	status := http.StatusOK
+	if allFailed(results) {
+		status = http.StatusBadGateway
+	}
+	writeJSON(w, status, map[string]any{"results": results})
 }
 
 // applyShaping validates the link id, body, and direction, then fans the

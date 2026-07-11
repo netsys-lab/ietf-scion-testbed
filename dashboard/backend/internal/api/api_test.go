@@ -30,6 +30,7 @@ type fakeController struct {
 	lastDirection string
 	lastClear     bool
 	lastShaping   derive.Shaping
+	applies       int
 	baseline      map[string]*derive.Shaping
 }
 
@@ -42,6 +43,7 @@ func (f *fakeController) PollBGP(ctx context.Context) map[string]*derive.BGPLink
 }
 
 func (f *fakeController) Apply(ctx context.Context, link topo.Link, direction string, p derive.Shaping, clear bool) []linkdclient.Result {
+	f.applies++
 	f.lastDirection = direction
 	f.lastClear = clear
 	f.lastShaping = p
@@ -337,4 +339,26 @@ func hasLink(g topo.Graph, id string) bool {
 		}
 	}
 	return false
+}
+
+func TestResetAll(t *testing.T) {
+	lc := &fakeController{results: []linkdclient.Result{{AS: 155, OK: true}}}
+	h, _, _, g := newTestServer(t, lc)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/reset-all", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rr.Code)
+	}
+	if !lc.lastClear || lc.lastDirection != "both" {
+		t.Fatalf("want clear=true direction=both, got clear=%v dir=%q", lc.lastClear, lc.lastDirection)
+	}
+	if lc.applies != len(g.Links) {
+		t.Fatalf("want one Apply per link (%d links), got %d", len(g.Links), lc.applies)
+	}
+	var resp struct {
+		Results []linkdclient.Result `json:"results"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil || len(resp.Results) != len(g.Links) {
+		t.Fatalf("results: %+v err %v", resp.Results, err)
+	}
 }

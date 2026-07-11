@@ -9,8 +9,17 @@
 // disc-radius bump. The .actions links are hidden in screen mode (chrome.css
 // body.screen .actions) — a wall display isn't meant to be clicked.
 import { useEffect } from "react";
+import { resetAllLinks } from "../api";
 import { useFabricStore } from "../store";
 import KpiStrip from "./KpiStrip";
+
+/** Confirm-guarded reset of every link's shaping (booth control; the
+ * per-link reset lives in LinkPanel). Errors surface as an alert — booth
+ * staff need the failure, not a silent no-op. */
+function onResetAll() {
+  if (!window.confirm("Reset shaping on ALL links to nominal?")) return;
+  resetAllLinks().catch((e) => window.alert(`reset-all failed: ${e}`));
+}
 
 export default function Chrome() {
   const connected = useFabricStore((s) => s.connected);
@@ -38,6 +47,9 @@ export default function Chrome() {
       <div className="actions" role="group" aria-label="Attendee links">
         <button className="tracebtn" onClick={() => select({ kind: "trace", id: "trace" })}>
           TRACE
+        </button>
+        <button className="tracebtn" onClick={onResetAll}>
+          RESET LINKS
         </button>
         <a href="/join">
           JOIN TESTBED

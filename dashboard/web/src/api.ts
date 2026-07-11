@@ -106,6 +106,12 @@ export function putShaping(linkId: string, direction: Direction, params: Shaping
   });
 }
 
+/** resetAllLinks clears shaping on every link (both directions) — the booth
+ * "make everything nominal again" control after demos. */
+export function resetAllLinks(): Promise<ShapingResponse> {
+  return request<ShapingResponse>("/api/reset-all", { method: "POST" });
+}
+
 export function resetShaping(linkId: string, direction: Direction): Promise<ShapingResponse> {
   return request<ShapingResponse>(`/api/links/${encodeURIComponent(linkId)}/reset`, {
     method: "POST",

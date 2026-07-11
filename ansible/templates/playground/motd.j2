@@ -5,8 +5,15 @@ Try these, and watch the dashboard map react:
   scion showpaths 1-150 --extended     # paths to a core AS
   scion ping 1-150,10.20.3.150         # ping a border router in AS 1-150
   scion traceroute 1-153,10.20.3.153
-  curl --http3 https://<host>          # HTTP/3 (this playground ships an HTTP/3 curl)
+  hev3 https://web.scion/              # Happy Eyeballs v3: SCION vs IPv6 vs IPv4 race
+  hev3 --no-ip -k 3 https://web.scion/ # SCION multipath (shape a link -> watch failover)
   scapy-scion                          # SCION-aware scapy (raw sockets enabled)
+
+This testbed also runs plain BGP/IP over the SAME links (compare the planes!):
+  traceroute as153.scion               # hops show per-AS anchors (as150..as161)
+  ping as150.scion                     # or web.scion / web2.scion
+  mtr as150.scion                      # live per-hop latency (shape a link, watch it move)
+  tcpdump -ni eth0 icmp                # no root needed; watch your own packets
 
 Endhost ASes you can join with your laptop: 1-152, 1-155, 1-158, 1-161.
 Session is sandboxed and resets on disconnect. Have fun!

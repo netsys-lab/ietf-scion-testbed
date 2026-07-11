@@ -24,6 +24,20 @@
     # File caps so guests (uid 2000, no sudo) can capture on eth0 — same
     # posture as the scapy raw-socket caps that already survive on these
     # unprivileged CTs. Ubuntu ships tcpdump without caps (root-only).
+    - name: QUIC UDP buffer sysctls (silences quic-go rmem warning on every hev3 run; improves h3 throughput)
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-quic-buffers.conf
+        mode: "0644"
+        content: |
+          net.core.rmem_max=8388608
+          net.core.wmem_max=8388608
+      register: quic_sysctl
+
+    - name: Apply sysctls
+      ansible.builtin.command: sysctl --system
+      when: quic_sysctl.changed
+      changed_when: true
+
     - name: tcpdump usable without root
       ansible.builtin.shell: |
         getcap /usr/bin/tcpdump | grep -q cap_net_raw && echo HAVE || setcap cap_net_raw,cap_net_admin+eip /usr/bin/tcpdump
