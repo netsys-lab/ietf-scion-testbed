@@ -1,34 +1,58 @@
-IETF 126 Vienna Hackathon SCION Testbed
-=======================================
+# IETF 126 Vienna Hackathon — SCION Testbed
 
-This repo delivers the testbed's live dashboard (the `fabricd` backend plus
-its web frontend), the `scion-linkd` link-shaping daemon running in every AS
-container, and the beacon-metadata sync that keeps both in step with the
-topology. To build, deploy, and operate: see [DEPLOY.md](DEPLOY.md).
+A 12-AS [SCION](https://scion-architecture.net/) network that runs as
+Proxmox LXC containers, built for the SCION Secure Path-Aware Routing
+project at the IETF 126 hackathon. Attendees join it as real SCION
+endhosts — over WireGuard from their laptop or through a zero-install
+browser terminal — and compare path-aware SCION against ordinary BGP/IP
+routing on identical links.
 
-```
- Management Network            IETF IPv4+IPv6 Network
-     10.20.3.0/24
-                    +-------+
-               +----| AS150 |----+
-               |    +-------+    |
-               |       ...       |
-               |    +-------+    |
-               +----| AS161 |----+
-+--------+     |    +-------+    |
-|Kea DHCP|-----+                 |
-+--------+     |                 |
-            +-----+         +---------+
-            |vmbr0|         | pubnet  |
-            +-----+         +---------+
-               |             |   |   |
-              ETH0         ETH1 ETH2 ETH3
-```
+## What's in this repo
 
-### Open Questions ###
-How to configure internal addresses of the border routers so they are exposed to
-pubnet?
+- **Dashboard** (`dashboard/` — `fabricd` backend + web UI): live topology
+  and traffic map, per-link shaping controls (latency/bandwidth/jitter/loss),
+  ID-INT path tracing, BGP session badges and a BGP path overlay, plus the
+  attendee join flow (WireGuard conf claim, endhost bundles, testbed TLS CA).
+- **linkd** (`linkd/`): per-AS link-shaping daemon (`tc` netem/tbf on the
+  inter-AS interfaces) with a REST API; also reports BGP sessions/routes.
+- **BGP/IP fabric** (`config/AS*/bird.conf`, `ansible/`): BIRD + BFD over
+  the same inter-AS links — the "today's Internet" comparison plane, with
+  per-AS anchor names (`as150.scion` … `as161.scion`).
+- **SCION DNS** (`config/coredns/`): a CoreDNS fork serving the `scion.`
+  zone with SVCB `scion=`/`scion-policy=` SvcParams and `scion=` TXT
+  records, plus the `scitra` plugin (SCION-IP-translator AAAA synthesis).
+- **Attendee access** (`ansible/`, `proxmox/`): WireGuard hub + join page,
+  browser playground containers, per-AS endhost bootstrap servers.
+- **Topology tooling** (`topology/`): source-of-truth topo files, beacon
+  staticinfo metadata sync, and consistency verification.
 
-### Docs ###
-- Kea DHCP Server
-    - https://kea.readthedocs.io/en/stable/index.html
+## Topology
+
+ISD 1, ASes `1-150` … `1-161`: four meshed core ASes (150–153), the rest
+non-core beneath them, 24 inter-AS links (including one peering link).
+Each AS container runs a border router, control service, and sciond, with
+one bridge per inter-AS link. A management network (`10.20.3.0/24`)
+carries control/metrics; the BGP fabric uses `10.<AS>.0.0/16` +
+`fd00:beef:<AS>::/48` over the same wires. See `topology/topology.topo`
+and `config/AS*/topology.json`.
+
+## Related repositories
+
+- [lschulz/scion](https://github.com/lschulz/scion) — the deployed SCION
+  stack (ID-INT + border-router RTT/traffic metrics).
+- [tjohn327/dns](https://github.com/tjohn327/dns) and
+  [tjohn327/coredns](https://github.com/tjohn327/coredns) (branch
+  `scion-dev`) — typed `scion`/`scion-policy` SvcParamKeys and the scitra
+  plugin.
+- [tjohn327/scion-hev3](https://github.com/tjohn327/scion-hev3) — Happy
+  Eyeballs v3 for SCION (racer library, CLI, demo server) and the
+  `draft-john-scion-svcb` IETF draft.
+
+## Operating it
+
+- Build, deploy, and rebuild-from-scratch: [DEPLOY.md](DEPLOY.md)
+- Booth demo scripts with measured numbers: [DEMOS.md](DEMOS.md)
+- Fleet health: `bash tools/booth-check.sh`
+- Topology consistency: `python3 topology/verify_topology.py`
+- Tests: `cd linkd && make test` · `cd dashboard/backend && go test ./...`
+  · `cd dashboard/web && npx vitest run`
