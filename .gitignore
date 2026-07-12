@@ -3,3 +3,5 @@ __pycache__/
 .build/
 ansible/group_vars/*.yml
 !ansible/group_vars/*.yml.example
+# superpowers workspace (ledger, brainstorm artifacts) — local-only
+.superpowers/
