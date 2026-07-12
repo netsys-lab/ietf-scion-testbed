@@ -30,11 +30,11 @@ contrast, fails over per-flow in about one round trip.
 The demo servers use a throwaway testbed CA, not a public one. On the
 playground shells the CA is preinstalled in the system trust store, so plain
 `curl https://web.scion/` just works. From your own laptop (WireGuard), use
-`hev3` (it ships the CA and trusts it automatically) or grab the CA from
-the booth / repo (`ansible/files/hev3-ca/ca.pem`) and pass
-`curl --cacert ca.pem https://web.scion/` — or accept `-k` for a quick
-look. Never trust this CA outside the testbed; its private key is public by
-design.
+`hev3` (it ships the CA and trusts it automatically) or download the CA
+from the join page ("Download TLS CA", raw URL `/api/join/ca.pem`) and pass
+`curl --cacert scion-testbed-ca.pem https://web.scion/` — or accept `-k`
+for a quick look. Never trust this CA outside the testbed; its private key
+is public by design — stick to `--cacert`, don't install it system-wide.
 
 **Can I just download prebuilt SCION binaries?** No — the official
 scionproto release binaries (including `v0.15.0`) are built

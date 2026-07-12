@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"sort"
 	"strconv"
 	"time"
@@ -141,6 +142,39 @@ func (s *server) handleJoinClaim(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// caPEM returns the testbed TLS CA bytes, or nil if the CA is not
+// configured or not readable (both mean: don't offer it).
+func (jc JoinConfig) caPEM() []byte {
+	if jc.HEv3CAFile == "" {
+		return nil
+	}
+	data, err := os.ReadFile(jc.HEv3CAFile)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+// handleJoinCA serves the testbed TLS CA (the hev3/web.scion demo CA) so
+// laptop attendees can `curl --cacert scion-testbed-ca.pem https://web.scion/`
+// — the playground/svc CTs trust it system-wide, laptops have no other
+// self-serve source (the CA is public by design; committed key material).
+func (s *server) handleJoinCA(w http.ResponseWriter, r *http.Request) {
+	if !s.join.Enabled {
+		http.NotFound(w, r)
+		return
+	}
+	pem := s.join.caPEM()
+	if pem == nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", `attachment; filename="scion-testbed-ca.pem"`)
+	w.WriteHeader(http.StatusOK)
+	w.Write(pem)
+}
+
 func (s *server) handleJoinMeta(w http.ResponseWriter, r *http.Request) {
 	if !s.join.Enabled {
 		http.NotFound(w, r)
@@ -177,7 +211,7 @@ func (s *server) handleJoinMeta(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"enabled":         true,
 		"joinable_ases":   s.join.JoinableASes,
 		"joinable":        joinable,
@@ -186,5 +220,9 @@ func (s *server) handleJoinMeta(w http.ResponseWriter, r *http.Request) {
 		"hub_ok":      hubOK,
 		"endpoint_v6": s.join.endpointV6Str(),
 		"endpoint_v4": s.join.endpointV4Str(),
-	})
+	}
+	if s.join.caPEM() != nil {
+		resp["ca_url"] = "/api/join/ca.pem"
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

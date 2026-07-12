@@ -112,7 +112,11 @@ function ClaimView({ claim, meta, v4, setV4 }: { claim: ClaimResult; meta: JoinM
         {claim.conf_v4 && (
           <label><input type="checkbox" checked={v4} onChange={(e) => setV4(e.target.checked)} /> IPv4 endpoint</label>
         )}
+        {meta?.ca_url && <a href={meta.ca_url} download>Download TLS CA (scion-testbed-ca.pem)</a>}
       </div>
+      {meta?.ca_url && (
+        <p className="join-note">The CA lets plain <code>curl --cacert scion-testbed-ca.pem https://web.scion/</code> work from your laptop — testbed-only trust, don’t install it system-wide.</p>
+      )}
       <p className="join-note">One conf tunnels the whole testbed. Pick an AS below to be an endhost in it — you can set up in several.</p>
       <div className="join-tabs" role="tablist">
         {joinable.map((j) => (

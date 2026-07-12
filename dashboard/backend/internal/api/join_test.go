@@ -20,7 +20,7 @@ import (
 // Disabled join surface must be invisible: every join route 404s.
 func TestJoinDisabledAll404(t *testing.T) {
 	h, _, _, _ := newTestServer(t, nil) // newTestServer passes JoinConfig{} (disabled)
-	for _, u := range []string{"/api/join/meta", "/api/join/bundle/158"} {
+	for _, u := range []string{"/api/join/meta", "/api/join/bundle/158", "/api/join/ca.pem"} {
 		rr := httptest.NewRecorder()
 		h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, u, nil))
 		if rr.Code != http.StatusNotFound {
@@ -273,5 +273,87 @@ func TestClaimWithoutASDefaultsToFirstJoinable(t *testing.T) {
 		if v, ok := ids[key]; !ok || v == "" {
 			t.Fatalf("fc00_identities[%q] = %v, want non-empty", key, v)
 		}
+	}
+}
+
+// The join page offers the hev3/web.scion TLS CA for laptop attendees
+// (plain curl needs --cacert; only the CTs got the CA into their system
+// store). Serving is gated on join_enabled + a configured, readable file.
+func TestJoinCAPEM(t *testing.T) {
+	pem := "-----BEGIN CERTIFICATE-----\nMIIFAKE\n-----END CERTIFICATE-----\n"
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	os.WriteFile(caPath, []byte(pem), 0o644)
+
+	jc := JoinConfig{
+		Enabled: true, BoothCode: "secret", ISD: 1,
+		JoinableASes: []int{158}, EndpointV6: "fd99::201", ListenPort: 51820,
+		RateMax: 100, RateWindow: time.Minute,
+		HEv3CAFile: caPath,
+	}
+	h := newJoinServerWithConfig(t, 1, jc)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/join/ca.pem", nil)
+	req.SetBasicAuth("scion", "secret")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if rr.Body.String() != pem {
+		t.Fatalf("body mismatch: %q", rr.Body.String())
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "application/x-pem-file" {
+		t.Fatalf("content-type: %q", ct)
+	}
+	if cd := rr.Header().Get("Content-Disposition"); cd != `attachment; filename="scion-testbed-ca.pem"` {
+		t.Fatalf("content-disposition: %q", cd)
+	}
+
+	// meta advertises the download URL only when the CA is configured
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/join/meta", nil)
+	req.SetBasicAuth("scion", "secret")
+	h.ServeHTTP(rr, req)
+	var meta map[string]any
+	json.Unmarshal(rr.Body.Bytes(), &meta)
+	if meta["ca_url"] != "/api/join/ca.pem" {
+		t.Fatalf("meta ca_url: %v", meta["ca_url"])
+	}
+}
+
+func TestJoinCAPEMUnconfigured404(t *testing.T) {
+	h := newJoinServer(t, 1) // no HEv3CAFile
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/join/ca.pem", nil)
+	req.SetBasicAuth("scion", "secret")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("want 404 without configured CA, got %d", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/join/meta", nil)
+	req.SetBasicAuth("scion", "secret")
+	h.ServeHTTP(rr, req)
+	var meta map[string]any
+	json.Unmarshal(rr.Body.Bytes(), &meta)
+	if _, ok := meta["ca_url"]; ok {
+		t.Fatalf("meta must omit ca_url when unconfigured: %v", meta["ca_url"])
+	}
+}
+
+func TestJoinCAPEMMissingFile404(t *testing.T) {
+	jc := JoinConfig{
+		Enabled: true, BoothCode: "secret", ISD: 1,
+		JoinableASes: []int{158}, EndpointV6: "fd99::201", ListenPort: 51820,
+		RateMax: 100, RateWindow: time.Minute,
+		HEv3CAFile: filepath.Join(t.TempDir(), "nope.pem"),
+	}
+	h := newJoinServerWithConfig(t, 1, jc)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/join/ca.pem", nil)
+	req.SetBasicAuth("scion", "secret")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("want 404 for unreadable CA, got %d", rr.Code)
 	}
 }

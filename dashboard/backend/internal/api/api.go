@@ -75,6 +75,13 @@ type JoinConfig struct {
 	// yielding the per-AS bootstrap-server URL, e.g. "http://10.20.3.%d:8041".
 	// Empty means bootstrap URLs are omitted from /api/join/meta.
 	BootstrapURLTemplate string
+
+	// HEv3CAFile is the PEM path of the testbed TLS CA (the hev3/web.scion
+	// demo CA) offered for download at /api/join/ca.pem — laptop attendees
+	// need it for plain curl (--cacert); the CTs already trust it
+	// system-wide. Empty or unreadable means the route 404s and meta omits
+	// ca_url.
+	HEv3CAFile string
 }
 
 // asAllowed reports whether AS number n is one of the joinable ASes.
@@ -191,6 +198,7 @@ func New(g topo.Graph, st *store.Store, d *derive.Deriver, lc Controller, static
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("GET /api/live", s.handleLive)
 	s.mux.HandleFunc("GET /api/join/meta", s.handleJoinMeta)
+	s.mux.HandleFunc("GET /api/join/ca.pem", s.handleJoinCA)
 	s.mux.HandleFunc("POST /api/join/claim", s.handleJoinClaim)
 	s.mux.HandleFunc("GET /api/join/bundle/{as}", s.handleJoinBundle)
 	s.mux.HandleFunc("GET /api/instructions", s.handleInstructionsList)

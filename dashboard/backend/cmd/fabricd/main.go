@@ -115,6 +115,9 @@ type config struct {
 	// BootstrapURLTemplate is a fmt template with one %d (AS number) for the
 	// per-AS end-host bootstrap-server URL surfaced on the join page.
 	BootstrapURLTemplate string `toml:"bootstrap_url_template"`
+	// HEv3CAFile is the PEM path of the testbed TLS CA offered at
+	// /api/join/ca.pem (laptop curl --cacert). Empty = route disabled.
+	HEv3CAFile string `toml:"hev3_ca_file"`
 
 	// Idint configures the ID-INT path-inspector trace feature (spec
 	// 2026-07-07). Disabled by default; in mock mode a synthetic prober is
@@ -200,6 +203,7 @@ func main() {
 		RateWindow:      time.Minute,
 
 		BootstrapURLTemplate: cfg.BootstrapURLTemplate,
+		HEv3CAFile:           cfg.HEv3CAFile,
 	}
 	var pool api.PoolStore // nil until B3 wires a real wgpool-backed store.
 

@@ -86,6 +86,19 @@
         dest: /etc/fabric/instructions/
         mode: "0644"
 
+    # Public-by-design testbed CA (hev3/web.scion TLS): the join page offers
+    # it at /api/join/ca.pem so laptop attendees can curl --cacert.
+    - name: Ensure /etc/fabricd exists
+      ansible.builtin.file:
+        path: /etc/fabricd
+        state: directory
+        mode: "0755"
+    - name: Copy testbed TLS CA for the join page
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/hev3-ca/ca.pem"
+        dest: /etc/fabricd/hev3-ca.pem
+        mode: "0644"
+
     - name: Ensure fabricd RTT-baseline persistence directory exists
       ansible.builtin.file:
         path: /var/lib/fabricd
@@ -123,6 +136,7 @@
           # Per-AS end-host bootstrap server (deploy_bootstrap_server.yaml),
           # surfaced on the join page as a clickable URL per joinable AS.
           bootstrap_url_template = "http://10.20.3.%d:8041"
+          hev3_ca_file = "/etc/fabricd/hev3-ca.pem"
           # Venue NAT64 puts many attendees behind one source IP; 30/min
           # absorbs a booth-opening rush while still bounding brute force.
           claim_rate_max = 30
