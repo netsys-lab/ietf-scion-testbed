@@ -3,7 +3,13 @@
   hosts: playground:svc
   become: true
   vars:
-    hev3_deb: "{{ playbook_dir }}/../../hev3/dist/scion-hev3_0.1.0_amd64.deb"
+    # hev3 moved to its own repo (github.com/tjohn327/scion-hev3,
+    # checkout expected as a sibling of this repo's parent on the devbox).
+    # Build there first: cd <hev3_repo> && make deb   (needs TESTBED_ROOT
+    # pointing here for the CA payload; default matches this layout).
+    # Override either var with -e for a different checkout.
+    hev3_repo: "{{ lookup('env', 'HOME') }}/tjohn327/scion-hev3"
+    hev3_deb: "{{ hev3_repo }}/dist/scion-hev3_0.1.0_amd64.deb"
   tasks:
     - name: Copy scion-hev3 package
       ansible.builtin.copy:
