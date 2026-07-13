@@ -65,9 +65,21 @@
   hosts: dashboard
   become: true
   tasks:
+    # fabricd's deb normally owns /var/lib/fabricd, but the documented deploy
+    # order runs this hub playbook BEFORE deploy_dashboard on a fresh fleet
+    # (fabricd log.Fatals if the pool file is missing at startup), so the dir
+    # may not exist yet. Ensure it — idempotent where the deb already made it.
+    - name: Ensure /var/lib/fabricd exists (dashboard deployed after this)
+      ansible.builtin.file:
+        path: /var/lib/fabricd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
     - name: Copy pool.json for fabricd
       ansible.builtin.copy:
-        src: "{{ wghub_build }}/pool.json"
+        src: "{{ wghub_dir | default(playbook_dir + '/../../.build/wghub') }}/pool.json"
         dest: /var/lib/fabricd/wg-pool.json
         owner: root
         group: root
