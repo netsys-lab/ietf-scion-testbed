@@ -4,13 +4,16 @@
 # Every line must read OK; exits 1 on any FAIL. ~30s.
 set -u
 
-PLAY=ietf@10.20.3.210   # play-158: has curl/dig/hev3 and mgmt reachability
+PLAY="${PLAY:-ietf@10.20.3.210}"   # play-158: has curl/dig/hev3 and mgmt reachability
+# Override SSH to target a different testbed host, e.g. the ietf-minipc-rack
+# replica: SSH="ssh -J ietf-minipc-rack -o UserKnownHostsFile=~/.ssh/known_hosts_minipc -o StrictHostKeyChecking=accept-new"
+SSH="${SSH:-ssh}"
 FAIL=0
 ok()   { printf 'OK   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1"; FAIL=1; }
 
 # One ssh: gather everything machine-readable from inside the mgmt net.
-OUT=$(ssh -o ConnectTimeout=10 "$PLAY" '
+OUT=$($SSH -o ConnectTimeout=10 "$PLAY" '
 set -u
 est=0; total=0; shaped=0; bfddown=0
 for x in 150 151 152 153 154 155 156 157 158 159 160 161; do
@@ -63,9 +66,9 @@ grep -q '^DIGANCHOR 10.150.0.1' <<<"$OUT" && ok "DNS as150.scion -> 10.150.0.1" 
                                           || fail "DNS as150.scion: $(grep '^DIGANCHOR' <<<"$OUT")"
 
 # hev3 smoke: full race (SCION should win) + IP-only (v6/v4 over the fabric).
-R1=$(ssh "$PLAY" 'hev3 https://web.scion/ 2>/dev/null | grep "winner:"')
+R1=$($SSH "$PLAY" 'hev3 https://web.scion/ 2>/dev/null | grep "winner:"')
 grep -q 'SCION' <<<"$R1" && ok "hev3 race: SCION wins ($R1)" || fail "hev3 race: $R1"
-R2=$(ssh "$PLAY" 'hev3 --no-scion https://web.scion/ 2>/dev/null | grep "winner:"')
+R2=$($SSH "$PLAY" 'hev3 --no-scion https://web.scion/ 2>/dev/null | grep "winner:"')
 grep -qE 'IPv6|IPv4' <<<"$R2" && ok "hev3 IP-only over fabric ($R2)" || fail "hev3 IP-only: $R2"
 
 exit $FAIL
