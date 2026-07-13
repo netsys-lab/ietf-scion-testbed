@@ -47,10 +47,6 @@
       ansible.builtin.command: update-ca-certificates
       when: hev3_ca_trust.changed
 
-    - name: Verify curl trusts web.scion without flags (system store; DNS + fabric already required here)
-      ansible.builtin.command: curl -s --max-time 5 https://web.scion/whoami
-      changed_when: false
-
 - name: Deploy hev3-server (Happy Eyeballs v3 demo target) on svc-150 + svc-153
   hosts: svc-150,svc-153
   become: true
@@ -123,3 +119,22 @@
     - name: Verify hev3-server is listening on 443/tcp (IP h2/h1.1)
       ansible.builtin.shell: ss -ltn | grep -q ':443 '
       changed_when: false
+
+# Client-side reachability check runs LAST — after the server play above has
+# started hev3-server on svc-150/153. Attendees reach for plain curl before
+# hev3, and curl only consults the system trust store (the CA installed in the
+# first play). On a fresh fleet the server does not exist until this playbook's
+# second play runs, so verifying web.scion in the first play would always fail;
+# hence it lives here. Retries absorb the beat between server start and the
+# fabric route/DNS being warm.
+- name: Verify curl trusts + reaches web.scion without flags (system store; DNS + fabric + server all required)
+  hosts: playground:svc
+  become: true
+  tasks:
+    - name: curl https://web.scion/whoami (no -k; system trust store)
+      ansible.builtin.command: curl -s --max-time 5 https://web.scion/whoami
+      register: webscion_curl
+      changed_when: false
+      retries: 6
+      delay: 3
+      until: webscion_curl.rc == 0 and (webscion_curl.stdout | trim | length > 0)
