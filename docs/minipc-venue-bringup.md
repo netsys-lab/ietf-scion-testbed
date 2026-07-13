@@ -28,6 +28,13 @@ Facts this procedure relies on (verified 2026-07-13 on the host):
 
 Run everything below **on the minipc host** unless a step says "from the dev box".
 
+> **Status (2026-07-13):** Item 1 has been applied to the current
+> `ietf-minipc-rack` and validated end-to-end (ansible `core 2.19.4` installed,
+> host root key `minipc-host-ansible` authorized on `ietf` fleet-wide,
+> `/etc/ansible/ansible.cfg` host-key-checking off, `update-wg-endpoint.sh`
+> ran the full host→ansible→`deploy_dashboard` path `failed=0`, timer active).
+> Re-run these steps only after a host rebuild. Item 2 runs at venue plug-in.
+
 ---
 
 ## Item 1 — make the minipc host an ansible control node
