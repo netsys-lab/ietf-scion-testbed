@@ -1,11 +1,12 @@
 #!/bin/bash
 # Generate the wg-hub server config + 50-slot attendee conf pool.
-# Output: .build/wghub/{wg0.conf,pool.json}. Idempotent only by
-# regeneration — rerunning REPLACES all keys (existing attendee confs die);
-# it refuses to overwrite unless -f is given.
+# Output: $WGHUB_OUT (default .build/wghub)/{wg0.conf,pool.json}. Idempotent
+# only by regeneration — rerunning REPLACES all keys (existing attendee confs
+# die); it refuses to overwrite unless -f is given. Set WGHUB_OUT to isolate a
+# second hub's pool (e.g. the ietf-minipc-rack replica) from the live one.
 set -euo pipefail
 
-OUT="$(cd "$(dirname "$0")/.." && pwd)/.build/wghub"
+OUT="${WGHUB_OUT:-$(cd "$(dirname "$0")/.." && pwd)/.build/wghub}"
 [ -e "$OUT/pool.json" ] && [ "${1:-}" != "-f" ] && {
   echo "refusing to overwrite existing $OUT/pool.json (use -f)"; exit 1; }
 mkdir -p "$OUT"; umask 077

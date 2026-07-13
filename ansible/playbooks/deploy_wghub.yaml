@@ -3,7 +3,7 @@
   hosts: hub
   become: true
   vars:
-    wghub_build: "{{ playbook_dir }}/../../.build/wghub"
+    wghub_build: "{{ wghub_dir | default(playbook_dir + '/../../.build/wghub') }}"
   pre_tasks:
     - name: Fail fast if the pool has not been generated
       ansible.builtin.stat:
@@ -67,7 +67,7 @@
   tasks:
     - name: Copy pool.json for fabricd
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../.build/wghub/pool.json"
+        src: "{{ wghub_build }}/pool.json"
         dest: /var/lib/fabricd/wg-pool.json
         owner: root
         group: root
