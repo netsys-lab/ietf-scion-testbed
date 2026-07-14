@@ -1,6 +1,6 @@
 $ORIGIN scion.
 $TTL 300
-@ 3600 IN SOA scitra.netsys.ovgu.de. lschulz.ovgu.de. 2026071201 7200 3600 1209600 3600
+@ 3600 IN SOA scitra.netsys.ovgu.de. lschulz.ovgu.de. 2026071401 7200 3600 1209600 3600
 @ IN NS scitra.netsys.ovgu.de.
 ; scion= TXT on every SCION-capable name (discovery via dig TXT; scitra input).
 ; Safe alongside A/AAAA since scitra dd03a3ffe: native records take precedence,
@@ -59,6 +59,10 @@ as161       IN A    10.161.0.1
 as161       IN AAAA fd00:beef:161::1
 as161       IN TXT  "scion=1-161,10.20.3.161"
 ; SCION-only names: SVCB + TXT (scitra serves fc00 AAAA to plain clients)
+; welcome -> svc-151 (CT214, 1-151,10.20.3.214): SCION-only demo name; scitra
+; synthesizes the fc00 AAAA from the scion= TXT (no explicit A/AAAA here).
+welcome    IN SVCB 1 . alpn=h3 scion=1-151\,10.20.3.214
+welcome    IN TXT  "scion=1-151,10.20.3.214"
 games      IN SVCB 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3 scion-policy=latency
 games      IN TXT  "scion=71-2:0:4a,10.44.25.3"
 matrix.netsys.ovgu   IN TXT "scion=71-2:0:4a,141.44.17.123"
