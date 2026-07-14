@@ -47,17 +47,17 @@
       ansible.builtin.command: update-ca-certificates
       when: hev3_ca_trust.changed
 
-- name: Deploy hev3-server (Happy Eyeballs v3 demo target) on svc-150 + svc-153 + svc-151
-  hosts: svc-150,svc-153,svc-151
+- name: Deploy hev3-server (Happy Eyeballs v3 demo target) on svc-150 + svc-153
+  hosts: svc-150,svc-153
   become: true
   vars:
     # inventory_hostname -> per-host cert dir under ansible/files/hev3-ca/
-    # (svc-150 answers as web.scion, svc-153 as web2.scion, svc-151 as
-    # welcome.scion — see tools/gen-hev3-ca.sh and config/coredns/scion.zone).
+    # (svc-150 answers as web.scion, svc-153 as web2.scion — see
+    # tools/gen-hev3-ca.sh and config/coredns/scion.zone). welcome.scion
+    # (svc-151) is served by a normal web server (nginx), see deploy_welcome.yaml.
     hev3_certs:
       svc-150: web.scion
       svc-153: web2.scion
-      svc-151: welcome.scion
     # SCION underlay binds the fabric sibling address .81 (see the unit's
     # ExecStart comment) so it can't collide with ip-h3 on .80.
     fabric_scion_ip: "10.{{ endhost_as }}.0.81"
@@ -91,11 +91,16 @@
     # network can race in; SCION traffic rides the existing underlay
     # (already reachable via scitra/the AS's border router) and needs no
     # extra ufw rule.
-    - name: ufw allow hev3-server (443/tcp + 443/udp, venue leg is the IP race target)
+    # 443 tcp+udp for the IP race (venue leg) AND the scitra-forwarded SCION
+    # legs arriving on the `scion` TUN (ufw denies incoming by default, and the
+    # TUN is not the trusted mgmt leg). 80/tcp for the cleartext leg — same:
+    # without it the scitra-forwarded :80 SYN on the TUN is silently dropped.
+    - name: ufw allow hev3-server (443/tcp+udp, 80/tcp)
       ansible.builtin.command: "{{ item }}"
       loop:
         - ufw allow 443/tcp
         - ufw allow 443/udp
+        - ufw allow 80/tcp
       changed_when: false
 
     - name: Enable + restart hev3-server

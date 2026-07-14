@@ -1,0 +1,28 @@
+# welcome.scion — normal web server (nginx) on svc-151.
+# Wildcard TCP :80/:443 never collides with scitra's UDP -p 80/443 underlay
+# sockets, so no address exclusion is needed (unlike hev3-server's UDP h3).
+# scitra delivers the forwarded SCION traffic to this host's fc00 iface, which
+# these wildcard listeners cover.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+
+    server_name welcome.scion;
+
+    ssl_certificate     /etc/nginx/welcome/cert.pem;
+    ssl_certificate_key /etc/nginx/welcome/key.pem;
+
+    root /var/www/welcome;
+    index index.html;
+
+    location = /whoami {
+        default_type application/json;
+        return 200 '{"transport":"nginx","server":"$hostname","path":"/whoami"}\n';
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

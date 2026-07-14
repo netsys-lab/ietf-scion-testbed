@@ -1,24 +1,26 @@
 $ORIGIN scion.
 $TTL 300
-@ 3600 IN SOA scitra.netsys.ovgu.de. lschulz.ovgu.de. 2026071402 7200 3600 1209600 3600
+@ 3600 IN SOA scitra.netsys.ovgu.de. lschulz.ovgu.de. 2026071405 7200 3600 1209600 3600
 @ IN NS scitra.netsys.ovgu.de.
 ; scion= TXT on every SCION-capable name (discovery via dig TXT; scitra input).
 ; Safe alongside A/AAAA since scitra dd03a3ffe: native records take precedence,
 ; fc00 synthesis only fills SCION-only names. REQUIRES that coredns build or
 ; newer — deploy the binary with/before this zone.
-; dual-homed (IP race legs): TXT scion= matches the SVCB scion= param byte-for-byte
-; (the address the SCION service listens on; no SCMP responder there — scion ping
-; wants the mgmt addr instead).
+; dual-homed (IP race legs): SVCB + TXT scion= both point at the CT's MGMT
+; identity (1-15x,10.20.3.21x). scitra --scmp answers `scion ping` there, and
+; scitra -p 443 80 forwards SCION :443/:80 at that identity to the local server
+; (hev3-server, bound to the fabric .80 + fc00 iface but NOT mgmt via
+; -listen-exclude). The IP race still uses the real fabric A/AAAA (.80) below.
 ; Fabric addresses are STATIC (BGP fabric, spec 2026-07-11-bgp-fabric) — the
 ; old venue-IP zone-sync is retired; nothing rewrites these lines.
 web        IN A    10.150.0.80
 web        IN AAAA fd00:beef:150::80
-web        IN SVCB 1 . alpn=h3,h2 port=443 scion=1-150\,10.150.0.81 scion-policy=bw,latency
-web        IN TXT  "scion=1-150,10.150.0.81"
+web        IN SVCB 1 . alpn=h3,h2 port=443 scion=1-150\,10.20.3.215 scion-policy=bw,latency
+web        IN TXT  "scion=1-150,10.20.3.215"
 web2       IN A    10.153.0.80
 web2       IN AAAA fd00:beef:153::80
-web2       IN SVCB 1 . alpn=h3,h2 port=443 scion=1-153\,10.153.0.81
-web2       IN TXT  "scion=1-153,10.153.0.81"
+web2       IN SVCB 1 . alpn=h3,h2 port=443 scion=1-153\,10.20.3.217
+web2       IN TXT  "scion=1-153,10.20.3.217"
 ; per-AS BGP-fabric anchor names (traceroute/ping demos read as ASes);
 ; TXT scion= carries the AS CT's mgmt addr — SCMP answers there, so the value
 ; copy-pastes into `scion ping`.
@@ -59,12 +61,13 @@ as161       IN A    10.161.0.1
 as161       IN AAAA fd00:beef:161::1
 as161       IN TXT  "scion=1-161,10.20.3.161"
 ; SCION-only names: SVCB + TXT (scitra serves fc00 AAAA to plain clients)
-; welcome -> svc-151 (CT214): SCION-only, served by hev3-server on the fabric
-; sibling .81 (1-151,10.151.0.81) — same service-address pattern as web/web2
-; (the mgmt addr 10.20.3.214 is scitra's own SCION identity, can't host a
-; native server). scitra synthesizes the fc00 AAAA from the scion= TXT.
-welcome    IN SVCB 1 . alpn=h3 scion=1-151\,10.151.0.81
-welcome    IN TXT  "scion=1-151,10.151.0.81"
+; welcome -> svc-151 (CT214): SCION-only, served by a NORMAL web server (nginx,
+; wildcard TCP :80/:443) reached over SCION via scitra -p 443 80 on the mgmt
+; identity (1-151,10.20.3.214). scitra --scmp answers `scion ping`; scitra
+; synthesizes the fc00 AAAA from this TXT so plain clients tunnel in. See
+; ansible/playbooks/deploy_welcome.yaml.
+welcome    IN SVCB 1 . alpn=h3 scion=1-151\,10.20.3.214
+welcome    IN TXT  "scion=1-151,10.20.3.214"
 games      IN SVCB 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3 scion-policy=latency
 games      IN TXT  "scion=71-2:0:4a,10.44.25.3"
 matrix.netsys.ovgu   IN TXT "scion=71-2:0:4a,141.44.17.123"

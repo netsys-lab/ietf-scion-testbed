@@ -1,0 +1,115 @@
+---
+# welcome.scion served by a normal web server (nginx) on svc-151 (CT214).
+# SCION-only name: clients reach it over SCION via scitra's `-p 80 443` forward
+# (svc-151 scitra_extra_args), which delivers to nginx's wildcard TCP :80/:443
+# on the fc00 iface; `scion ping` is answered by scitra --scmp on the mgmt
+# identity. hev3-server is NOT used here (see deploy_hev3.yaml). Requires the
+# welcome.scion cert (ansible/files/hev3-ca/welcome.scion, from gen-hev3-ca.sh)
+# and the testbed CA already trusted system-wide (deploy_hev3.yaml Play 1).
+- name: Deploy welcome.scion (nginx) on svc-151
+  hosts: svc-151
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+
+    - name: Stop + disable hev3-server (welcome uses nginx now)
+      ansible.builtin.systemd:
+        name: hev3-server
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: TLS material dir
+      ansible.builtin.file:
+        path: /etc/nginx/welcome
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Copy welcome.scion certificate
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/hev3-ca/welcome.scion/cert.pem"
+        dest: /etc/nginx/welcome/cert.pem
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Copy welcome.scion private key
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/hev3-ca/welcome.scion/key.pem"
+        dest: /etc/nginx/welcome/key.pem
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Web root
+      ansible.builtin.file:
+        path: /var/www/welcome
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install welcome page
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/welcome/index.html"
+        dest: /var/www/welcome/index.html
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Remove default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Render welcome nginx site
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/welcome/welcome.nginx.conf.j2"
+        dest: /etc/nginx/sites-available/welcome.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable welcome site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/welcome.conf
+        dest: /etc/nginx/sites-enabled/welcome.conf
+        state: link
+
+    - name: Validate nginx config
+      ansible.builtin.command: nginx -t
+      changed_when: false
+
+    - name: ufw allow 80 + 443 (venue leg denies incoming by default)
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - ufw allow 80/tcp
+        - ufw allow 443/tcp
+      changed_when: false
+
+    - name: Enable + restart nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+        enabled: true
+        daemon_reload: true
+
+    - name: Verify nginx serves /whoami locally over TLS
+      ansible.builtin.command: curl -sk --max-time 5 https://127.0.0.1/whoami
+      register: welcome_check
+      changed_when: false
+      retries: 3
+      delay: 2
+      until: welcome_check.rc == 0 and (welcome_check.stdout | trim | length > 0)
+
+    - name: Verify nginx serves /whoami locally over plain HTTP (:80)
+      ansible.builtin.command: curl -s --max-time 5 http://127.0.0.1/whoami
+      register: welcome_http_check
+      changed_when: false
+      failed_when: welcome_http_check.rc != 0 or (welcome_http_check.stdout | trim | length == 0)

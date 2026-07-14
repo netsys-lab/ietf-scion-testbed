@@ -77,15 +77,18 @@ svc:
     svc-151:
       ansible_host: 10.20.3.214
       endhost_as: "151"
+      scitra_extra_args: " -p 443 80"   # welcome.scion: forward SCION :443/:80 -> local server
     svc-150:
       ansible_host: 10.20.3.215
       endhost_as: "150"
+      scitra_extra_args: " -p 443 80"   # web.scion: forward SCION :443/:80 -> local server
     svc-152:
       ansible_host: 10.20.3.216
       endhost_as: "152"
     svc-153:
       ansible_host: 10.20.3.217
       endhost_as: "153"
+      scitra_extra_args: " -p 443 80"   # web2.scion: forward SCION :443/:80 -> local server
   vars:
     ansible_user: ietf
     ansible_python_interpreter: auto_silent

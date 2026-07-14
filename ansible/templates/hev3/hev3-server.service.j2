@@ -13,7 +13,13 @@ Requires=scion-sciond.service
 # -scion-ip binds the SCION underlay to the fabric SIBLING address .81 so
 # the SCION UDP :443 listener can't collide with the ip-h3 :443 listener on
 # the fabric primary .80 (commit 7689e3f's collision, same-address variant).
-ExecStart=/usr/local/bin/hev3-server -scion -scion-ip {{ fabric_scion_ip }}
+# -listen-http :80 adds the cleartext HTTP leg (TCP; never collides with
+# scitra's UDP underlay). -listen-exclude <mgmt IP> keeps the ip-h3 UDP :443
+# listener OFF the mgmt address so scitra's `-p 443/80` underlay can bind it
+# and forward SCION :443/:80 to this server on the fc00 scitra iface — the
+# zone advertises the mgmt SCION identity (scitra --scmp answers `scion ping`
+# there); the server is reachable on the fabric .80 + fc00, never on mgmt.
+ExecStart=/usr/local/bin/hev3-server -scion -scion-ip {{ fabric_scion_ip }} -listen-http :80 -listen-exclude {{ ansible_eth0.ipv4.address }}
 Environment=SCION_DAEMON_ADDRESS=127.0.0.1:30255
 Restart=on-failure
 # Binds :443 on both the IP and SCION stacks — matches house style for svc
