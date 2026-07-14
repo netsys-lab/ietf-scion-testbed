@@ -86,7 +86,10 @@
       ansible.builtin.command: nginx -t
       changed_when: false
 
-    - name: ufw allow 80 + 443 (venue leg denies incoming by default)
+    # Venue-leg (eth1) exposure; the SCION path (scitra TUN) is already trusted
+    # by the svc ufw baseline (`allow in on scion`), so nginx needs no per-port
+    # rule for the SCION legs — only for direct venue-IP clients.
+    - name: ufw allow nginx on the venue leg (80 + 443)
       ansible.builtin.command: "{{ item }}"
       loop:
         - ufw allow 80/tcp

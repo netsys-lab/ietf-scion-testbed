@@ -91,11 +91,11 @@
     # network can race in; SCION traffic rides the existing underlay
     # (already reachable via scitra/the AS's border router) and needs no
     # extra ufw rule.
-    # 443 tcp+udp for the IP race (venue leg) AND the scitra-forwarded SCION
-    # legs arriving on the `scion` TUN (ufw denies incoming by default, and the
-    # TUN is not the trusted mgmt leg). 80/tcp for the cleartext leg — same:
-    # without it the scitra-forwarded :80 SYN on the TUN is silently dropped.
-    - name: ufw allow hev3-server (443/tcp+udp, 80/tcp)
+    # Venue-leg (eth1, globally routable) exposure for regular-IP clients:
+    # 443/tcp+udp + 80/tcp. The SCION legs (arriving on the scion TUN via
+    # scitra -p) and the fabric legs (eth0) are already covered by the svc
+    # ufw baseline's `allow in on {eth0,scion}` — they need no per-port rule.
+    - name: ufw allow hev3-server on the venue leg (443/tcp+udp, 80/tcp)
       ansible.builtin.command: "{{ item }}"
       loop:
         - ufw allow 443/tcp

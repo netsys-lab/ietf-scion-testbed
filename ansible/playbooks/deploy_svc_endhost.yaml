@@ -35,18 +35,24 @@
         enabled: true
         state: started
 
-    # svc-151 has a venue leg (eth1 on vmbr0) so DNS etc. are reachable by
-    # regular-IP clients. The venue net is globally routable, so lock it down:
-    # deny incoming by default, trust only the isolated mgmt bridge (eth0).
-    # Open specific venue-leg ports (e.g. DNS 53, ideally scoped to venue/lab
-    # prefixes) deliberately when the service is deployed. Configured via ufw's
-    # CLI (idempotent) to avoid a galaxy collection dependency.
-    - name: ufw baseline (deny incoming, allow outgoing, trust mgmt eth0)
+    # These containers have a venue leg (eth1 on vmbr0) so services are
+    # reachable by regular-IP clients. The venue net is globally routable, so
+    # ufw's real job is to lock THAT leg down: deny incoming by default, and
+    # trust the two internal planes —
+    #   - eth0: the isolated mgmt bridge, plus the fabric legs (.80/.81);
+    #   - scion: the scitra TUN. SCION-side port exposure is already bounded by
+    #     scitra's `-p` list (inbound SCION flows are rejected unless the port
+    #     is statically forwarded), so re-gating the TUN in ufw adds nothing but
+    #     the footgun of needing a `ufw allow <port>` for every SCION service.
+    # Venue-leg ports (443/80, DNS 53) are opened explicitly per service. ufw
+    # CLI (idempotent) avoids a galaxy collection dependency.
+    - name: ufw baseline (deny incoming; trust mgmt eth0 + scion TUN; venue leg firewalled)
       ansible.builtin.command: "{{ item }}"
       loop:
         - ufw default deny incoming
         - ufw default allow outgoing
         - ufw allow in on eth0
+        - ufw allow in on scion
         - ufw --force enable
       changed_when: false
 
