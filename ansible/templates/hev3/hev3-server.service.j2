@@ -1,10 +1,20 @@
 [Unit]
 Description=hev3-server (Happy Eyeballs v3 demo target: IP h2/h1.1/h3 + SCION h3)
-After=network-online.target scion-sciond.service
-Wants=network-online.target
+# scitra.service ordering matters: the ip-h3 UDP listener enumerates addresses
+# at startup and must bind the fc00 scitra-iface (where scitra -p forwards the
+# SCION legs). If hev3 starts before scitra's `scion` TUN exists, that fc00:443
+# UDP listener is silently missing and the SCION-over-scitra path is dead until
+# a restart. So order After scitra, Want it, and gate ExecStart on the fc00
+# address actually being present (Type=simple has no readiness signal, and
+# scitra brings the TUN up slightly after its process launches).
+After=network-online.target scion-sciond.service scitra.service
+Wants=network-online.target scitra.service
 Requires=scion-sciond.service
 
 [Service]
+# Wait (up to 60s) for scitra's `scion` TUN fc00 address before binding, so the
+# ip-h3 enumeration always includes it. Cheap no-op once it is up.
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do ip -6 addr show scion scope global 2>/dev/null | grep -q "inet6 fc00" && exit 0; sleep 1; done; echo "hev3-server: scion TUN fc00 address not up after 60s" >&2; exit 1'
 # -scion also serves native HTTP/3 over SCION QUIC (in addition to the
 # always-on IP TCP h2/h1.1 and IP UDP h3 listeners); defaults handle
 # -listen-ip (:443), -cert/-key (/etc/hev3/{cert,key}.pem), -scion-port
