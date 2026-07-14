@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/ansible/files/hev3-ca"
 CA_CN="SCION-in-a-Box hev3 CA"
-NAMES=(web.scion web2.scion)
+NAMES=(web.scion web2.scion welcome.scion)
 
 mkdir -p "$OUT"
 

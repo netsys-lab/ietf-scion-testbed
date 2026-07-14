@@ -47,16 +47,17 @@
       ansible.builtin.command: update-ca-certificates
       when: hev3_ca_trust.changed
 
-- name: Deploy hev3-server (Happy Eyeballs v3 demo target) on svc-150 + svc-153
-  hosts: svc-150,svc-153
+- name: Deploy hev3-server (Happy Eyeballs v3 demo target) on svc-150 + svc-153 + svc-151
+  hosts: svc-150,svc-153,svc-151
   become: true
   vars:
     # inventory_hostname -> per-host cert dir under ansible/files/hev3-ca/
-    # (svc-150 answers as web.scion, svc-153 as web2.scion — see
-    # tools/gen-hev3-ca.sh and config/coredns/scion.zone).
+    # (svc-150 answers as web.scion, svc-153 as web2.scion, svc-151 as
+    # welcome.scion — see tools/gen-hev3-ca.sh and config/coredns/scion.zone).
     hev3_certs:
       svc-150: web.scion
       svc-153: web2.scion
+      svc-151: welcome.scion
     # SCION underlay binds the fabric sibling address .81 (see the unit's
     # ExecStart comment) so it can't collide with ip-h3 on .80.
     fabric_scion_ip: "10.{{ endhost_as }}.0.81"
