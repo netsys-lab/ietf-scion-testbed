@@ -60,6 +60,17 @@ func (jc JoinConfig) endpointV4Str() string {
 	return fmt.Sprintf("%s:%d", jc.EndpointV4, jc.ListenPort)
 }
 
+// primaryEndpointStr is the endpoint baked into the default .conf. The venue
+// is IPv6-mostly, so prefer the v6 endpoint; fall back to v4 when the hub has
+// no global IPv6 (v4-only networks) so the default conf still works. Returns
+// "" only if neither is configured (deploy asserts at least one).
+func (jc JoinConfig) primaryEndpointStr() string {
+	if v6 := jc.endpointV6Str(); v6 != "" {
+		return v6
+	}
+	return jc.endpointV4Str()
+}
+
 func (s *server) handleJoinClaim(w http.ResponseWriter, r *http.Request) {
 	if !s.join.Enabled {
 		http.NotFound(w, r)
@@ -132,10 +143,14 @@ func (s *server) handleJoinClaim(w http.ResponseWriter, r *http.Request) {
 		"isd_as":          fmt.Sprintf("%d-%d", s.join.ISD, req.AS),
 		"fc00_identity":   fc.String(),
 		"fc00_identities": identities,
-		"conf":            renderConf(sl, s.pool.ServerPublicKey(), s.join.endpointV6Str()),
+		"conf":            renderConf(sl, s.pool.ServerPublicKey(), s.join.primaryEndpointStr()),
 		"endpoint_v6":     s.join.endpointV6Str(),
 	}
-	if v4 := s.join.endpointV4Str(); v4 != "" {
+	// Offer the explicit v4 conf only when it is a genuine ALTERNATIVE to the
+	// primary — i.e. the primary is the v6 endpoint. On a v4-only hub the
+	// primary already is v4 (see primaryEndpointStr), so conf_v4 would just
+	// duplicate conf, and the /join page's v4 toggle stays hidden.
+	if v4 := s.join.endpointV4Str(); v4 != "" && s.join.EndpointV6 != "" {
 		resp["conf_v4"] = renderConf(sl, s.pool.ServerPublicKey(), v4)
 		resp["endpoint_v4"] = v4
 	}

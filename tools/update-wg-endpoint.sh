@@ -7,7 +7,8 @@
 # wg-quick up would hit the old IP and never handshake).
 #
 # The IETF meeting network is IPv6-mostly, so the v6 endpoint is the one
-# attendees use; v4 is kept as a fallback for v4-only clients. Preference for
+# attendees use; v4 is kept as a fallback for v4-only clients (and becomes the
+# sole advertised endpoint when the hub has no global v6). Preference for
 # v6: a global-unicast address (2000::/3 — the real venue prefix) over a ULA
 # (fc00::/7, what the lab hands out), and never a temporary/privacy address
 # (a server endpoint must be stable).
@@ -32,10 +33,16 @@ for a in "${g6[@]}"; do case "$a" in 2*|3*) v6="$a"; break;; esac; done
 # booting / hasn't reached the venue net), so a periodic run doesn't flag a
 # failed unit — the next tick retries. Manual runs error hard (exit 1).
 notready() { echo "$1" >&2; [ "${AUTO:-0}" = 1 ] && exit 0 || exit 1; }
-[ -z "$v4" ] && notready "hub eth1 has no IPv4 yet"
-[ -z "$v6" ] && notready "hub eth1 has no global IPv6 yet"
+# The venue is v6-mostly, so v6 is normally the endpoint attendees use — but a
+# v4-only network (this rack/pre-venue, or a v4-only venue drop) must still
+# yield a working join. Require at least ONE global address; fall back to
+# advertising v4 alone when there is no global v6 (fabricd's join surface then
+# bakes v4 into the default conf — see primaryEndpointStr in join.go).
+[ -z "$v4" ] && [ -z "$v6" ] && notready "hub eth1 has no global address yet (neither v4 nor v6)"
+[ -z "$v6" ] && echo "note: hub eth1 has no global IPv6 — advertising a v4-only endpoint" >&2
+[ -z "$v4" ] && echo "note: hub eth1 has no IPv4 — advertising a v6-only endpoint" >&2
 
-echo "hub CT$HUB_CT eth1 -> wg_endpoint_v4=$v4  wg_endpoint_v6=$v6"
+echo "hub CT$HUB_CT eth1 -> wg_endpoint_v4=${v4:-<none>}  wg_endpoint_v6=${v6:-<none>}"
 
 # Idempotence guard: skip the (heavy) redeploy when the endpoint is unchanged,
 # so this is cheap to run on every boot / from a periodic timer. FORCE=1 to

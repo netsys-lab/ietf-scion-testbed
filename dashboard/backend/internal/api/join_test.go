@@ -117,6 +117,33 @@ func TestClaimHappyPath(t *testing.T) {
 	}
 }
 
+// TestClaimV4OnlyFallback: on a hub with no global IPv6 (v4-only network) the
+// default conf must fall back to the v4 endpoint, and no separate conf_v4 is
+// offered (it would just duplicate conf).
+func TestClaimV4OnlyFallback(t *testing.T) {
+	h := newJoinServerWithConfig(t, 2, JoinConfig{
+		Enabled: true, BoothCode: "secret", ISD: 1,
+		JoinableASes: []int{158, 159, 160, 161},
+		EndpointV6:   "", EndpointV4: "203.0.113.7", ListenPort: 51820,
+		RateMax: 100, RateWindow: time.Minute,
+	})
+	rr := postClaim(t, h, `{"as":158,"code":"secret"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if !strings.Contains(resp["conf"].(string), "Endpoint = 203.0.113.7:51820") {
+		t.Fatalf("default conf did not fall back to v4 endpoint:\n%s", resp["conf"])
+	}
+	if _, ok := resp["conf_v4"]; ok {
+		t.Fatalf("conf_v4 should be absent on a v4-only hub (would duplicate conf)")
+	}
+	if resp["endpoint_v6"] != "" {
+		t.Fatalf("endpoint_v6 should be empty, got %v", resp["endpoint_v6"])
+	}
+}
+
 // TestRenderConfDNS pins the DNS line's position: it must sit between
 // Address and MTU in the [Interface] block, pointing attendees at the
 // testbed's SCION-aware resolver.

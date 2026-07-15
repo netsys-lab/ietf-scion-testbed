@@ -15,15 +15,18 @@
         that:
           - booth_code is defined
           - booth_code | length > 0
+          # Both endpoint keys must exist (config.toml renders both), but only
+          # ONE need be non-empty: the venue is v6-mostly, yet a v4-only network
+          # must still deploy (fabricd falls back to the v4 endpoint — see
+          # update-wg-endpoint.sh + primaryEndpointStr in join.go).
           - wg_endpoint_v6 is defined
-          - wg_endpoint_v6 | length > 0
           - wg_endpoint_v4 is defined
-          - wg_endpoint_v4 | length > 0
+          - (wg_endpoint_v4 | length > 0) or (wg_endpoint_v6 | length > 0)
           - venue_allowed_v4 is defined
           - venue_allowed_v4 | length > 0
           - venue_allowed_v6 is defined
           - venue_allowed_v6 | length > 0
-        fail_msg: "booth_code / wg_endpoint_v6 / wg_endpoint_v4 / venue_allowed_v4 / venue_allowed_v6 must be set in ansible/group_vars/playground.yml before deploying the dashboard."
+        fail_msg: "booth_code / venue_allowed_v4 / venue_allowed_v6 must be set and at least one of wg_endpoint_v4 / wg_endpoint_v6 must be non-empty in ansible/group_vars/playground.yml before deploying the dashboard."
   tasks:
     - name: Copy fabricd package
       ansible.builtin.copy:
