@@ -2,6 +2,10 @@
 - name: Deploy the WireGuard attendee hub (thin, daemonless)
   hosts: hub
   become: true
+  # venue_allowed_v4/v6 source-gate the WG handshake on the venue leg (same
+  # list the dashboard uses; see templates/wghub/nftables.conf.j2).
+  vars_files:
+    - "{{ playbook_dir }}/../group_vars/playground.yml"
   vars:
     wghub_build: "{{ wghub_dir | default(playbook_dir + '/../../.build/wghub') }}"
   pre_tasks:
@@ -34,9 +38,9 @@
         dest: /etc/wireguard/wg0.conf
         mode: "0600"
 
-    - name: Install nftables policy
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/wghub/nftables.conf"
+    - name: Install nftables policy (source-gated WG handshake — venue_allowed_*)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/wghub/nftables.conf.j2"
         dest: /etc/nftables.conf
         mode: "0644"
 

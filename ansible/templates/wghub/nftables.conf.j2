@@ -44,7 +44,12 @@ table inet wghub {
         # admin over mgmt only
         iifname "eth0" tcp dport 22 accept
         iifname "eth0" icmp type echo-request accept
-        # WG handshake on the venue leg
-        iifname "eth1" udp dport 51820 accept
+        # WG handshake on the venue leg — SOURCE-GATED to the venue allowlist
+        # (venue_allowed_v4/v6 in group_vars/playground.yml, the SAME list the
+        # dashboard uses). The venue leg is globally routable, so only the IETF
+        # meeting prefixes + home/prep networks may even attempt to join —
+        # venue attendees are on those prefixes. Widen by editing that var.
+        iifname "eth1" ip saddr { {{ venue_allowed_v4 | join(', ') }} } udp dport 51820 accept
+        iifname "eth1" ip6 saddr { {{ venue_allowed_v6 | join(', ') }} } udp dport 51820 accept
     }
 }

@@ -50,6 +50,10 @@
 - name: Deploy hev3-server (Happy Eyeballs v3 demo target) on svc-150 + svc-153
   hosts: svc-150,svc-153
   become: true
+  # venue_allowed_v4/v6 source-gate the venue-leg web ports (same list the
+  # dashboard + wghub use).
+  vars_files:
+    - "{{ playbook_dir }}/../group_vars/playground.yml"
   vars:
     # inventory_hostname -> per-host cert dir under ansible/files/hev3-ca/
     # (svc-150 answers as web.scion, svc-153 as web2.scion — see
@@ -85,22 +89,28 @@
         mode: "0644"
 
     # svc-150/153 both carry a venue leg (eth1 on vmbr0) — the IP race target
-    # for the hev3 demo — and deploy_svc_endhost.yaml's ufw baseline denies
-    # incoming by default, trusting only the mgmt leg (eth0). Explicitly
-    # allow 443 (TCP for h2/h1.1, UDP for h3) so IP clients on the venue
-    # network can race in; SCION traffic rides the existing underlay
-    # (already reachable via scitra/the AS's border router) and needs no
-    # extra ufw rule.
-    # Venue-leg (eth1, globally routable) exposure for regular-IP clients:
-    # 443/tcp+udp + 80/tcp. The SCION legs (arriving on the scion TUN via
-    # scitra -p) and the fabric legs (eth0) are already covered by the svc
-    # ufw baseline's `allow in on {eth0,scion}` — they need no per-port rule.
-    - name: ufw allow hev3-server on the venue leg (443/tcp+udp, 80/tcp)
-      ansible.builtin.command: "{{ item }}"
-      loop:
-        - ufw allow 443/tcp
-        - ufw allow 443/udp
-        - ufw allow 80/tcp
+    # for the hev3 demo. The venue leg is globally routable, so the web ports
+    # (443/tcp for h2/h1.1, 443/udp for h3, 80/tcp) are SOURCE-GATED to the
+    # venue allowlist (venue_allowed_v4/v6, the same list the dashboard + wghub
+    # use): venue attendees are on the IETF meeting prefixes, the wider internet
+    # is denied. The SCION legs (scion TUN via scitra -p) and fabric/mgmt legs
+    # (eth0) are already trusted by the svc ufw baseline's
+    # `allow in on {eth0,scion}` and are intentionally NOT source-gated —
+    # SCION reachability must not depend on an IP allowlist. Outbound stays open
+    # (baseline `default allow outgoing`), so the server keeps internet egress.
+    - name: Drop any prior internet-open venue web rules (superseded by the allowlist)
+      ansible.builtin.command: "ufw delete allow {{ item }}"
+      loop: ["443/tcp", "443/udp", "80/tcp"]
+      register: ufw_del
+      changed_when: "'Could not delete' not in ufw_del.stdout"
+      failed_when: false
+
+    - name: ufw allow hev3-server on the venue leg from venue prefixes only (443/tcp+udp, 80/tcp)
+      ansible.builtin.command: >-
+        ufw allow in on eth1 from {{ item.0 }} to any port {{ item.1.port }} proto {{ item.1.proto }}
+      loop: "{{ (venue_allowed_v4 + venue_allowed_v6) | product([{'port': 443, 'proto': 'tcp'}, {'port': 443, 'proto': 'udp'}, {'port': 80, 'proto': 'tcp'}]) | list }}"
+      loop_control:
+        label: "{{ item.0 }} -> :{{ item.1.port }}/{{ item.1.proto }}"
       changed_when: false
 
     - name: Enable + restart hev3-server

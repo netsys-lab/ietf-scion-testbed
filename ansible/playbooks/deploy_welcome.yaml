@@ -9,6 +9,10 @@
 - name: Deploy welcome.scion (nginx) on svc-151
   hosts: svc-151
   become: true
+  # venue_allowed_v4/v6 source-gate the venue-leg web ports (same list the
+  # dashboard + wghub + hev3 svc hosts use).
+  vars_files:
+    - "{{ playbook_dir }}/../group_vars/playground.yml"
   tasks:
     - name: Install nginx
       ansible.builtin.apt:
@@ -86,14 +90,26 @@
       ansible.builtin.command: nginx -t
       changed_when: false
 
-    # Venue-leg (eth1) exposure; the SCION path (scitra TUN) is already trusted
-    # by the svc ufw baseline (`allow in on scion`), so nginx needs no per-port
-    # rule for the SCION legs — only for direct venue-IP clients.
-    - name: ufw allow nginx on the venue leg (80 + 443)
-      ansible.builtin.command: "{{ item }}"
-      loop:
-        - ufw allow 80/tcp
-        - ufw allow 443/tcp
+    # Venue-leg (eth1, globally routable) exposure for direct venue-IP clients,
+    # SOURCE-GATED to the venue allowlist (venue_allowed_v4/v6, the same list
+    # the dashboard + wghub + hev3 svc hosts use): only the IETF meeting
+    # prefixes + home/prep networks reach nginx on 80/443, the wider internet
+    # is denied. The SCION path (scitra TUN) and fabric/mgmt legs (eth0) are
+    # already trusted by the svc ufw baseline's `allow in on {eth0,scion}` and
+    # are intentionally NOT source-gated. Outbound stays open.
+    - name: Drop any prior internet-open venue web rules (superseded by the allowlist)
+      ansible.builtin.command: "ufw delete allow {{ item }}"
+      loop: ["80/tcp", "443/tcp"]
+      register: ufw_del
+      changed_when: "'Could not delete' not in ufw_del.stdout"
+      failed_when: false
+
+    - name: ufw allow nginx on the venue leg from venue prefixes only (80 + 443, tcp)
+      ansible.builtin.command: >-
+        ufw allow in on eth1 from {{ item.0 }} to any port {{ item.1 }} proto tcp
+      loop: "{{ (venue_allowed_v4 + venue_allowed_v6) | product([80, 443]) | list }}"
+      loop_control:
+        label: "{{ item.0 }} -> :{{ item.1 }}/tcp"
       changed_when: false
 
     - name: Enable + restart nginx

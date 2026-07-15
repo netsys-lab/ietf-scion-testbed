@@ -12,5 +12,5 @@ wg_endpoint_v4: "203.0.113.99"
 # Venue-leg (eth1) allowlist for CT200:8080. IETF meeting prefixes
 # (https://www.ietf.org/meeting/meeting-network-information/) + home lab.
 # Confirm the meeting prefixes on-site each meeting.
-venue_allowed_v4: ["31.133.128.0/18", "31.130.224.0/20", "10.0.0.0/24", "10.1.0.0/24"]
+venue_allowed_v4: ["31.133.128.0/18", "31.130.224.0/20", "141.44.0.0/16", "10.0.0.0/24", "10.1.0.0/24"]
 venue_allowed_v6: ["2001:67c:370::/48", "2001:67c:1230::/46"]
