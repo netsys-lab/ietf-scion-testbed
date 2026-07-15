@@ -1,0 +1,74 @@
+// Testbed deployment layout — containers, bridges, and services.
+// Source of truth for topology/testbed-layout.{svg,png}; regenerate with:
+//   dot -Tsvg topology/testbed-layout.dot -o topology/testbed-layout.svg
+//   dot -Tpng -Gdpi=150 topology/testbed-layout.dot -o topology/testbed-layout.png
+// (This is the deployment/infra view; topology.svg is the SCION AS graph.)
+digraph testbed {
+    graph [rankdir=TB, fontname="Helvetica", fontsize=12, labelloc=t,
+           label="IETF-126 SCION Testbed — deployment layout (22 LXC containers on one Proxmox host)",
+           bgcolor="white", nodesep=0.35, ranksep=0.75, compound=true, pad=0.25];
+    node  [fontname="Helvetica", fontsize=10];
+    edge  [fontname="Helvetica", fontsize=9, color="#4a5568"];
+
+    laptop [shape=note, style=filled, fillcolor="#fff3cd", color="#d69e2e",
+            label="Attendee laptop\nWireGuard tunnel or browser"];
+
+    // ---- bridges: the three connective planes ----
+    node [shape=cylinder, style=filled, fillcolor="#cfe3ff", color="#2b6cb0", fontsize=10];
+    pub   [label="public / venue bridge  ·  eth1\nglobally routable, firewalled to venue prefixes"];
+    mgmt  [label="mgmt bridge  ·  10.20.3.0/24\nevery container eth0  —  control-plane + metrics"];
+    links [label="scion1 … scion18  ·  24 inter-AS link bridges\none per link  ·  UDP/50000 underlay  ·  shaped by linkd"];
+
+    // ---- container groups ----
+    node [shape=box, style="rounded,filled", fillcolor="#eef2f7", color="#4a5568", fontsize=10];
+
+    subgraph cluster_attendee {
+        label="Attendee access";
+        style="rounded,filled"; fillcolor="#f7fafc"; color="#a0aec0"; fontsize=11;
+        dash [label="CT200  ·  dashboard\nfabricd :8080 + web UI"];
+        wg   [label="CT201  ·  wg-hub\nWireGuard wg0"];
+        play [label="CT210–CT213  ·  playground\nzero-install browser terminals\nhomed in AS 158 / 152 / 155 / 161"];
+    }
+
+    subgraph cluster_svc {
+        label="Service endhosts  ·  CT214–CT217  ·  services behind scitra";
+        style="rounded,filled"; fillcolor="#f7fafc"; color="#a0aec0"; fontsize=11;
+        web  [label="CT215  ·  web.scion\nhev3-server  ·  AS150"];
+        web2 [label="CT217  ·  web2.scion\nhev3-server  ·  AS153"];
+        wel  [label="CT214  ·  welcome.scion\nnginx  ·  AS151"];
+        dns  [label="CT216  ·  CoreDNS\nscion. zone :53  ·  AS152"];
+    }
+
+    subgraph cluster_ases {
+        label="SCION AS nodes  ·  CT150–CT161  ·  ASes 1-150…1-161  ·  eth0 = 10.20.3.150–161";
+        style="rounded,filled"; fillcolor="#f7fafc"; color="#a0aec0"; fontsize=11;
+        asn [shape=box, fillcolor="#e6eef7",
+             label="each of the 12 containers runs:\lborder router br1-N-1  ·  control service cs1-N-1  ·  sciond\llinkd — tc netem/tbf shaping + BGP REST :30480\lBIRD — BGP + BFD over the same inter-AS links\l"];
+    }
+
+    // ---- wiring ----
+    laptop -> pub [label="WireGuard / HTTPS", dir=none, color="#d69e2e"];
+
+    // venue leg reaches only the venue-facing services (not CoreDNS / playground)
+    edge [dir=none, color="#2b6cb0"];
+    pub -> dash;
+    pub -> wg;
+    pub -> web;
+    pub -> web2;
+    pub -> wel;
+
+    // mgmt reaches every container's eth0 (clipped to each group border)
+    edge [dir=none, color="#2f855a"];
+    mgmt -> dash [lhead=cluster_attendee];
+    mgmt -> web  [lhead=cluster_svc];
+    mgmt -> asn  [lhead=cluster_ases];
+
+    // inter-AS link bridges attach to the AS nodes
+    links -> asn [dir=none, color="#805ad5", lhead=cluster_ases];
+
+    // logical flows over the underlay
+    edge [dir=forward, style=dashed, color="#718096"];
+    dash -> asn [label="scrapes metrics", lhead=cluster_ases];
+    play -> asn [label="SCION via sciond", lhead=cluster_ases];
+    web  -> asn [label="SCION via sciond", ltail=cluster_svc, lhead=cluster_ases];
+}

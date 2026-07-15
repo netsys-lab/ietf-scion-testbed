@@ -44,52 +44,12 @@ together by three kinds of Linux bridge: an isolated **management** network
 attendee-facing services, and **24 per-link bridges** (`scion1…scion18`) that
 each carry one inter-AS link's SCION underlay and BGP fabric.
 
-```mermaid
-flowchart TB
-    laptop["Attendee laptop<br/>WireGuard tunnel or browser"]
+![Testbed deployment layout — 22 LXC containers, three bridge planes, and the services each container runs](topology/testbed-layout.svg)
 
-    subgraph host["Proxmox LXC host — 22 containers"]
-        direction TB
+<!-- Diagram source: topology/testbed-layout.dot (graphviz). Regenerate with:
+     dot -Tsvg topology/testbed-layout.dot -o topology/testbed-layout.svg
+     dot -Tpng -Gdpi=150 topology/testbed-layout.dot -o topology/testbed-layout.png -->
 
-        subgraph ases["SCION AS nodes · CT150–CT161 · ASes 1-150…1-161 · eth0 = 10.20.3.150–161"]
-            asn["each container runs:<br/>border router br1-N-1 · control service cs1-N-1 · sciond<br/>linkd — tc netem/tbf shaping + BGP REST :30480<br/>BIRD — BGP + BFD over the same inter-AS links"]
-        end
-
-        subgraph attendee["Attendee access"]
-            dash["CT200 · dashboard<br/>fabricd :8080 + web UI"]
-            wg["CT201 · wg-hub<br/>WireGuard wg0"]
-            play["CT210–CT213 · playground<br/>zero-install browser terminals<br/>homed in AS 158 / 152 / 155 / 161"]
-        end
-
-        subgraph svc["Service endhosts · CT214–CT217 · services behind scitra"]
-            web["CT215 · web.scion<br/>hev3-server · AS150"]
-            web2["CT217 · web2.scion<br/>hev3-server · AS153"]
-            wel["CT214 · welcome.scion<br/>nginx · AS151"]
-            dns["CT216 · CoreDNS<br/>scion. zone :53 · AS152"]
-        end
-
-        mgmt(["mgmt bridge · 10.20.3.0/24<br/>every container eth0 — control-plane + metrics"])
-        pub(["public / venue bridge · eth1<br/>globally routable, firewalled to venue prefixes"])
-        links(["scion1 … scion18 · 24 inter-AS link bridges<br/>one per link · UDP/50000 underlay · shaped by linkd"])
-    end
-
-    laptop -->|WireGuard / HTTPS| pub
-
-    links --- ases
-    mgmt --- ases
-    mgmt --- attendee
-    mgmt --- svc
-
-    pub --- dash
-    pub --- wg
-    pub --- web
-    pub --- web2
-    pub --- wel
-
-    dash -. scrapes metrics .-> ases
-    play -. SCION via sciond .-> ases
-    svc  -. SCION via sciond .-> ases
-```
 
 Bridge names differ slightly per host (the venue leg is `vmbr0` on the
 mini-PC, `pubnet` on the rack); the roles above are stable. See
