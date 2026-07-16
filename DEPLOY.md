@@ -496,7 +496,7 @@ pinging a svc host's fc00 address from a playground shell replies too.
 Resolves the `scion.` TLD (SVCB records carrying `scion=<IA>,<host>` next to
 ordinary A/AAAA, per `docs/drafts/draft-john-scion-svcb-00.md`) and forwards
 everything else to Quad9, on svc-152 (CT216, `10.20.3.216`). This is the DNS
-half of the hev3 story below — hev3 resolves SVCB to learn a name's SCION
+half of the hev3 story below — hev3 resolves HTTPS/SVCB RRs to learn a name's SCION
 candidate alongside its IP ones.
 
 ### Build order
@@ -647,8 +647,15 @@ out — only regenerate between sessions (see "Pool exhausted" below).
 `hev3` is the SCION-aware Happy Eyeballs v3 CLI
 (`draft-ietf-happy-happyeyeballs-v3` extended with a SCION candidate family —
 see `docs/superpowers/specs/2026-07-10-scion-svcb-hev3-design.md`): it
-resolves a name's SVCB record, then races SCION, IPv6, and IPv4 candidates
-in parallel and reports the winner. `hev3-server` is the demo target it
+resolves a name's HTTPS/SVCB records (0.2.0 queries both, per
+draft-john-scion-svcb-01 — the zone serves HTTPS RRs since serial
+2026071601), then races SCION, IPv6, and IPv4 candidates in parallel and
+reports the winner. 0.2.0's engine no longer stalls IP legs behind SCION
+path lookup; the booth's SCION-first story uses `-scion-grace 150ms`
+(see DEMOS.md recipe 1). The zone's web/web2 scion= params carry the
+fabric `.81` hev3-server listeners; the TXT scion= rows keep the mgmt
+identities (scitra forwarding input) — deliberately different access
+methods. `hev3-server` is the demo target it
 races toward — one process serving the same page over IP h2/h1.1, IP HTTP/3,
 and (with `-scion`) native HTTP/3 over SCION QUIC, tagging each response
 with the transport that actually won.
@@ -656,7 +663,7 @@ with the transport that actually won.
 ### Build
 
 ```sh
-cd hev3 && make deb   # -> dist/scion-hev3_0.1.0_amd64.deb
+cd hev3 && make deb   # -> dist/scion-hev3_0.2.0_amd64.deb
 ```
 
 Ships `/usr/local/bin/{hev3,hev3-server}` plus the testbed CA at

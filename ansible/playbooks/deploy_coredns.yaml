@@ -44,8 +44,8 @@
         name: dnsutils
         state: present
 
-    - name: Verify scion. zone answers (SVCB web.scion non-empty)
-      ansible.builtin.command: dig @{{ ansible_host }} SVCB web.scion +short
+    - name: Verify scion. zone answers (HTTPS web.scion non-empty)
+      ansible.builtin.command: dig @{{ ansible_host }} HTTPS web.scion +short
       register: svcb_check
       changed_when: false
       retries: 5

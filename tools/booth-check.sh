@@ -65,9 +65,13 @@ grep -q '^DIGWEB 10.150.0.80' <<<"$OUT" && ok "DNS web.scion -> 10.150.0.80" \
 grep -q '^DIGANCHOR 10.150.0.1' <<<"$OUT" && ok "DNS as150.scion -> 10.150.0.1" \
                                           || fail "DNS as150.scion: $(grep '^DIGANCHOR' <<<"$OUT")"
 
-# hev3 smoke: full race (SCION should win) + IP-only (v6/v4 over the fabric).
-R1=$($SSH "$PLAY" 'hev3 https://web.scion/ 2>/dev/null | grep "winner:"')
-grep -q 'SCION' <<<"$R1" && ok "hev3 race: SCION wins ($R1)" || fail "hev3 race: $R1"
+# hev3 smoke: fair race (IP wins on merit since the 0.2.0 engine no longer
+# stalls IP legs behind SCION path lookup), the demo's grace race (SCION
+# wins with -scion-grace, the booth recipe), + IP-only (v6/v4 over fabric).
+R0=$($SSH "$PLAY" 'hev3 https://web.scion/ 2>/dev/null | grep "winner:"')
+grep -qE 'IPv6|IPv4|SCION' <<<"$R0" && ok "hev3 fair race ($R0)" || fail "hev3 fair race: $R0"
+R1=$($SSH "$PLAY" 'hev3 -scion-grace 150ms https://web.scion/ 2>/dev/null | grep "winner:"')
+grep -q 'SCION' <<<"$R1" && ok "hev3 grace race: SCION wins ($R1)" || fail "hev3 grace race: $R1"
 R2=$($SSH "$PLAY" 'hev3 --no-scion https://web.scion/ 2>/dev/null | grep "winner:"')
 grep -qE 'IPv6|IPv4' <<<"$R2" && ok "hev3 IP-only over fabric ($R2)" || fail "hev3 IP-only: $R2"
 

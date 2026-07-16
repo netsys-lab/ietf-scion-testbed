@@ -8,12 +8,18 @@ noted. Dashboard: `http://10.20.3.200:8080` (booth code auth, user `scion`).
 ## 1. The race (fair, same links)
 
 ```sh
-hev3 https://web.scion/            # SCION wins ~150ms native h3
-hev3 --no-scion https://web.scion/ # IP legs only: v6 wins ~50ms over the BGP fabric
+hev3 https://web.scion/                    # fair race: v6 wins ~50ms; SCION pays ~100ms path lookup first
+hev3 -scion-grace 150ms https://web.scion/ # SCION-first story: hold IP legs during path lookup; SCION wins ~150ms cold / ~55ms warm
+hev3 --no-scion https://web.scion/         # IP legs only: v6 wins ~50ms over the BGP fabric
 ```
-All rows show fabric addresses (`10.150.0.80` / `fd00:beef:150::80` /
-`1-150,10.150.0.81`). Both planes cross the SAME emulated links — that's
-the point. `web2.scion` = svc-153, same demo, different paths.
+Since hev3 0.2.0 (engine rewrite, HEv3-04-conformant) the IP legs no
+longer wait for SCION path lookup, so the plain race is honest: v6 wins
+while sciond fetches paths. `-scion-grace` is the demo knob (the draft's
+optional "Expansion Delay"): it narrates as "give the path-aware leg its
+path-lookup time". All rows show fabric addresses (`10.150.0.80` /
+`fd00:beef:150::80` / `1-150,10.150.0.81`). Both planes cross the SAME
+emulated links — that's the point. `web2.scion` = svc-153, same demo,
+different paths.
 
 ## 2. Degradation: SCION reroutes, BGP endures
 
@@ -127,4 +133,4 @@ RESET after: link reset (demo 4) AND `ssh ietf@10.20.3.215 'pkill iperf3'`.
 - `bash tools/booth-check.sh` from the dev box — sessions, shapes, health, smoke.
 - Sessions on one AS: `curl http://10.20.3.15x:30480/api/v1/bgp` (from mgmt).
 - All-links state: dashboard map; grey BGP badge = linkd/BIRD unreachable, red = session down.
-- sciond path-fetch crossing a shaped link makes the FIRST hev3 run slow (~700ms start) — feature, mention it or rerun.
+- sciond path-fetch crossing a shaped link slows the FIRST -scion-grace/--no-ip run (~150ms+ start; warm ~55ms) — feature, mention it or rerun. The plain race no longer stalls (0.2.0 engine).
