@@ -1,6 +1,6 @@
 $ORIGIN scion.
 $TTL 300
-@ 3600 IN SOA scitra.netsys.ovgu.de. lschulz.ovgu.de. 2026071405 7200 3600 1209600 3600
+@ 3600 IN SOA scitra.netsys.ovgu.de. lschulz.ovgu.de. 2026071600 7200 3600 1209600 3600
 @ IN NS scitra.netsys.ovgu.de.
 ; scion= TXT on every SCION-capable name (discovery via dig TXT; scitra input).
 ; Safe alongside A/AAAA since scitra dd03a3ffe: native records take precedence,
@@ -15,11 +15,11 @@ $TTL 300
 ; old venue-IP zone-sync is retired; nothing rewrites these lines.
 web        IN A    10.150.0.80
 web        IN AAAA fd00:beef:150::80
-web        IN SVCB 1 . alpn=h3,h2 port=443 scion=1-150\,10.20.3.215 scion-policy=bw,latency
+web        IN HTTPS 1 . alpn=h3,h2 port=443 scion=1-150\,10.20.3.215 scion-policy=bw,latency
 web        IN TXT  "scion=1-150,10.20.3.215"
 web2       IN A    10.153.0.80
 web2       IN AAAA fd00:beef:153::80
-web2       IN SVCB 1 . alpn=h3,h2 port=443 scion=1-153\,10.20.3.217
+web2       IN HTTPS 1 . alpn=h3,h2 port=443 scion=1-153\,10.20.3.217
 web2       IN TXT  "scion=1-153,10.20.3.217"
 ; per-AS BGP-fabric anchor names (traceroute/ping demos read as ASes);
 ; TXT scion= carries the AS CT's mgmt addr — SCMP answers there, so the value
@@ -66,9 +66,9 @@ as161       IN TXT  "scion=1-161,10.20.3.161"
 ; identity (1-151,10.20.3.214). scitra --scmp answers `scion ping`; scitra
 ; synthesizes the fc00 AAAA from this TXT so plain clients tunnel in. See
 ; ansible/playbooks/deploy_welcome.yaml.
-welcome    IN SVCB 1 . alpn=h3 scion=1-151\,10.20.3.214
+welcome    IN HTTPS 1 . alpn=h3 scion=1-151\,10.20.3.214
 welcome    IN TXT  "scion=1-151,10.20.3.214"
-games      IN SVCB 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3 scion-policy=latency
+games      IN HTTPS 1 . alpn=h3 scion=71-2:0:4a\,10.44.25.3 scion-policy=latency
 games      IN TXT  "scion=71-2:0:4a,10.44.25.3"
 matrix.netsys.ovgu   IN TXT "scion=71-2:0:4a,141.44.17.123"
 element.netsys.ovgu  IN CNAME matrix.netsys.ovgu.scion.
