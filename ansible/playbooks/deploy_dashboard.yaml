@@ -5,7 +5,7 @@
   vars_files:
     - "{{ playbook_dir }}/../group_vars/playground.yml"
   vars:
-    fabricd_deb: "{{ playbook_dir }}/../../dashboard/backend/dist/fabricd_0.1.1_amd64.deb"
+    fabricd_deb: "{{ playbook_dir }}/../../dashboard/backend/dist/fabricd_0.1.2_amd64.deb"
   pre_tasks:
     - name: Fail fast if on-site join vars are unset
       # The on-site flow sets these in group_vars/playground.yml and reruns

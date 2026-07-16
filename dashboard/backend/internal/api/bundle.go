@@ -50,7 +50,7 @@ func bundleReadme(asNum int) string {
 		"Unpack into an empty directory and run sciond there with sd.toml.\n"+
 		"Full setup (WireGuard, SCION tools, scitra, MTU caveats) lives on the\n"+
 		"join page, or raw:\n\n"+
-		"  /api/instructions/laptop-linux.md\n\n"+
+		"  /api/instructions/laptop.md\n\n"+
 		"Keep tunnelled payloads under ~1200 bytes.\n", asNum)
 }
 
