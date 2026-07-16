@@ -3,7 +3,7 @@
 Zero install: a live SCION endhost shell right in your browser, running
 inside one of ASes 1-152, 1-155, 1-158, 1-161 on the real testbed. Good if
 you don't want to install anything, or just want a 2-minute taste before
-setting up your own laptop (see `laptop-linux.md`).
+setting up your own laptop/VM (see `laptop-linux.md`).
 
 1. **Open a terminal.** On this page, pick one of the "AS 1-152/1-155/1-158/1-161
    terminal" cards. You'll land on a booth-code-gated web terminal
@@ -22,29 +22,25 @@ setting up your own laptop (see `laptop-linux.md`).
    tab — you'll see the path you just used light up live.
 
 3. **The fc00 demo (plain IPv6 over SCION).** Every playground endhost also
-   runs `scitra-tun`, which transparently maps an `fc00::/8` IPv6 address
+   runs [`scitra-tun`](https://github.com/lschulz/scion-cpp/blob/main/scitra/docs/scitra-tun.md), 
+   which transparently maps an `fc00::/8` IPv6 address
    onto a SCION endhost identity. That means an ordinary `ping -6` — no
    SCION tooling, no special flags — actually rides SCION underneath. The
    `fc00...` prefix encodes the target ISD + AS number, so the address you
    ping looks different depending on which AS you're in and which AS you're
-   pinging into — see `faq.md` for the full explanation and worked example.
+   pinging into.
 
 4. **Two internets, one wire.** The same inter-AS links also run a plain
    BGP/IP network (BIRD, IPv4+IPv6) — so you can compare today's routing
    with SCION side by side:
 
    ```
-   hev3 https://web.scion/         # race SCION vs IPv6 vs IPv4 to one server
    curl https://web.scion/         # plain HTTPS over the BGP plane (testbed CA preinstalled)
+   curl https://welcome.scion/     # HTTPS over SCITRA tunnel
    traceroute as153.scion          # per-AS anchor hops (as150 … as161)
    mtr as150.scion                 # live per-hop latency
    tcpdump -ni eth0 icmp           # watch your own packets (no root needed)
    ```
-
-   Now shape a link from the dashboard: both planes slow down (same wire!),
-   but SCION *reroutes* (`hev3 --no-ip -k 3 https://web.scion/` — path #p2
-   takes over) while `traceroute` keeps showing the same degraded hops —
-   BGP is blind to latency and only reacts when the link actually dies.
 
 5. **Session lifetime.** Your shell is sandboxed and resets when you
    disconnect — nothing you do there persists or affects other attendees.

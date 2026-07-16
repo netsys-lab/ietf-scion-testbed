@@ -1,11 +1,9 @@
 # Laptop — Linux
 
-Bring your own laptop onto the SCION testbed as a real endhost in one of
-ASes 1-152, 1-155, 1-158, 1-161. Takes about 10 minutes; the SCION build is
-the slow part.
+Bring your own laptop/VM onto the SCION testbed as a real endhost in one of
+ASes 1-152, 1-155, 1-158, 1-161.
 
-1. **WireGuard**: `sudo apt install wireguard` (Debian/Ubuntu — use your
-   distro's package otherwise, e.g. `sudo dnf install wireguard-tools`).
+1. **WireGuard**: `sudo apt install wireguard`
 
 2. **Claim your conf** on this page (`/join`) — enter the booth code. There's
    no AS picker at claim time: one conf tunnels the whole testbed, and the

@@ -20,42 +20,26 @@ links also carry a plain BGP/IP network (BIRD on every AS, IPv4+IPv6), so
 you can compare today's Internet routing with SCION on identical
 infrastructure. Each AS has an anchor address (`as150.scion` …
 `as161.scion`) — `traceroute as153.scion` shows the BGP path as per-AS
-hops, and `hev3 https://web.scion/` races SCION against IPv6/IPv4 to the
-same server. Link shaping applies to both planes at once (one `tc` qdisc on
+hops. Link shaping applies to both planes at once (one `tc` qdisc on
 the shared interface); the map's BGP badge turns red when a "link failure"
 (100% loss) tears the BGP session down and the fabric reroutes — SCION, by
-contrast, fails over per-flow in about one round trip.
+contrast, can fail over to another path per-flow in about one round trip.
 
 **curl says "unable to get local issuer certificate" for `web.scion`.**
 The demo servers use a throwaway testbed CA, not a public one. On the
 playground shells the CA is preinstalled in the system trust store, so plain
-`curl https://web.scion/` just works. From your own laptop (WireGuard), use
-`hev3` (it ships the CA and trusts it automatically) or download the CA
-from the join page ("Download TLS CA", raw URL `/api/join/ca.pem`) and pass
+`curl https://web.scion/` just works. From your own laptop (WireGuard), 
+download the CA from the join page ("Download TLS CA") and pass
 `curl --cacert scion-testbed-ca.pem https://web.scion/` — or accept `-k`
 for a quick look. Never trust this CA outside the testbed; its private key
 is public by design — stick to `--cacert`, don't install it system-wide.
-
-**Can I just download prebuilt SCION binaries?** No — the official
-scionproto release binaries (including `v0.15.0`) are built
-`CGO_ENABLED=0`, and `v0.15.0` reverted to the mattn/go-sqlite3 driver,
-which requires cgo for the trust/path DBs. The result: the official
-`scion-daemon` panics on startup (`go-sqlite3 ... is a stub`) and never
-gets to open a socket. Build from source instead with `CGO_ENABLED=1` (see
-`laptop-linux.md`) — we've proven upstream `v0.15.0`
-built this way interoperates with this testbed. If the booth is offering a
-prebuilt CGO-enabled binary for your platform, that works too.
 
 **How big a payload can I send through my WireGuard tunnel?** Keep
 tunnelled SCION payloads under **~1200 bytes**. Your WG interface reports an
 MTU of 1380, and SCION's path metadata for these testbed links advertises
 up to 1452 bytes — but the real ceiling your packets have to clear is the
 *tunnel's* effective MTU once SCION and WireGuard headers are accounted
-for, which is well under either of those numbers. Don't pass `--max-mtu` to
-`scion ping`/`traceroute`, and don't run bulk transfers over the tunnel:
-oversized payloads fail cleanly (a timeout or a clear error), they don't
-silently corrupt — but they also won't get through, so there's no point
-pushing past ~1200 B for anything you're doing at the booth.
+for, which is well under either of those numbers.
 
 **Why is my `fc00...` identity different when I ping into another AS?**
 The `fc00::/8` address scitra shows you (and that you `ping -6` from a
@@ -68,27 +52,3 @@ endhosts have their own prefix too, e.g. AS 1-158's playground box is
 `fc00:1000:a100::ffff:10.20.3.213` — same testbed, different AS number
 baked into the address. This is expected: the address *is* "which AS, which
 host," not a stable per-attendee identity.
-
-**The hub looks offline / my conf claim fails with a connection error.**
-The join page's "Join with your laptop" section shows a hub-offline banner
-when the WireGuard hub (CT201) isn't reachable — the browser terminals
-(playground) are unaffected since they don't go through the hub at all.
-Check back in a few minutes, or ask at the booth; staff can see the same
-status.
-
-**I lost my conf / closed the tab / switched laptops.** The join page keeps
-your last claimed conf in your browser's local storage, so revisiting
-`/join` on the *same* browser re-shows it (including the QR code and
-download button) without claiming a new one. If that's not available
-(different browser, cleared storage, different laptop), just claim again —
-50 confs are provisioned and claims aren't rationed per person, so a second
-claim is fine. Note claiming again gives you a *different* slot/IP; the old
-one still exists until staff revoke it.
-
-**All the confs are claimed (409 / "no confs left").** All 50 slots are in
-use. Ask at the booth — staff can free up conf slots that are no longer in
-use (attendees who left, etc.).
-
-**Can I run this after I leave the venue?** No — the WireGuard endpoint is
-only reachable from the venue network, and the whole testbed is torn down
-after the event.
