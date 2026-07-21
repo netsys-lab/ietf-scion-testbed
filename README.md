@@ -60,13 +60,13 @@ mini-PC, `pubnet` on the rack); the roles above are stable. See
 
 - [lschulz/scion](https://github.com/lschulz/scion) — the deployed SCION
   stack (ID-INT + border-router RTT/traffic metrics).
-- [tjohn327/dns](https://github.com/tjohn327/dns) and
+- [netsys-lab/dns-scion-svcb]([https://github.com/tjohn327/dns](https://github.com/netsys-lab/dns-scion-svcb)) and
   [tjohn327/coredns](https://github.com/tjohn327/coredns) (branch
   `scion-dev`) — typed `scion`/`scion-policy` SvcParamKeys and the scitra
   plugin.
 - [tjohn327/scion-hev3](https://github.com/tjohn327/scion-hev3) — Happy
   Eyeballs v3 for SCION (racer library, CLI, demo server) and the
-  `draft-john-scion-svcb` IETF draft.
+  [`draft-scion-svcb`](https://github.com/netsys-lab/draft-scion-svcb) draft.
 
 ## Operating it
 
