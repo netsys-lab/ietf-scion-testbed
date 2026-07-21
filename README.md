@@ -60,7 +60,7 @@ mini-PC, `pubnet` on the rack); the roles above are stable. See
 
 - [lschulz/scion](https://github.com/lschulz/scion) — the deployed SCION
   stack (ID-INT + border-router RTT/traffic metrics).
-- [netsys-lab/dns-scion-svcb]([https://github.com/tjohn327/dns](https://github.com/netsys-lab/dns-scion-svcb)) and
+- [netsys-lab/dns-scion-svcb](https://github.com/netsys-lab/dns-scion-svcb) and
   [tjohn327/coredns](https://github.com/tjohn327/coredns) (branch
   `scion-dev`) — typed `scion`/`scion-policy` SvcParamKeys and the scitra
   plugin.
