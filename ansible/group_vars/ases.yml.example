@@ -20,4 +20,4 @@ cs_binary_dest: /usr/bin/control
 # cs_binary_src — the freshly built patched binary, from $SCION_FORK/bin/control
 # (see DEPLOY.md's Build order / Fork provenance sections). Update this path
 # if you build with SCION_FORK pointed somewhere other than the default.
-cs_binary_src: /home/tony/lshulz/scion/bin/control
+cs_binary_src: /path/to/scion/bin/control

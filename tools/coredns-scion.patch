@@ -1,0 +1,564 @@
+diff --git a/core/dnsserver/zdirectives.go b/core/dnsserver/zdirectives.go
+index cf39df355..fa64e9765 100644
+--- a/core/dnsserver/zdirectives.go
++++ b/core/dnsserver/zdirectives.go
+@@ -56,6 +56,7 @@ var Directives = []string{
+ 	"clouddns",
+ 	"k8s_external",
+ 	"kubernetes",
++	"scitra",
+ 	"file",
+ 	"auto",
+ 	"secondary",
+diff --git a/core/plugin/zplugin.go b/core/plugin/zplugin.go
+index 476d8c1dc..567b1fffb 100644
+--- a/core/plugin/zplugin.go
++++ b/core/plugin/zplugin.go
+@@ -53,6 +53,7 @@ import (
+ 	_ "github.com/coredns/coredns/plugin/rewrite"
+ 	_ "github.com/coredns/coredns/plugin/root"
+ 	_ "github.com/coredns/coredns/plugin/route53"
++	_ "github.com/coredns/coredns/plugin/scitra"
+ 	_ "github.com/coredns/coredns/plugin/secondary"
+ 	_ "github.com/coredns/coredns/plugin/sign"
+ 	_ "github.com/coredns/coredns/plugin/template"
+diff --git a/plugin.cfg b/plugin.cfg
+index a4fc637c0..a7f904bff 100644
+--- a/plugin.cfg
++++ b/plugin.cfg
+@@ -65,6 +65,7 @@ azure:azure
+ clouddns:clouddns
+ k8s_external:k8s_external
+ kubernetes:kubernetes
++scitra:scitra
+ file:file
+ auto:auto
+ secondary:secondary
+diff --git a/plugin/scitra/README.md b/plugin/scitra/README.md
+new file mode 100644
+index 000000000..28cbad30d
+--- /dev/null
++++ b/plugin/scitra/README.md
+@@ -0,0 +1,59 @@
++# scitra
++
++## Name
++
++*scitra* - resolves SCION TXT records to SCION-mapped IPv6 addresses
++
++## Description
++
++This CoreDNS plugin is a companion to [SCION-IP Address Translators][1] that returns special AAAA
++addresses (SCION-mapped IP addresses) for host that announce SCION support in a TXT record.
++
++TXT records recognized by this plugin must have the form "scion=<ISD-ASN>,<Host>" where <ISD-ASN> is
++a SCION AS and <Host> is an IPv4 or IPv6 address.
++
++Native records take precedence: if the name also has real A/AAAA records (a dual-homed host), an
++A or AAAA query is answered with those records unchanged. Only for SCION-only names (no native
++record of the requested type) does the plugin synthesize a SCION-mapped AAAA and suppress A
++answers. This makes it safe to publish `scion=` TXT records on every SCION-capable name,
++including hosts that are also reachable over plain IP.
++
++[1] https://github.com/netsys-lab/scion-ip-translator
++
++## Syntax
++
++```txt
++scitra [prefix PREFIX]
++```
++
++* `prefix` **PREFIX** is an 8 bit long IPv6 prefix in CIDR notation that is used by translators to
++  identify SCION-mapped IPv6 addresses. The default prefix is `fc00::/8`.
++
++## Compilation
++
++This plugin must run before `file` (and `forward`) in `plugin.cfg` since it resolves the
++SCION TXT record through its `Next` chain:
++
++```txt
++# add this line right before file:file
++scitra:scitra
++```
++
++## Example
++
++Forward queries to another DNS server and rewrite SCION addresses.
++```txt
++. {
++    forward . 1.1.1.1
++    scitra
++    cache
++}
++```
++
++## Provenance
++
++Vendored from [netsys-lab/coredns-scitra](https://github.com/netsys-lab/coredns-scitra),
++licensed under Apache-2.0 (see upstream repository for the full license text; SPDX headers in
++the source files are preserved). This copy is built against a local fork of `miekg/dns` that
++adds a typed `scion` SvcParamKey and a `scionproto/scion` fork pin (see this repository's
++`go.mod`).
+diff --git a/plugin/scitra/scitra.go b/plugin/scitra/scitra.go
+new file mode 100644
+index 000000000..031380090
+--- /dev/null
++++ b/plugin/scitra/scitra.go
+@@ -0,0 +1,193 @@
++// SPDX-License-Identifier: Apache-2.0
++package scitra
++
++import (
++	"context"
++	"encoding/binary"
++	"fmt"
++	"net"
++	"strings"
++
++	"github.com/coredns/coredns/plugin"
++	clog "github.com/coredns/coredns/plugin/pkg/log"
++	"github.com/coredns/coredns/plugin/pkg/nonwriter"
++	"github.com/coredns/coredns/request"
++	"github.com/miekg/dns"
++	"github.com/scionproto/scion/pkg/addr"
++)
++
++const name = "scitra"
++
++var log = clog.NewWithPlugin("scitra")
++
++type Scitra struct {
++	Next   plugin.Handler
++	Prefix byte
++}
++
++func (s Scitra) Name() string { return name }
++
++func (s Scitra) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
++
++	var scionAddr addr.Addr
++	var mappedAddr net.IP
++	var hasScion bool
++
++	if len(r.Question) != 1 {
++		return plugin.NextOrFailure(name, s.Next, ctx, w, r)
++	}
++
++	qtype := r.Question[0].Qtype
++	name := r.Question[0].Name
++	if qtype == dns.TypeA || qtype == dns.TypeAAAA {
++		var err error
++		scionAddr, hasScion, err = s.queryScionAddress(ctx, w, name)
++		if err != nil {
++			return 0, err
++		}
++		if hasScion {
++			log.Debugf("%v is at %v", name, scionAddr)
++			mappedAddr, err = s.scion2ip(scionAddr)
++			if err != nil {
++				log.Infof("scion2ip failed, because %v", err)
++				hasScion = false
++			}
++		}
++	}
++	if !hasScion {
++		// pass to the next plugin
++		return plugin.NextOrFailure(name, s.Next, ctx, w, r)
++	}
++
++	// Native records take precedence: if the next plugin already has an
++	// answer of the requested type (dual-homed host), serve it unchanged.
++	// Synthesis and A-suppression only apply to SCION-only names.
++	nw := nonwriter.New(w)
++	rcode, err := plugin.NextOrFailure(name, s.Next, ctx, nw, r)
++	if err != nil {
++		return rcode, err
++	}
++	if rcode == dns.RcodeSuccess && nw.Msg != nil {
++		for _, ans := range nw.Msg.Answer {
++			if ans.Header().Rrtype == qtype {
++				log.Debugf("native %v records exist for %v, passing through", dns.TypeToString[qtype], name)
++				err := w.WriteMsg(nw.Msg)
++				return 0, err
++			}
++		}
++	}
++
++	if qtype == dns.TypeA {
++		// suppress response, we only answer AAAA requests for SCION hosts
++		log.Debugf("suppressed A-record request for %v", name)
++		return s.emptyResponse(w, r)
++	}
++
++	// answer with a SCION-mapped IPv6 address
++	state := request.Request{W: w, Req: r}
++	re := new(dns.Msg)
++	re.SetReply(r)
++	re.Authoritative = true
++	rr := new(dns.AAAA)
++	rr.Hdr = dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeAAAA, Class: state.QClass()}
++	rr.AAAA = mappedAddr
++	re.Answer = append(re.Answer, rr)
++
++	log.Debugf("translated %v to %v", scionAddr, mappedAddr)
++	err = w.WriteMsg(re)
++	return 0, err
++}
++
++// queryScionAddress sends a request for name's TXT records to the next plugin
++// and returns a SCION address if one was found in the respose.
++func (s Scitra) queryScionAddress(
++	ctx context.Context, w dns.ResponseWriter, name string,
++) (addr.Addr, bool, error) {
++
++	r := new(dns.Msg)
++	r.Id = 1337
++	r.MsgHdr.Opcode = dns.OpcodeQuery
++	r.MsgHdr.RecursionDesired = true
++	r.Question = append(r.Question, dns.Question{
++		Name:   name,
++		Qtype:  dns.TypeTXT,
++		Qclass: dns.ClassINET,
++	})
++
++	nw := nonwriter.New(w)
++	rcode, err := plugin.NextOrFailure(name, s.Next, ctx, nw, r)
++	if err != nil {
++		return addr.Addr{}, false, err
++	}
++	re := nw.Msg
++
++	if rcode == dns.RcodeSuccess {
++		for _, ans := range re.Answer {
++			if txt, ok := (ans).(*dns.TXT); ok {
++				for _, s := range txt.Txt {
++					parts := strings.SplitN(s, "=", 2)
++					if len(parts) == 2 && parts[0] == "scion" {
++						a, err := addr.ParseAddr(parts[1])
++						if err == nil && a.Host.Type() == addr.HostTypeIP {
++							return a, true, nil
++						}
++					}
++				}
++			}
++		}
++	}
++	return addr.Addr{}, false, nil
++}
++
++// emptyResponse returns an empty response to the client.
++func (s Scitra) emptyResponse(w dns.ResponseWriter, r *dns.Msg) (int, error) {
++	re := new(dns.Msg)
++	re.SetReply(r)
++	err := w.WriteMsg(re)
++	return 0, err
++}
++
++func (s Scitra) scion2ip(scionAddr addr.Addr) (net.IP, error) {
++	addr := make([]byte, 16)
++	ip := scionAddr.Host.IP().Unmap()
++
++	// Prefix
++	addr[0] = s.Prefix
++
++	// ISD-ASN
++	var ia uint32
++	isd := uint32(scionAddr.IA.ISD())
++	if isd >= (1 << 12) {
++		return addr, fmt.Errorf("ISD cannot be encoded (%v)", scionAddr)
++	}
++	asn := scionAddr.IA.AS()
++	if asn < (1 << 19) {
++		ia = (isd << 20) | uint32(asn)
++	} else if 0x2_0000_0000 <= asn && asn <= 0x2_0007_ffff {
++		ia = (isd << 20) | (1 << 19) | (uint32(asn) & 0x7ffff)
++	} else {
++		return addr, fmt.Errorf("ASN cannot be encoded (%v)", scionAddr)
++	}
++	binary.BigEndian.PutUint32(addr[1:5], ia)
++
++	// Local prefix and Subnet ID
++	if ip.Is6() {
++		var localPrefix [3]byte
++		// Should SCION-IP-Translator compatibility be announced with another TXT record?
++		binary.BigEndian.PutUint16(localPrefix[:2], 0) // TODO: local prefix
++		localPrefix[2] = 0                             // TODO: subnet
++		copy(addr[5:8], localPrefix[:])
++	}
++
++	// Host Address / Interface
++	if ip.Is4() {
++		binary.BigEndian.PutUint32(addr[8:12], 0xffff)
++		ipv4 := ip.As4()
++		copy(addr[12:16], ipv4[:4])
++	} else {
++		ipv6 := ip.As16()
++		copy(addr[8:16], ipv6[8:16])
++	}
++
++	return addr, nil
++}
+diff --git a/plugin/scitra/scitra_test.go b/plugin/scitra/scitra_test.go
+new file mode 100644
+index 000000000..7ce1b0441
+--- /dev/null
++++ b/plugin/scitra/scitra_test.go
+@@ -0,0 +1,177 @@
++// SPDX-License-Identifier: Apache-2.0
++package scitra
++
++import (
++	"context"
++	"net"
++	"strings"
++	"testing"
++
++	"github.com/coredns/coredns/plugin/pkg/dnstest"
++	"github.com/coredns/coredns/plugin/test"
++	"github.com/miekg/dns"
++	"github.com/scionproto/scion/pkg/addr"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++// stubZone answers questions from a fixed RR set (exact qname+qtype match),
++// standing in for the file plugin as scitra's Next handler.
++type stubZone struct {
++	rrs []dns.RR
++}
++
++func (z stubZone) Name() string { return "stub" }
++
++func (z stubZone) ServeDNS(_ context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
++	m := new(dns.Msg)
++	m.SetReply(r)
++	m.Authoritative = true
++	q := r.Question[0]
++	for _, rr := range z.rrs {
++		h := rr.Header()
++		if strings.EqualFold(h.Name, q.Name) && h.Rrtype == q.Qtype {
++			m.Answer = append(m.Answer, rr)
++		}
++	}
++	if err := w.WriteMsg(m); err != nil {
++		return dns.RcodeServerFailure, err
++	}
++	return dns.RcodeSuccess, nil
++}
++
++func TestServeDNSNativeFirst(t *testing.T) {
++	zoneRRs := []string{
++		"dual.scion. 300 IN A 10.155.0.1",
++		"dual.scion. 300 IN AAAA fd00:beef:155::1",
++		`dual.scion. 300 IN TXT "scion=1-155,10.20.3.155"`,
++		`only.scion. 300 IN TXT "scion=1-150,10.150.0.81"`,
++		"plain.scion. 300 IN A 10.1.2.3",
++	}
++	var rrs []dns.RR
++	for _, s := range zoneRRs {
++		rr, err := dns.NewRR(s)
++		require.NoError(t, err)
++		rrs = append(rrs, rr)
++	}
++	s := Scitra{Next: stubZone{rrs: rrs}, Prefix: 0xfc}
++
++	type answer struct {
++		Type uint16
++		Addr string
++	}
++	testCases := []struct {
++		Name     string
++		QName    string
++		QType    uint16
++		Expected []answer
++	}{
++		{
++			Name:     "native AAAA preserved on dual-homed name",
++			QName:    "dual.scion.",
++			QType:    dns.TypeAAAA,
++			Expected: []answer{{dns.TypeAAAA, "fd00:beef:155::1"}},
++		},
++		{
++			Name:     "native A preserved on dual-homed name",
++			QName:    "dual.scion.",
++			QType:    dns.TypeA,
++			Expected: []answer{{dns.TypeA, "10.155.0.1"}},
++		},
++		{
++			Name:     "SCION-only name synthesizes AAAA",
++			QName:    "only.scion.",
++			QType:    dns.TypeAAAA,
++			Expected: []answer{{dns.TypeAAAA, "fc00:1000:9600::ffff:a96:51"}},
++		},
++		{
++			Name:     "SCION-only name suppresses A",
++			QName:    "only.scion.",
++			QType:    dns.TypeA,
++			Expected: nil,
++		},
++		{
++			Name:     "name without scion TXT passes through",
++			QName:    "plain.scion.",
++			QType:    dns.TypeA,
++			Expected: []answer{{dns.TypeA, "10.1.2.3"}},
++		},
++	}
++
++	for _, tc := range testCases {
++		t.Run(tc.Name, func(t *testing.T) {
++			req := new(dns.Msg)
++			req.SetQuestion(tc.QName, tc.QType)
++			rec := dnstest.NewRecorder(&test.ResponseWriter{})
++			_, err := s.ServeDNS(context.Background(), rec, req)
++			require.NoError(t, err)
++			require.NotNil(t, rec.Msg)
++			assert.Equal(t, dns.RcodeSuccess, rec.Msg.Rcode)
++
++			var got []answer
++			for _, rr := range rec.Msg.Answer {
++				switch v := rr.(type) {
++				case *dns.A:
++					got = append(got, answer{dns.TypeA, v.A.String()})
++				case *dns.AAAA:
++					got = append(got, answer{dns.TypeAAAA, v.AAAA.String()})
++				default:
++					t.Fatalf("unexpected answer RR type %T", rr)
++				}
++			}
++			assert.Equal(t, tc.Expected, got)
++		})
++	}
++}
++
++func TestAddrTranslation(t *testing.T) {
++	s := Scitra{Next: nil, Prefix: byte(0xfc)}
++
++	testCases := []struct {
++		Name         string
++		Input        addr.Addr
++		Expected     net.IP
++		ErrAssertion assert.ErrorAssertionFunc
++	}{
++		{
++			Name:         "BGP-compatible ASN",
++			Input:        addr.MustParseAddr("1-0:0:fc02,10.128.1.1"),
++			Expected:     net.ParseIP("fc00:10fc:200::ffff:a80:101"),
++			ErrAssertion: assert.NoError,
++		},
++		{
++			Name:         "public SCION ASN",
++			Input:        addr.MustParseAddr("64-2:0:9,10.0.0.0"),
++			Expected:     net.ParseIP("fc04:800:900::ffff:a00:0"),
++			ErrAssertion: assert.NoError,
++		},
++		{
++			Name:         "IPv6 host address",
++			Input:        addr.MustParseAddr("1-0:0:fc02,fd00::1"),
++			Expected:     net.ParseIP("fc00:10fc:200::1"),
++			ErrAssertion: assert.NoError,
++		},
++		{
++			Name:         "ISD too large",
++			Input:        addr.MustParseAddr("4096-ff00:0:0,127.0.0.1"),
++			Expected:     nil,
++			ErrAssertion: assert.Error,
++		},
++		{
++			Name:         "ASN too large",
++			Input:        addr.MustParseAddr("1-ff00:0:0,127.0.0.1"),
++			Expected:     nil,
++			ErrAssertion: assert.Error,
++		},
++	}
++
++	for _, test := range testCases {
++		t.Run(test.Name, func(t *testing.T) {
++			ip, err := s.scion2ip(test.Input)
++			test.ErrAssertion(t, err)
++			if err == nil {
++				assert.Equal(t, test.Expected, ip)
++			}
++		})
++	}
++}
+diff --git a/plugin/scitra/setup.go b/plugin/scitra/setup.go
+new file mode 100644
+index 000000000..841bc0ee7
+--- /dev/null
++++ b/plugin/scitra/setup.go
+@@ -0,0 +1,44 @@
++// SPDX-License-Identifier: Apache-2.0
++package scitra
++
++import (
++	"fmt"
++	"net/netip"
++
++	"github.com/coredns/caddy"
++	"github.com/coredns/coredns/core/dnsserver"
++	"github.com/coredns/coredns/plugin"
++)
++
++// init registers this plugin.
++func init() { plugin.Register("scitra", setup) }
++
++func setup(c *caddy.Controller) error {
++	var err error
++	prefix := netip.MustParsePrefix("fc00::/8")
++
++	c.Next() // skip first token ("scitra")
++	for c.Next() {
++		switch c.Val() {
++		case "prefix":
++			if !c.NextArg() {
++				return plugin.Error("scitra", c.ArgErr())
++			}
++			prefix, err = netip.ParsePrefix(c.Val())
++			if err != nil {
++				return plugin.Error("scitra", err)
++			}
++			if !prefix.Addr().Unmap().Is6() || prefix.Bits() != 8 {
++				return plugin.Error("scitra", fmt.Errorf("invalid prefix"))
++			}
++		default:
++			return plugin.Error("scitra", fmt.Errorf("unrecognized arguments"))
++		}
++	}
++
++	// Add plugin to CoreDNS
++	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
++		return Scitra{Next: next, Prefix: prefix.Addr().As16()[0]}
++	})
++	return nil
++}
+diff --git a/plugin/scitra/setup_test.go b/plugin/scitra/setup_test.go
+new file mode 100644
+index 000000000..d0e957c14
+--- /dev/null
++++ b/plugin/scitra/setup_test.go
+@@ -0,0 +1,25 @@
++// SPDX-License-Identifier: Apache-2.0
++package scitra
++
++import (
++	"testing"
++
++	"github.com/coredns/caddy"
++)
++
++func TestSetup(t *testing.T) {
++	c := caddy.NewTestController("dns", "scitra")
++	if err := setup(c); err != nil {
++		t.Fatalf("Setup without arguments returned unexpected error: %v", err)
++	}
++
++	c = caddy.NewTestController("dns", "scitra prefix fd::/8")
++	if err := setup(c); err != nil {
++		t.Fatalf("Setup without prefix returned unexpected error: %v", err)
++	}
++
++	c = caddy.NewTestController("dns", "scitra prefix fd::/16")
++	if err := setup(c); err == nil {
++		t.Fatalf("Expected invalid prefix error, but got: %v", err)
++	}
++}

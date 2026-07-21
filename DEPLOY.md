@@ -31,8 +31,8 @@ were previously manual, so a clean rebuild is one command:
   `lxc.cgroup2.devices.allow: c 10:200 rwm` +
   `lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file` to each
   `/etc/pve/lxc/<id>.conf`, then reboots the container.
-- **SSH keys** — installs `proxmox/public_keys` (host ansible key + dev infra
-  key) for root, the entry point for the `ietf` bootstrap below.
+- **SSH keys** — installs `proxmox/public_keys` (the control-node/dev keys
+  you list there) for root, the entry point for the `ietf` bootstrap below.
 
 **CPU weights.** Containers carry tiered `cpuunits` (cgroup-v2 cpu.weight;
 set by `create_contianers.sh`, live-applied with `pct set`): AS containers
@@ -75,7 +75,7 @@ iteration).
 cd dashboard/web && npm ci && npm run build
 cd ../backend && make deb
 cd ../../linkd && make deb
-SCION_FORK=${SCION_FORK:-/home/tony/lshulz/scion}
+SCION_FORK=${SCION_FORK:-$HOME/scion}
 (cd "$SCION_FORK" && go build -o bin/control ./control/cmd/control)
 ```
 
@@ -100,8 +100,8 @@ The patched control service is built from a fork, not upstream scionproto:
 - Branch: `ietf-126`.
 - Commit: `158d2060b`, based on upstream `8ce7ed2f8` (the commit pinned for
   this deploy).
-- Local build checkout: `$SCION_FORK`, default `/home/tony/lshulz/scion`
-  (already tracks `origin/ietf-126`).
+- Local build checkout: `$SCION_FORK`, default `$HOME/scion` (tracking
+  `origin/ietf-126`).
 
 **This branch is pushed** to `github.com/lschulz/scion` (branch `ietf-126`),
 so a fresh checkout or a different build host can reproduce the
@@ -160,8 +160,8 @@ values:
 - `linkd_cs_unit` — the CS systemd unit name (e.g. `scion-control@AS150`,
   verify the actual name from the discovery command above).
 - `cs_binary_dest` — the path the unit executes (from `readlink` above).
-- `cs_binary_src: /home/tony/lshulz/scion/bin/control` — the freshly built
-  patched binary.
+- `cs_binary_src: $SCION_FORK/bin/control` — the freshly built patched
+  binary (spell out the actual path; ansible does not expand `$SCION_FORK`).
 
 Then deploy:
 
@@ -494,23 +494,28 @@ pinging a svc host's fc00 address from a playground shell replies too.
 ## SCION DNS (CoreDNS on svc-152)
 
 Resolves the `scion.` TLD (SVCB records carrying `scion=<IA>,<host>` next to
-ordinary A/AAAA, per `docs/drafts/draft-john-scion-svcb-00.md`) and forwards
+ordinary A/AAAA, per
+[draft-scion-svcb](https://github.com/netsys-lab/draft-scion-svcb)) and forwards
 everything else to Quad9, on svc-152 (CT216, `10.20.3.216`). This is the DNS
 half of the hev3 story below — hev3 resolves HTTPS/SVCB RRs to learn a name's SCION
 candidate alongside its IP ones.
 
 ### Build order
 
-Two local forks feed the binary, both already on their `scion-dev` branch
-and merged: `/home/tony/tjohn327/dns` (Task 1 — adds the `scion` SVCB
-`SvcParamKey`, commit `f27c366e`) and `/home/tony/tjohn327/coredns` (Task 2
-— `replace`s in the dns fork and vendors the
-[netsys-lab/coredns-scitra](https://github.com/netsys-lab/coredns-scitra)
-plugin so `scitra`'s AAAA-synthesis runs inside CoreDNS itself, commit
-`57c13a5f`). Nothing to change here — just build:
+The binary is upstream
+[coredns/coredns](https://github.com/coredns/coredns) at a pinned commit,
+plus `tools/coredns-scion.patch` — the `scitra` plugin (AAAA synthesis from
+`scion=` records, originally
+[netsys-lab/coredns-scitra](https://github.com/netsys-lab/coredns-scitra))
+and its plugin registration. On top of the patch the build script pins two
+go.mod replaces: `miekg/dns` →
+[netsys-lab/dns-scion-svcb](https://github.com/netsys-lab/dns-scion-svcb)
+(branch `scion` — the typed `scion`/`scion-policy` SVCB SvcParamKeys) and
+`scionproto/scion` → the lschulz fork. Nothing to configure — just build
+(clones into `.build/coredns/src`):
 
 ```sh
-./tools/build-coredns.sh   # -> .build/coredns/bin/coredns (COREDNS_SRC override; default /home/tony/tjohn327/coredns)
+./tools/build-coredns.sh   # -> .build/coredns/bin/coredns
 ```
 
 Fully static (`CGO_ENABLED=0`), so — unlike the idint-* binaries — there's no
@@ -569,8 +574,7 @@ BGP to its inter-AS neighbours over the SCION link bridges, advertising its own
 `10.<AS>.0.0/16` + `fd00:beef:<AS>::/48` and learning the rest — so a packet
 from an endhost in AS158 to `10.150.0.80` traverses the fabric hop by hop,
 following the same topology the SCION plane does. Generator + per-AS configs
-are `topology/gen_bird.py` → `config/AS*/bird.conf` (spec
-`docs/superpowers/specs/2026-07-11-bgp-fabric-design.md`).
+are `topology/gen_bird.py` → `config/AS*/bird.conf`.
 
 ### Deploy
 
@@ -646,7 +650,7 @@ out — only regenerate between sessions (see "Pool exhausted" below).
 
 `hev3` is the SCION-aware Happy Eyeballs v3 CLI
 (`draft-ietf-happy-happyeyeballs-v3` extended with a SCION candidate family —
-see `docs/superpowers/specs/2026-07-10-scion-svcb-hev3-design.md`): it
+see [netsys-lab/scion-hev3](https://github.com/netsys-lab/scion-hev3)): it
 resolves a name's HTTPS/SVCB records (0.2.0 queries both, per
 draft-john-scion-svcb-01 — the zone serves HTTPS RRs since serial
 2026071601), then races SCION, IPv6, and IPv4 candidates in parallel and
@@ -662,8 +666,13 @@ with the transport that actually won.
 
 ### Build
 
+In a checkout of
+[netsys-lab/scion-hev3](https://github.com/netsys-lab/scion-hev3), with
+`TESTBED_ROOT` pointing at this repo (the deb bundles the testbed CA from
+`ansible/files/hev3-ca/`):
+
 ```sh
-cd hev3 && make deb   # -> dist/scion-hev3_0.2.0_amd64.deb
+TESTBED_ROOT=/path/to/ietf-scion-testbed make deb   # -> dist/scion-hev3_0.2.0_amd64.deb
 ```
 
 Ships `/usr/local/bin/{hev3,hev3-server}` plus the testbed CA at

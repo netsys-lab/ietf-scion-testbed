@@ -13,7 +13,7 @@
 # (fc00::/7, what the lab hands out), and never a temporary/privacy address
 # (a server endpoint must be stable).
 #
-# USAGE (on ietf-proxmox):  bash tools/update-wg-endpoint.sh
+# USAGE (on the Proxmox host):  bash tools/update-wg-endpoint.sh
 set -euo pipefail
 
 REPO="${REPO:-/root/ietf-scion-testbed}"

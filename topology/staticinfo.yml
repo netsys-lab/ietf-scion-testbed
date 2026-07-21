@@ -4,7 +4,7 @@ model:
   speed_km_per_s: 200000   # light in fiber
   floor_ms: 1.0            # min one-way latency
   round_ms: 0.1
-# Tiered for the U300E mini-PC host (2026-07-07): leaf/attendee flows are
+# Tiered for a modest single-host deployment: leaf/attendee flows are
 # bounded by the 50 Mbit parent_child tier (CPU headroom for the BR dataplane
 # on 6 threads), the core aggregates visibly (two leaf flows congest a shared
 # core hop), and the single peer link is deliberately thin for path-diversity

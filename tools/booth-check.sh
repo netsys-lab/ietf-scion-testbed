@@ -5,8 +5,8 @@
 set -u
 
 PLAY="${PLAY:-ietf@10.20.3.210}"   # play-158: has curl/dig/hev3 and mgmt reachability
-# Override SSH to target a different testbed host, e.g. the ietf-minipc-rack
-# replica: SSH="ssh -J ietf-minipc-rack -o UserKnownHostsFile=~/.ssh/known_hosts_minipc -o StrictHostKeyChecking=accept-new"
+# Override SSH to target a replica of the testbed on another host, e.g.:
+# SSH="ssh -J <replica-host> -o UserKnownHostsFile=~/.ssh/known_hosts_replica -o StrictHostKeyChecking=accept-new"
 SSH="${SSH:-ssh}"
 FAIL=0
 ok()   { printf 'OK   %s\n' "$1"; }

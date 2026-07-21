@@ -26,7 +26,7 @@
 #   ./tools/build-scitra.sh                    # builds .build/scitra/bin/{scitra-tun,scion2ip}
 #   SCION_CPP=/path/to/scion-cpp ./tools/build-scitra.sh
 # Env vars:
-#   SCION_CPP          scion-cpp git checkout (default /home/tony/lshulz/scion-cpp)
+#   SCION_CPP          scion-cpp git checkout (default $HOME/scion-cpp)
 #   BUILDER_IMAGE      build container (default gcc:13-bookworm -- keep glibc <= 2.39)
 #   SCITRA_BUILD_WORK  persistent vcpkg/cmake cache (default ~/.cache/scitra-work)
 # Requires: docker, and network access from the build container (vcpkg fetches).
@@ -46,7 +46,7 @@
 #  build host's glibc is <= 2.39.)
 set -euo pipefail
 
-SCION_CPP="${SCION_CPP:-/home/tony/lshulz/scion-cpp}"
+SCION_CPP="${SCION_CPP:-$HOME/scion-cpp}"
 BUILDER_IMAGE="${BUILDER_IMAGE:-gcc:13-bookworm}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$REPO_ROOT/.build/scitra/bin"

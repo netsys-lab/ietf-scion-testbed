@@ -3,7 +3,7 @@
 # Output: $WGHUB_OUT (default .build/wghub)/{wg0.conf,pool.json}. Idempotent
 # only by regeneration — rerunning REPLACES all keys (existing attendee confs
 # die); it refuses to overwrite unless -f is given. Set WGHUB_OUT to isolate a
-# second hub's pool (e.g. the ietf-minipc-rack replica) from the live one.
+# second hub's pool (e.g. a replica of the testbed) from the live one.
 set -euo pipefail
 
 OUT="${WGHUB_OUT:-$(cd "$(dirname "$0")/.." && pwd)/.build/wghub}"

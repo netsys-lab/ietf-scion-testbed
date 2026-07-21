@@ -18,9 +18,10 @@ routing on identical links.
 - **BGP/IP fabric** (`config/AS*/bird.conf`, `ansible/`): BIRD + BFD over
   the same inter-AS links — the "today's Internet" comparison plane, with
   per-AS anchor names (`as150.scion` … `as161.scion`).
-- **SCION DNS** (`config/coredns/`): a CoreDNS fork serving the `scion.`
-  zone with SVCB `scion=`/`scion-policy=` SvcParams and `scion=` TXT
-  records, plus the `scitra` plugin (SCION-IP-translator AAAA synthesis).
+- **SCION DNS** (`config/coredns/`, `tools/build-coredns.sh`): upstream
+  CoreDNS patched for SCION, serving the `scion.` zone with SVCB
+  `scion=`/`scion-policy=` SvcParams and `scion=` TXT records, plus the
+  `scitra` plugin (SCION-IP-translator AAAA synthesis).
 - **Attendee access** (`ansible/`, `proxmox/`): WireGuard hub + join page,
   browser playground containers, per-AS endhost bootstrap servers.
 - **Topology tooling** (`topology/`): source-of-truth topo files, beacon
@@ -51,8 +52,9 @@ each carry one inter-AS link's SCION underlay and BGP fabric.
      dot -Tpng -Gdpi=150 topology/testbed-layout.dot -o topology/testbed-layout.png -->
 
 
-Bridge names differ slightly per host (the venue leg is `vmbr0` on the
-mini-PC, `pubnet` on the rack); the roles above are stable. See
+Bridge names differ slightly per host (the venue-leg bridge may be `vmbr0`
+or `pubnet`, depending on the host's existing wiring); the roles above are
+stable. See
 `proxmox/create_contianers.sh` for the container/bridge wiring and
 `config/AS*/topology.json` for per-link interface and underlay detail.
 
@@ -60,13 +62,18 @@ mini-PC, `pubnet` on the rack); the roles above are stable. See
 
 - [lschulz/scion](https://github.com/lschulz/scion) — the deployed SCION
   stack (ID-INT + border-router RTT/traffic metrics).
-- [netsys-lab/dns-scion-svcb](https://github.com/netsys-lab/dns-scion-svcb) and
-  [tjohn327/coredns](https://github.com/tjohn327/coredns) (branch
-  `scion-dev`) — typed `scion`/`scion-policy` SvcParamKeys and the scitra
-  plugin.
-- [tjohn327/scion-hev3](https://github.com/tjohn327/scion-hev3) — Happy
-  Eyeballs v3 for SCION (racer library, CLI, demo server) and the
-  [`draft-scion-svcb`](https://github.com/netsys-lab/draft-scion-svcb) draft.
+- [netsys-lab/dns-scion-svcb](https://github.com/netsys-lab/dns-scion-svcb)
+  (branch `scion`) — DNS library with the typed `scion`/`scion-policy` SVCB
+  SvcParamKeys. The testbed's DNS server is upstream
+  [CoreDNS](https://github.com/coredns/coredns) patched with the scitra
+  plugin (from
+  [netsys-lab/coredns-scitra](https://github.com/netsys-lab/coredns-scitra))
+  and pinned to this library — see `tools/build-coredns.sh` +
+  `tools/coredns-scion.patch`.
+- [netsys-lab/scion-hev3](https://github.com/netsys-lab/scion-hev3) — Happy
+  Eyeballs v3 for SCION (racer library, CLI, demo server).
+- [netsys-lab/draft-scion-svcb](https://github.com/netsys-lab/draft-scion-svcb)
+  — the `scion` SVCB SvcParamKey Internet-Draft.
 
 ## Operating it
 

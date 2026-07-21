@@ -4,7 +4,7 @@
 # fork's pkg/fcrypto is amd64-cgo only.
 set -euo pipefail
 
-SCION_FORK="${SCION_FORK:-/home/tony/lshulz/scion}"
+SCION_FORK="${SCION_FORK:-$HOME/scion}"
 OUT="$(cd "$(dirname "$0")/.." && pwd)/.build/endhost/bin"
 mkdir -p "$OUT"
 
