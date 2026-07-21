@@ -1,6 +1,6 @@
 # IETF 126 Vienna Hackathon — SCION Testbed
 
-A 12-AS [SCION](https://scion-architecture.net/) network that runs as
+A 12-AS SCION network that runs as
 Proxmox LXC containers, built for the SCION Secure Path-Aware Routing
 project at the IETF 126 hackathon. Attendees join it as real SCION
 endhosts — over WireGuard from their laptop or through a zero-install
