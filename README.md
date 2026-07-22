@@ -78,7 +78,6 @@ stable. See
 ## Operating it
 
 - Build, deploy, and rebuild-from-scratch: [DEPLOY.md](DEPLOY.md)
-- Booth demo scripts with measured numbers: [DEMOS.md](DEMOS.md)
 - Fleet health: `bash tools/booth-check.sh`
 - Topology consistency: `python3 topology/verify_topology.py`
 - Tests: `cd linkd && make test` · `cd dashboard/backend && go test ./...`
