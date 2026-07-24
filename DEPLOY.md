@@ -887,56 +887,6 @@ except through the WG tunnel, and WG egress is pinned by the hub's nftables
 AS's border router/control service and hairpin to other attendees, nothing
 else on the mgmt net.
 
-### NOC email
-
-Send before the event, once the hub's venue uplink is provisioned:
-
-```
-Subject: IETF 126 SCION hackathon testbed — port check
-
-Two services on our hackathon table are reachable from the general
-attendee network:
-
-  - Live topology dashboard: TCP/8080 to <dashboard-venue-addr>
-  - WireGuard attendee access: UDP/51820 to <hub-venue-addr>
-
-Both need to stay open inbound from the venue Wi-Fi/wired segments to our
-table. Nothing else on our subnet should be attendee-reachable.
-
-Thanks,
-<contact>
-```
-
-Client-to-client traffic on the venue network is **not** filtered (confirmed
-2026-07-06), so WireGuard attendees on Wi-Fi can reach the hub on our wired
-drop — the email above is a courtesy heads-up, not a go/no-go dependency. (The
-direct-underlay approach would also work given this, but we keep the tunnel
-for the scitra IPv6 story and mgmt-plane isolation.)
-
-### On-site checklist
-
-```
-[ ] Wired drop live: CT200/CT201 have DHCP leases on eth1 (venue net)
-[ ] Hub has a global IPv6 on eth1 (pct exec 201 -- ip -6 -br addr show eth1 scope global)
-[ ] Pre-flight ON the proxmox host: sudo tools/wg-attendee-test.sh <hub-v6-or-v4>
-    passes — this is a netns simulation run on the host (it needs root, makes a
-    netns, reads a slot key from .build/wghub/pool.json); it proves the hub
-    answers and the tunnel path works end to end. NOT an attendee-laptop test.
-[ ] Real SSID-client test from an actual laptop on the ietf SSID: open the
-    dashboard join page, claim a conf, wg-quick up it, then scion showpaths /
-    scion ping per the laptop instructions — the genuine "from a laptop" path
-    uses the join page + real SCION tools, not the host script above.
-[ ] One claim per SSID: run the claim flow once per venue SSID, not just one
-[ ] QR code on the join page scans and imports on a phone WireGuard app
-[ ] /play/158/ (Tier 1 terminal) loads and logs in from a phone browser
-[ ] nft drop counters on the hub bump after a :22 probe to 10.20.3.150 (a
-    non-joinable AS / the mgmt plane) from inside the tunnel — mirrors the
-    Tier-1 confinement check. The hub's forward chain ACCEPTS tcp to
-    10.20.3.152/155/158/161, so the probe must target an AS outside that set
-    to drop; the wg0->eth0 pin to 152/155/158/161 only is what bumps the
-    drop counter.
-```
-
 ### Known gotchas
 
 - **`deploy_linkd.yaml` still uses `ansible.builtin.apt`, not `dpkg -i`.**
